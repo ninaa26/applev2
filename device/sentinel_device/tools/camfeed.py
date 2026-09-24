@@ -7,7 +7,7 @@ tailnet. It listens on the Tailscale address only, so it isn't visible on the ca
 The frame shows the time and the share of saturated pixels (the trap aims for < 2 %).
 
 Bench use only: while it runs, sentinel-cycle cannot open the camera. Stop it with Ctrl-C,
-or `pkill -f sentinel-camfeed`.
+or `pkill -f "[s]entinel-camfeed"` (the brackets stop pkill matching its own ssh command).
 """
 
 from __future__ import annotations
@@ -59,23 +59,39 @@ def main(argv: list[str] | None = None) -> int:
     controls = dict(cam_cfg.get("usb_controls") or {})
     if cam_cfg.get("usb_wb_temperature"):
         controls.update(white_balance_automatic=0, white_balance_temperature=cam_cfg["usb_wb_temperature"])
-    UsbCamera(cam_cfg)._set_controls(controls)
 
-    cap = cv2.VideoCapture(str(cam_cfg["usb_device"]), cv2.CAP_V4L2)
+    def open_camera():
+        UsbCamera(cam_cfg)._set_controls(controls)
+        c = cv2.VideoCapture(str(cam_cfg["usb_device"]), cv2.CAP_V4L2)
+        w, h = cam_cfg["usb_size"]
+        c.set(cv2.CAP_PROP_FRAME_WIDTH, int(w))
+        c.set(cv2.CAP_PROP_FRAME_HEIGHT, int(h))
+        return c
+
+    cap = open_camera()
     if not cap.isOpened():
         raise SystemExit(f"cannot open {cam_cfg['usb_device']} (is sentinel-cycle or another viewer using it?)")
-    w, h = cam_cfg["usb_size"]
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, int(w))
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, int(h))
     latest: list[bytes | None] = [None]
     lock = threading.Lock()
 
     def grab():
+        # A USB hiccup re-enumerates the camera (video0 -> video1); the by-id path follows it,
+        # but the old handle stays dead. Reopen after a second of failed reads.
+        nonlocal cap
+        failed_since = None
         while True:
             ok, frame = cap.read()
             if not ok:
+                failed_since = failed_since or time.monotonic()
+                if time.monotonic() - failed_since > 1.0:
+                    print("camera stopped sending frames; reopening", flush=True)
+                    cap.release()
+                    time.sleep(1.0)
+                    cap = open_camera()
+                    failed_since = None
                 time.sleep(0.1)
                 continue
+            failed_since = None
             label = f"{time.strftime('%H:%M:%S')}  clipped {clipped_fraction(frame):.1%}"
             cv2.putText(frame, label, (8, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
             jpg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])[1].tobytes()
