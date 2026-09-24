@@ -50,6 +50,20 @@ The photo should appear on the dashboard within a few seconds. If the Mac is off
 4. White balance: adjust `colour_gains` until a white liner looks neutral. These values stay fixed for good; the model relies on every photo looking the same.
 5. Lens calibration: photograph `hardware/print/checkerboard.png` flat on the tray at ~10 positions/angles and keep the photos for the calibration script.
 
+**USB webcam instead:** webcams have no manual exposure, and their auto-exposure clips the red
+channel under an orange trap roof. Set `usb_controls` in `[camera]` (names from
+`v4l2-ctl -d /dev/video0 --list-ctrls`); the Alcor Micro webcam in the orange Pherocon VI works with
+`{ brightness = -40, saturation = 30, backlight_compensation = 0 }`. The capture also lowers
+`brightness` by itself while more than `usb_max_clip_frac` of any channel is saturated, and reports
+`brightness`/`clipped_frac` in the photo's metadata.
+
+**Check detection on the bench** (on the Mac): copy a few photos over and run
+`.venv/bin/sentinel-server detect photo1.jpg photo2.jpg --out overlays/`. It prints how many insects
+it found and the grid it measured (spacing in px, angle, px/mm), and saves copies with boxes drawn.
+Measure your liner's grid spacing once with a ruler and set `SENTINEL_GRID_MM` in `.env`: the
+detector uses it to turn pixels into millimetres (it ignores anything under 3 mm or over 30 mm).
+If the lure isn't in the photo, clear the default lure mask: `sentinel-server set-mask T1 --none`.
+
 ## 6. Field mode
 
 ```bash

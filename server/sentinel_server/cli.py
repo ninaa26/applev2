@@ -7,6 +7,8 @@
     sentinel-server worker
     sentinel-server reprocess --card 3     # re-run a liner's photos with the current models
     sentinel-server import-weather newa.csv --source newa:Ithaca
+    sentinel-server detect photo.jpg --out overlays/   # try the detector on photos, draw what it found
+    sentinel-server set-mask T1 --none     # lure not in view: don't ignore any area
 """
 
 from __future__ import annotations
@@ -96,6 +98,48 @@ def cmd_reprocess(args) -> int:
     return 0
 
 
+def cmd_detect(args) -> int:
+    """Run the detector on image files and write copies with boxes drawn, for tuning on the bench."""
+    import cv2
+
+    from .pipeline.detect import make_detector
+
+    det = make_detector(args.detector or get_settings().detector)
+    args.out.mkdir(parents=True, exist_ok=True)
+    for path in args.images:
+        boxes = det.detect(path)
+        img = cv2.imread(str(path))
+        info = getattr(det, "last", {})
+        for b in boxes:
+            cv2.rectangle(img, (int(b.x1), int(b.y1)), (int(b.x2), int(b.y2)), (255, 255, 0), 2)
+            cv2.putText(img, f"{b.conf:.2f}", (int(b.x1), max(12, int(b.y1) - 4)), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 0), 1)
+        line = f"{path.name}: {len(boxes)} insects"
+        if info.get("grid") is not None:
+            g = info["grid"]
+            grid = f"grid {g.pitch_px / info['work_scale']:.0f}px at {', '.join(f'{a:.1f}°' for a in g.angles)}" if g.score else "no grid found"
+            line += f"  ({grid}; {info['px_per_mm']:.1f} px/mm)"
+            cv2.putText(img, f"{len(boxes)} found | {info['px_per_mm']:.1f} px/mm", (8, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 0), 1)
+        cv2.imwrite(str(args.out / path.name), img)
+        print(line)
+    print(f"overlays in {args.out}/")
+    return 0
+
+
+def cmd_set_mask(args) -> int:
+    """Areas the detector ignores (the lure), as fractions of the photo: x1 y1 x2 y2."""
+    with session_scope() as db:
+        trap = db.get(Trap, args.trap_id)
+        if trap is None:
+            print(f"no trap {args.trap_id}", file=sys.stderr)
+            return 1
+        if args.none:
+            trap.mask = []
+        elif args.box:
+            trap.mask = [list(b) for b in args.box]
+        print(f"{trap.id} mask: {trap.mask or 'none'}")
+    return 0
+
+
 def cmd_import_weather(args) -> int:
     """CSV with columns date, tmax_f, tmin_f (e.g. exported daily data from the nearest NEWA station)."""
     init_db()
@@ -143,6 +187,18 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("reprocess", help="re-run detection/tracking for one liner")
     p.add_argument("--card", type=int, required=True)
     p.set_defaults(fn=cmd_reprocess)
+
+    p = sub.add_parser("detect", help="run the detector on photos and save annotated copies")
+    p.add_argument("images", type=Path, nargs="+")
+    p.add_argument("--out", type=Path, default=Path("overlays"))
+    p.add_argument("--detector", choices=["baseline", "flatbug"])
+    p.set_defaults(fn=cmd_detect)
+
+    p = sub.add_parser("set-mask", help="set (or show) the area a trap's detector ignores")
+    p.add_argument("trap_id")
+    p.add_argument("--box", type=float, nargs=4, action="append", metavar=("X1", "Y1", "X2", "Y2"))
+    p.add_argument("--none", action="store_true")
+    p.set_defaults(fn=cmd_set_mask)
 
     p = sub.add_parser("import-weather", help="import daily max/min temperatures (°F)")
     p.add_argument("csv", type=Path)

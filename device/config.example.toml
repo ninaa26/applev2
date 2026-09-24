@@ -26,6 +26,10 @@ settle_s = 1.5             # let the LEDs and sensor settle before the still
 usb_device = "/dev/video0" # prefer the stable /dev/v4l/by-id/usb-...-video-index0 path
 usb_size = [640, 480]      # largest size `v4l2-ctl --list-formats-ext` shows
 usb_wb_temperature = 0     # Kelvin to lock white balance; 0 = auto
+usb_max_clip_frac = 0.02   # if more of any colour channel than this is saturated, lower brightness and retry
+# Webcam controls (names from `v4l2-ctl -d <dev> --list-ctrls`). These suit the Alcor Micro
+# webcam inside an orange trap: its auto-exposure otherwise clips the red channel.
+usb_controls = { brightness = -40, saturation = 30, backlight_compensation = 0 }
 
 [led]
 enabled = true

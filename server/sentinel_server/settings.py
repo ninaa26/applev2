@@ -34,6 +34,8 @@ class Settings:
     timezone: str = field(default_factory=lambda: os.environ.get("SENTINEL_TZ", "America/New_York"))
     detector: str = field(default_factory=lambda: os.environ.get("SENTINEL_DETECTOR", "baseline"))
     classifier: str = field(default_factory=lambda: os.environ.get("SENTINEL_CLASSIFIER", "none"))
+    # Spacing of the liner's printed grid; the baseline detector uses it to work out the image scale.
+    grid_mm: float = field(default_factory=lambda: float(os.environ.get("SENTINEL_GRID_MM", "25.4")))
     worker_poll_s: float = field(default_factory=lambda: float(os.environ.get("SENTINEL_WORKER_POLL_S", "3")))
     offline_after_h: float = field(default_factory=lambda: float(os.environ.get("SENTINEL_OFFLINE_AFTER_H", "12")))
 

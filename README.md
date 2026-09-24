@@ -30,7 +30,7 @@ With the Pi and camera: [docs/bring-up.md](docs/bring-up.md). Choosing between c
 ## What works today
 
 - Device cycle: capture with locked focus/exposure/white balance, SHT45 + INA219 readings, offline queue, upload, next-wake scheduling (DST-safe), RTC alarm + power-off, "new liner" by power-button wake; focus-sweep tool. Tested on a Mac with the fake camera; **not yet run on the Pi**.
-- Server: authenticated uploads (duplicate-safe), new-liner handling, lure masking, detection (OpenCV baseline; flatbug adapter), tracking so each insect counts once (confirmed after 2 photos), review queue with confirm/relabel/reject, BE degree days, NEWA sustained-catch biofix, pest milestones, dashboard pages.
+- Server: authenticated uploads (duplicate-safe), new-liner handling, lure masking, detection (OpenCV baseline that measures the liner grid for scale and removes grid lines, tested on the real webcam-in-orange-trap view; flatbug adapter), `sentinel-server detect` overlays for bench checks, tracking so each insect counts once (confirmed after 2 photos), review queue with confirm/relabel/reject, BE degree days, NEWA sustained-catch biofix, pest milestones, dashboard pages.
 - 16 automated tests (device 6, server 10), plus an end-to-end run: 6 fake-camera cycles → 3 moths detected, 2 confirmed, 1 candidate, which matches the fake camera's ground truth.
 
 ## Not done yet

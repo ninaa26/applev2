@@ -73,3 +73,15 @@ def test_queue_keeps_photos_when_server_down(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(uploader, "upload_one", lambda url, key, image, t: sent.append(image.name) or {"config": {}})
     n, reply, err = uploader.drain(q, "http://x", "k", 1, 2)
     assert n == 2 and err is None and sent == sorted(sent) and len(q.pending()) == 1
+
+
+def test_clipped_fraction_reports_worst_channel():
+    import numpy as np
+
+    from sentinel_device.camera import clipped_fraction
+
+    frame = np.zeros((10, 10, 3), np.uint8)
+    frame[..., 2] = 255          # red fully clipped (orange trap roof)
+    frame[:5, :, 1] = 255        # half the green clipped
+    assert clipped_fraction(frame) == 1.0
+    assert clipped_fraction(frame[..., :2]) == 0.5

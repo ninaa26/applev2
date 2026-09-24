@@ -42,8 +42,12 @@ for i in 1 2 3 4 5; do .venv/bin/sentinel-cycle --config config.toml --no-halt; 
 
 | Setting | Install | What it does |
 |---|---|---|
-| `SENTINEL_DETECTOR=flatbug` | `uv pip install -p .venv/bin/python -e '.[flatbug]'` | Pretrained insect detector, which also works on crowded cards |
+| `SENTINEL_DETECTOR=flatbug` | `uv pip install -p .venv/bin/python -e '.[flatbug]'` | Pretrained insect detector, which also works on crowded cards. Weights (50 MB) download to `data/models/` on first use |
 | `SENTINEL_CLASSIFIER=bioclip` | `uv pip install -p .venv/bin/python -e '.[bioclip]'` | BioCLIP 2 zero-shot species ID (model v0) |
+
+The default `baseline` detector needs no downloads: it finds the liner's printed grid (which gives the
+scale in px/mm), removes the grid lines, and keeps dark blobs 3–30 mm long. Try either detector on
+photos with `sentinel-server detect *.jpg --out overlays/ [--detector flatbug]`.
 
 On Apple Silicon both run on the Mac's GPU (`mps`). After switching, re-run old photos with
 `sentinel-server reprocess --card <id>`.

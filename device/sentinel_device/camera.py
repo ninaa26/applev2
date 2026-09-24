@@ -10,9 +10,13 @@ laptop before the hardware is ready.
 from __future__ import annotations
 
 import json
+import logging
 import random
+import subprocess
 import time
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 
 class CaptureError(RuntimeError):
@@ -73,14 +77,32 @@ class Picamera2Camera:
 class UsbCamera:
     """A UVC webcam via OpenCV (apt `python3-opencv`, seen through the venv's system site-packages).
 
-    Webcams expose fewer controls than the Pi camera: we lock white balance when the
-    camera allows it and throw away warm-up frames so auto-exposure has settled.
+    Cheap webcams have no manual exposure. Their auto-exposure meters brightness, not
+    individual colours, so under a coloured trap roof the red channel clips even when the
+    picture looks fine overall. We set the controls from `usb_controls` (names as
+    `v4l2-ctl --list-ctrls` prints them), discard warm-up frames, and then, while more than
+    `usb_max_clip_frac` of any colour channel is saturated, lower `brightness` and try again.
     """
 
     WARMUP_FRAMES = 15
+    CLIP_STEP = 16
+    CLIP_TRIES = 4
 
     def __init__(self, cfg: dict):
         self.cfg = cfg
+
+    def _set_controls(self, controls: dict) -> None:
+        if not controls:
+            return
+        # white_balance_automatic must be off before a manual temperature is accepted
+        ordered = sorted(controls.items(), key=lambda kv: not kv[0].endswith("_automatic"))
+        for key, value in ordered:
+            r = subprocess.run(
+                ["v4l2-ctl", "-d", str(self.cfg["usb_device"]), f"--set-ctrl={key}={int(value)}"],
+                capture_output=True, text=True,
+            )
+            if r.returncode != 0:
+                log.warning("camera control %s=%s rejected: %s", key, value, r.stderr.strip())
 
     def capture(self, path: Path) -> dict:
         try:
@@ -88,22 +110,31 @@ class UsbCamera:
         except ImportError as e:  # pragma: no cover - only on the Pi
             raise CaptureError("OpenCV is not installed: sudo apt install python3-opencv") from e
 
+        controls = dict(self.cfg.get("usb_controls") or {})
+        if self.cfg.get("usb_wb_temperature"):
+            controls.update(white_balance_automatic=0, white_balance_temperature=self.cfg["usb_wb_temperature"])
+        self._set_controls(controls)
         cap = cv2.VideoCapture(str(self.cfg["usb_device"]), cv2.CAP_V4L2)
         if not cap.isOpened():
             raise CaptureError(f"cannot open USB camera {self.cfg['usb_device']}")
+        brightness = int(controls.get("brightness", 0))
+        max_clip = float(self.cfg.get("usb_max_clip_frac", 0.02))
         try:
             w, h = self.cfg["usb_size"]
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, int(w))
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, int(h))
-            if self.cfg.get("usb_wb_temperature"):
-                cap.set(cv2.CAP_PROP_AUTO_WB, 0)
-                cap.set(cv2.CAP_PROP_WB_TEMPERATURE, int(self.cfg["usb_wb_temperature"]))
             time.sleep(float(self.cfg["settle_s"]))
-            frame = None
-            for _ in range(self.WARMUP_FRAMES):
-                ok, frame = cap.read()
-            if frame is None or not ok:
-                raise CaptureError("USB camera returned no frame")
+            for attempt in range(self.CLIP_TRIES + 1):
+                frame, ok = None, False
+                for _ in range(self.WARMUP_FRAMES):
+                    ok, frame = cap.read()
+                if frame is None or not ok:
+                    raise CaptureError("USB camera returned no frame")
+                clip = clipped_fraction(frame)
+                if clip <= max_clip or attempt == self.CLIP_TRIES or brightness <= -64:
+                    break
+                brightness = max(-64, brightness - self.CLIP_STEP)
+                self._set_controls({"brightness": brightness})
             if not cv2.imwrite(str(path), frame, [cv2.IMWRITE_JPEG_QUALITY, int(self.cfg["jpeg_quality"])]):
                 raise CaptureError(f"could not write {path}")
             wb = cap.get(cv2.CAP_PROP_WB_TEMPERATURE)
@@ -115,18 +146,27 @@ class UsbCamera:
             "width": frame.shape[1],
             "height": frame.shape[0],
             "wb_temperature": wb if wb > 0 else None,
+            "brightness": brightness,
+            "clipped_frac": round(clip, 4),
         }
+
+
+def clipped_fraction(frame) -> float:
+    """Largest share of pixels at the top of any one colour channel (BGR uint8 array)."""
+    return max(float((frame[..., c] >= 254).mean()) for c in range(frame.shape[2]))
 
 
 class FakeCamera:
     """Synthetic liner: pale card, grid lines, a lure in the middle, and moths that accumulate."""
 
     WIDTH, HEIGHT = 2304, 1296
+    # The whole liner (~200 mm) across the frame: ~11.5 px/mm, so the 25.4 mm grid is ~290 px.
+    GRID_PX = 290
     SPECIES = {  # rough body length in px at this resolution, and a colour
-        "CM": (70, (95, 80, 70)),
-        "OBLR": (80, (150, 110, 70)),
-        "OFM": (42, (90, 90, 90)),
-        "other": (35, (40, 40, 40)),
+        "CM": (110, (95, 80, 70)),
+        "OBLR": (120, (150, 110, 70)),
+        "OFM": (70, (90, 90, 90)),
+        "other": (50, (40, 40, 40)),
     }
 
     def __init__(self, cfg: dict, data_dir: Path, seed: int | None = None):
@@ -160,7 +200,7 @@ class FakeCamera:
 
         img = Image.new("RGB", (self.WIDTH, self.HEIGHT), (236, 232, 205))
         d = ImageDraw.Draw(img)
-        step = 60
+        step = self.GRID_PX
         for x in range(0, self.WIDTH, step):
             d.line([(x, 0), (x, self.HEIGHT)], fill=(214, 210, 185), width=2)
         for y in range(0, self.HEIGHT, step):

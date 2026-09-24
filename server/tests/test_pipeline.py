@@ -16,15 +16,16 @@ from sentinel_server.pipeline.worker import Pipeline, process_pending
 
 W, H = 1600, 900
 MOTHS = [(300, 300), (900, 500), (1300, 200)]
+GRID = 160  # a 25.4 mm liner grid at ~6.3 px/mm: moths below are ~8 mm long
 
 
 def liner(moths) -> bytes:
     img = Image.new("RGB", (W, H), (236, 232, 205))
     d = ImageDraw.Draw(img)
-    for x in range(0, W, 50):
-        d.line([(x, 0), (x, H)], fill=(214, 210, 185), width=2)
-    for y in range(0, H, 50):
-        d.line([(0, y), (W, y)], fill=(214, 210, 185), width=2)
+    for x in range(0, W, GRID):
+        d.line([(x, 0), (x, H)], fill=(190, 60, 50), width=3)
+    for y in range(0, H, GRID):
+        d.line([(0, y), (W, y)], fill=(190, 60, 50), width=3)
     d.rounded_rectangle([W / 2 - 30, H / 2 - 10, W / 2 + 30, H / 2 + 10], radius=6, fill=(170, 40, 40))  # lure (masked)
     for x, y in moths:
         d.ellipse([x - 25, y - 12, x + 25, y + 12], fill=(80, 70, 60))

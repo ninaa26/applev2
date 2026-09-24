@@ -27,6 +27,8 @@ DEFAULTS: dict[str, Any] = {
         "usb_device": "/dev/video0",
         "usb_size": [640, 480],
         "usb_wb_temperature": 0,  # 0 = leave auto white balance on
+        "usb_controls": {},  # v4l2 control name -> value, applied before every capture
+        "usb_max_clip_frac": 0.02,  # lower brightness while more of a channel than this is saturated
     },
     "led": {"enabled": True, "gpio": 17},
     "sensors": {"sht4x": True, "ina219": False, "ina219_shunt_ohms": 0.1},
