@@ -70,6 +70,54 @@ class Picamera2Camera:
         }
 
 
+class UsbCamera:
+    """A UVC webcam via OpenCV (apt `python3-opencv`, seen through the venv's system site-packages).
+
+    Webcams expose fewer controls than the Pi camera: we lock white balance when the
+    camera allows it and throw away warm-up frames so auto-exposure has settled.
+    """
+
+    WARMUP_FRAMES = 15
+
+    def __init__(self, cfg: dict):
+        self.cfg = cfg
+
+    def capture(self, path: Path) -> dict:
+        try:
+            import cv2  # type: ignore
+        except ImportError as e:  # pragma: no cover - only on the Pi
+            raise CaptureError("OpenCV is not installed: sudo apt install python3-opencv") from e
+
+        cap = cv2.VideoCapture(str(self.cfg["usb_device"]), cv2.CAP_V4L2)
+        if not cap.isOpened():
+            raise CaptureError(f"cannot open USB camera {self.cfg['usb_device']}")
+        try:
+            w, h = self.cfg["usb_size"]
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, int(w))
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, int(h))
+            if self.cfg.get("usb_wb_temperature"):
+                cap.set(cv2.CAP_PROP_AUTO_WB, 0)
+                cap.set(cv2.CAP_PROP_WB_TEMPERATURE, int(self.cfg["usb_wb_temperature"]))
+            time.sleep(float(self.cfg["settle_s"]))
+            frame = None
+            for _ in range(self.WARMUP_FRAMES):
+                ok, frame = cap.read()
+            if frame is None or not ok:
+                raise CaptureError("USB camera returned no frame")
+            if not cv2.imwrite(str(path), frame, [cv2.IMWRITE_JPEG_QUALITY, int(self.cfg["jpeg_quality"])]):
+                raise CaptureError(f"could not write {path}")
+            wb = cap.get(cv2.CAP_PROP_WB_TEMPERATURE)
+        finally:
+            cap.release()
+        return {
+            "sensor": "usb",
+            "device": str(self.cfg["usb_device"]),
+            "width": frame.shape[1],
+            "height": frame.shape[0],
+            "wb_temperature": wb if wb > 0 else None,
+        }
+
+
 class FakeCamera:
     """Synthetic liner: pale card, grid lines, a lure in the middle, and moths that accumulate."""
 
@@ -140,6 +188,8 @@ def make_camera(cfg: dict, data_dir: Path):
     backend = cfg["camera"]["backend"]
     if backend == "picamera2":
         return Picamera2Camera(cfg["camera"])
+    if backend == "usb":
+        return UsbCamera(cfg["camera"])
     if backend == "fake":
         return FakeCamera(cfg["camera"], data_dir)
     raise ValueError(f"unknown camera backend {backend!r}")

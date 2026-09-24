@@ -7,6 +7,7 @@ server is: copy the database + media folder, set these variables, start.
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -18,7 +19,12 @@ def _load_dotenv(path: Path = Path(".env")) -> None:
         line = line.strip()
         if line and not line.startswith("#") and "=" in line:
             key, _, value = line.partition("=")
-            os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+            value = value.strip()
+            if value[:1] in ('"', "'"):
+                value = value[1:].partition(value[0])[0]
+            else:
+                value = re.split(r"\s+#", value, maxsplit=1)[0].strip()  # inline comment
+            os.environ.setdefault(key.strip(), value)
 
 
 @dataclass

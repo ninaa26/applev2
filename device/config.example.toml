@@ -15,13 +15,17 @@ halt_after_cycle = true    # false on the bench: stay on after capturing
 manual_wake_is_new_card = true  # field: wake by power button = fresh liner installed
 
 [camera]
-backend = "picamera2"      # "fake" for testing on a laptop
+backend = "picamera2"      # "usb" for a webcam, "fake" for testing on a laptop
 lens_position = 6.5        # dioptres (1 / metres); ~15 cm => 6.7. Tune with sentinel-focus-sweep.
 exposure_us = 8000
 analogue_gain = 1.0
 colour_gains = [1.9, 1.6]  # fixed white balance (red, blue); tune once under the LEDs
 jpeg_quality = 95
 settle_s = 1.5             # let the LEDs and sensor settle before the still
+# backend = "usb" only (the picamera2 settings above don't apply to webcams):
+usb_device = "/dev/video0" # prefer the stable /dev/v4l/by-id/usb-...-video-index0 path
+usb_size = [640, 480]      # largest size `v4l2-ctl --list-formats-ext` shows
+usb_wb_temperature = 0     # Kelvin to lock white balance; 0 = auto
 
 [led]
 enabled = true

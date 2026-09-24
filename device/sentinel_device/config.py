@@ -24,6 +24,9 @@ DEFAULTS: dict[str, Any] = {
         "colour_gains": [1.9, 1.6],
         "jpeg_quality": 95,
         "settle_s": 1.5,
+        "usb_device": "/dev/video0",
+        "usb_size": [640, 480],
+        "usb_wb_temperature": 0,  # 0 = leave auto white balance on
     },
     "led": {"enabled": True, "gpio": 17},
     "sensors": {"sht4x": True, "ina219": False, "ina219_shunt_ohms": 0.1},
