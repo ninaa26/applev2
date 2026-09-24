@@ -102,3 +102,33 @@ def test_insect_on_a_grid_line_is_found():
     on_line = (x_line, H / 2, 9, 4, 0.35, 88)  # lies along a vertical grid line
     img = liner([on_line], angle=0.0, keystone=0.0)
     assert near(centres(BaselineDetector().detect_array(img)), on_line[0], on_line[1])
+
+
+def total(boxes):
+    return sum(b.n for b in boxes)
+
+
+@pytest.mark.parametrize("pair,label", [
+    (((300, 240, 10, 4, 0.35, 90), (329, 240, 10, 4, 0.35, 90)), "side by side, wings touching"),
+    (((250, 240, 10, 4, 0.35, 0), (318, 240, 10, 4, 0.35, 0)), "end to end"),
+    (((300, 240, 10, 4, 0.35, 60), (318, 250, 10, 4, 0.35, 120)), "crossed, overlapping"),
+])
+def test_touching_pair_counts_as_two(pair, label):
+    boxes = BaselineDetector().detect_array(liner(list(pair), angle=0.0, keystone=0.0))
+    assert total(boxes) == 2, f"{label}: {[(round(b.cx), round(b.cy), b.n) for b in boxes]}"
+
+
+def test_single_moths_are_not_split():
+    moths = [(130, 140, 10, 4, 0.35, 70), (500, 120, 12, 5, 0.55, 150), (330, 250, 6, 2.5, 0.35, 20)]
+    boxes = BaselineDetector().detect_array(liner(moths, angle=4.0))
+    assert len(boxes) == 3 and total(boxes) == 3
+
+
+def test_clump_is_never_one_insect():
+    """Four overlapping moths cover about three moths' area: area can't count them exactly, so
+    the guarantee is only that a clump counts as more than one and goes to review (n > 1)."""
+    clump = [(300 + dx, 240 + dy, 10, 4, 0.35, a) for dx, dy, a in
+             [(0, 0, 90), (26, 0, 90), (13, 20, 0), (13, -22, 10)]]
+    boxes = BaselineDetector().detect_array(liner(clump, angle=0.0, keystone=0.0))
+    assert total(boxes) >= 2
+    assert len(boxes) > 1 or boxes[0].n > 1

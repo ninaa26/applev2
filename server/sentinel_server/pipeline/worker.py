@@ -58,10 +58,13 @@ class Pipeline:
                 t.misses = 0
                 t.last_seen_at = cap.captured_at
                 t.x1, t.y1, t.x2, t.y2 = box.x1, box.y1, box.x2, box.y2
+                if t.reviewed_label is None:  # a reviewer's count stands
+                    t.n_insects = box.n
             else:
                 t = Track(
                     card_id=cap.card_id, first_seen_at=cap.captured_at, last_seen_at=cap.captured_at,
                     first_capture_id=cap.id, x1=box.x1, y1=box.y1, x2=box.x2, y2=box.y2, prob_sum={},
+                    n_insects=box.n,
                 )
                 db.add(t)
                 db.flush()
@@ -74,12 +77,14 @@ class Pipeline:
                 t.n_classified += 1
             if t.reviewed_label is None:
                 t.species, t.species_conf, t.review_status = trk.consensus(t.prob_sum, t.n_classified)
+                if t.n_insects > 1:  # touching insects: a person checks the count
+                    t.review_status = "review"
             if t.status == "candidate" and t.n_seen >= trk.CONFIRM_AFTER:
                 t.status = "confirmed"
                 t.confirmed_at = cap.captured_at
             db.add(Detection(
                 capture_id=cap.id, track_id=t.id, x1=box.x1, y1=box.y1, x2=box.x2, y2=box.y2,
-                det_conf=box.conf, probs=p, model_version=self.version,
+                det_conf=box.conf, n_insects=box.n, probs=p, model_version=self.version,
             ))
 
         for t in live:

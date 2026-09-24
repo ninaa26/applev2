@@ -164,7 +164,7 @@ def create_app(start_worker: bool = False) -> FastAPI:
 
     @app.post("/tracks/{track_id}/review")
     def review(track_id: int, label: str = Form(...), reviewer: str = Form(default=""), next: str = Form(default="/review"),
-               db: Session = Depends(get_session)):
+               count: int | None = Form(default=None), db: Session = Depends(get_session)):
         t = db.get(Track, track_id)
         if t is None:
             raise HTTPException(404, "no such insect")
@@ -173,6 +173,8 @@ def create_app(start_worker: bool = False) -> FastAPI:
         elif label in SPECIES:
             t.reviewed_label = label
             t.review_status = "confirmed"
+            if count is not None:  # touching insects: the reviewer's count replaces the estimate
+                t.n_insects = max(1, min(50, count))
         else:
             raise HTTPException(422, f"unknown label {label!r}")
         db.add(Review(track_id=t.id, label=label, reviewer=reviewer[:60]))

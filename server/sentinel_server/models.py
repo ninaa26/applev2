@@ -105,6 +105,9 @@ class Track(Base):
     # confirmed / relabelled by a person; rejected: not an insect
     review_status: Mapped[str] = mapped_column(String(16), default="review", index=True)
     reviewed_label: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # insects this track stands for: >1 when touching insects couldn't be separated (from the
+    # latest photo, so if they're told apart later, the new track takes over the extra one)
+    n_insects: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
 
     @property
     def label(self) -> str:
@@ -121,6 +124,7 @@ class Detection(Base):
     x2: Mapped[float] = mapped_column(Float)
     y2: Mapped[float] = mapped_column(Float)
     det_conf: Mapped[float] = mapped_column(Float)
+    n_insects: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     probs: Mapped[dict] = mapped_column(JSON, default=dict)
     model_version: Mapped[str] = mapped_column(String(80), default="")
     capture: Mapped[Capture] = relationship(back_populates="detections")

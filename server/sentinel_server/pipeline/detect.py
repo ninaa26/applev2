@@ -23,6 +23,7 @@ class Box:
     x2: float
     y2: float
     conf: float
+    n: int = 1  # insects in the box: >1 when touching insects couldn't be separated
 
     @property
     def w(self) -> float:
@@ -67,20 +68,30 @@ class BaselineDetector:
     - uneven light and lens vignetting are divided out;
     - the grid is located (angle + spacing), which also gives the image scale, and
       its lines are subtracted, so an insect sitting on a line is still found;
-    - blobs are kept by physical size in mm, not by pixel size.
+    - blobs are kept by physical size in mm, not by pixel size;
+    - touching insects: a blob much bigger than a typical moth is split at its narrow neck
+      (distance-transform watershed). If it won't split, it becomes one box with `n` set to
+      its size in moths, which the tracker counts as n and sends to review.
     """
 
-    version = "baseline-cv-0.2"
+    version = "baseline-cv-0.3"
     WORK_MAX_SIDE = 1600
 
     def __init__(self, grid_mm: float = 25.4, min_len_mm: float = 3.0, max_len_mm: float = 30.0,
-                 min_contrast: float = 0.20, fallback_liner_mm: float = 200.0, bg_object_mm: float = 15.0):
+                 min_contrast: float = 0.20, fallback_liner_mm: float = 200.0, bg_object_mm: float = 15.0,
+                 moth_area_mm2: float = 30.0, clump_factor: float = 1.8):
         self.grid_mm = grid_mm
         self.min_len_mm = min_len_mm
         self.max_len_mm = max_len_mm
         self.min_contrast = min_contrast
         self.fallback_liner_mm = fallback_liner_mm
         self.bg_object_mm = bg_object_mm  # background estimate looks past dark things up to this size  # no grid found: assume the liner spans the image width
+        # Area of one moth seen from above (a resting CM is ~10 x 4 mm, ~30 mm²). The photo's own
+        # median blob area is used instead once there are enough blobs to trust it.
+        self.moth_area_mm2 = moth_area_mm2
+        self.clump_factor = clump_factor  # blobs this many moths big are treated as touching insects
+        self.max_single_len_mm = 18.0   # longest single moth at rest (OBLR females ~14 mm)
+        self.max_single_width_mm = 7.0  # widest single moth at rest
         self.last: dict = {}
 
     def detect(self, image_path: Path) -> list[Box]:
@@ -88,6 +99,24 @@ class BaselineDetector:
         if img is None:
             raise ValueError(f"cannot read image {image_path}")
         return self.detect_array(img)
+
+    def _clump_count(self, mask: np.ndarray, typical: float, px_per_mm: float) -> int:
+        """How many insects an unsplittable blob holds. Size alone misleads (an OBLR is 1.5x a CM's
+        area), so a big blob only counts as several if it is also shaped like several: dented
+        (crossed or clumped moths), wider than any resting moth (side by side), or longer than
+        any single one (end to end). A moth stuck with its wings spread can still pass as two;
+        that's why these boxes go to review."""
+        area = float(mask.sum())
+        if area < self.clump_factor * typical:
+            return 1
+        cs, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        (_, _), (rw, rh), _ = cv2.minAreaRect(np.vstack(cs))
+        long_mm, short_mm = max(rw, rh) / px_per_mm, min(rw, rh) / px_per_mm
+        if _solidity(mask) >= 0.85 and long_mm < self.max_single_len_mm and short_mm < self.max_single_width_mm:
+            return 1
+        # blur and the closing step fatten merged blobs, and the prior is a mid-size moth:
+        # estimate against 1.2 moths so a pair of large moths isn't called three
+        return max(2, int(area / (1.2 * typical) + 0.5))
 
     def detect_array(self, img: np.ndarray) -> list[Box]:
         h0, w0 = img.shape[:2]
@@ -109,9 +138,26 @@ class BaselineDetector:
             # Perspective and lens distortion fan the lines out, so try a spread of angles around
             # each grid direction. Safe for insects: none is `length` long in any direction.
             step = max(0.5, float(np.degrees(np.arctan(2.5 * px_per_mm * 0.8 / length))))
+            full = []
             for base in grid.angles:
+                fam = np.zeros_like(dark)
                 for angle in np.arange(base - 15, base + 15 + 1e-6, step):
-                    lines = np.maximum(lines, line_opening(dark, float(angle), length))
+                    fam = np.maximum(fam, line_opening(dark, float(angle), length))
+                full.append(fam)
+            lines = np.maximum.reduce(full)
+            # Two moths end to end along a grid line are as long as a line: keep the parts of the
+            # line response that are much wider than the printed lines (measured in this photo, as
+            # blur makes them 1-3 mm wide), then put the crossings back, which look wide to each family.
+            on = lines > self.min_contrast / 2
+            line_w = float(on.sum()) * grid.pitch_px / (len(full) * h * w)  # area / total line length
+            thick = int(max(2.2 * line_w, 2.0 * px_per_mm)) + 1
+            if thick < 3.5 * px_per_mm:  # only when a moth (>= ~3.5 mm wide) is clearly wider than a line
+                thin = np.zeros_like(dark)
+                for base in grid.angles:
+                    for angle in np.arange(base - 15, base + 15 + 1e-6, step):
+                        thin = np.maximum(thin, line_opening(dark, float(angle), length, thick))
+                crossings = np.minimum(full[0], full[1]) if len(full) == 2 else np.zeros_like(dark)
+                lines = np.maximum(thin, cv2.dilate(crossings, np.ones((3, 3), np.uint8)))
         resid = np.clip(dark - lines, 0, 1)
 
         noise = 1.4826 * float(np.median(np.abs(resid - np.median(resid))))
@@ -124,7 +170,7 @@ class BaselineDetector:
 
         n, labels, stats, _ = cv2.connectedComponentsWithStats(binary, connectivity=8)
         min_len, max_len = self.min_len_mm * px_per_mm, self.max_len_mm * px_per_mm
-        boxes = []
+        kept = []
         for i in range(1, n):
             x, y, bw, bh, area = stats[i]
             if not (min_len <= max(bw, bh) <= max_len):
@@ -134,15 +180,73 @@ class BaselineDetector:
             touches_edge = x <= 1 or y <= 1 or x + bw >= w - 1 or y + bh >= h - 1
             if touches_edge and min(bw, bh) < 0.35 * max(bw, bh):
                 continue  # a grid line cut off by the photo edge; insects cut off by the edge are fatter
-            contrast = float(resid[labels == i].mean())
-            conf = float(np.clip(contrast * 2.0, 0.05, 0.99))
-            pad = 0.15
-            boxes.append(Box(
-                max(0, x - pad * bw) / f, max(0, y - pad * bh) / f,
-                min(w, x + bw * (1 + pad)) / f, min(h, y + bh * (1 + pad)) / f, conf,
-            ))
-        self.last = {"px_per_mm": px_per_mm / f, "grid": grid, "threshold": thresh, "work_scale": f}
+            kept.append(i)
+
+        areas = [int(stats[i][4]) for i in kept]
+        typical = self.moth_area_mm2 * px_per_mm ** 2
+        if len(areas) >= 5:  # enough blobs: the photo's own median moth, within reason
+            typical = float(np.clip(np.median(areas), 0.4 * typical, 2.5 * typical))
+
+        boxes = []
+        for i, area in zip(kept, areas):
+            pieces = [(labels == i)]
+            if area >= 1.5 * typical:
+                pieces = split_touching(labels == i, min_piece_px=0.3 * typical)
+            for piece in pieces:
+                ys, xs = np.nonzero(piece)
+                x, y = int(xs.min()), int(ys.min())
+                bw, bh = int(xs.max()) - x + 1, int(ys.max()) - y + 1
+                count = self._clump_count(piece[y:y + bh, x:x + bw], typical, px_per_mm)
+                contrast = float(resid[piece].mean())
+                conf = float(np.clip(contrast * 2.0, 0.05, 0.99))
+                pad = 0.15
+                boxes.append(Box(
+                    max(0, x - pad * bw) / f, max(0, y - pad * bh) / f,
+                    min(w, x + bw * (1 + pad)) / f, min(h, y + bh * (1 + pad)) / f, conf, count,
+                ))
+        self.last = {"px_per_mm": px_per_mm / f, "grid": grid, "threshold": thresh, "work_scale": f,
+                     "moth_area_px": typical / f ** 2}
         return boxes
+
+
+def _solidity(mask: np.ndarray) -> float:
+    cs, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    hull = cv2.contourArea(cv2.convexHull(np.vstack(cs))) if cs else 0.0
+    return float(mask.sum()) / hull if hull > 0 else 1.0
+
+
+def split_touching(mask: np.ndarray, min_piece_px: float) -> list[np.ndarray]:
+    """Split one blob into insects at its narrow necks (distance-transform watershed).
+
+    Seeds are the blob's "cores", the parts at least 60% as thick as its thickest point: one
+    long core for a single moth, one per moth when two touch side by side or end to end. Cores
+    smaller than `min_piece_px` (wing tips, legs) don't count. Returns [mask] if it won't split.
+    """
+    m = mask.astype(np.uint8)
+    ys, xs = np.nonzero(m)
+    y0, x0 = max(0, ys.min() - 2), max(0, xs.min() - 2)
+    sub = m[y0:ys.max() + 3, x0:xs.max() + 3]
+    dist = cv2.distanceTransform(sub, cv2.DIST_L2, 5)
+    cores = (dist >= 0.6 * dist.max()).astype(np.uint8)
+    n, lab, st, _ = cv2.connectedComponentsWithStats(cores, connectivity=8)
+    seeds = [k for k in range(1, n) if st[k][4] >= 0.15 * min_piece_px]
+    if len(seeds) < 2:
+        return [mask]
+    markers = np.zeros(sub.shape, np.int32)
+    for j, k in enumerate(seeds, start=2):
+        markers[lab == k] = j
+    markers[sub == 0] = 1  # background
+    rgb = cv2.cvtColor((255 - np.clip(dist / dist.max() * 255, 0, 255)).astype(np.uint8), cv2.COLOR_GRAY2BGR)
+    cv2.watershed(rgb, markers)
+    pieces = []
+    for j in range(2, len(seeds) + 2):
+        piece = (markers == j) & (sub > 0)
+        if piece.sum() < min_piece_px:
+            return [mask]  # a sliver: not really two insects
+        full = np.zeros(mask.shape, bool)
+        full[y0:y0 + sub.shape[0], x0:x0 + sub.shape[1]] = piece
+        pieces.append(full)
+    return pieces
 
 
 def darkness(v: np.ndarray, object_px: int) -> np.ndarray:
@@ -170,10 +274,17 @@ def _rotate(a: np.ndarray, angle: float, size: tuple[int, int] | None = None, in
     return cv2.warpAffine(a, m, (ow, oh), flags=cv2.INTER_LINEAR)
 
 
-def line_opening(dark: np.ndarray, angle: float, length: int) -> np.ndarray:
-    """Dark structures that run straight for `length` px in direction `angle` (degrees, image x axis)."""
+def line_opening(dark: np.ndarray, angle: float, length: int, thick: int | None = None) -> np.ndarray:
+    """Dark structures that run straight for `length` px in direction `angle` (degrees, image x axis).
+
+    With `thick`, only the thin part: anything `thick` px or wider across the line is left alone,
+    so two moths lying end to end along a grid line aren't mistaken for the line itself.
+    """
     rot = _rotate(dark, angle)  # lines at `angle` become horizontal
     opened = cv2.morphologyEx(rot, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (length, 1)))
+    if thick:
+        wide = cv2.morphologyEx(opened, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (1, thick)))
+        opened = opened - wide
     # a line may bend slightly (lens distortion): also accept it one pixel up or down
     opened = cv2.dilate(opened, np.ones((3, 1), np.uint8))
     return _rotate(opened, angle, inverse_of=dark.shape)

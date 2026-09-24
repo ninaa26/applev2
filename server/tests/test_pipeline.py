@@ -27,8 +27,9 @@ def liner(moths) -> bytes:
     for y in range(0, H, GRID):
         d.line([(0, y), (W, y)], fill=(190, 60, 50), width=3)
     d.rounded_rectangle([W / 2 - 30, H / 2 - 10, W / 2 + 30, H / 2 + 10], radius=6, fill=(170, 40, 40))  # lure (masked)
-    for x, y in moths:
-        d.ellipse([x - 25, y - 12, x + 25, y + 12], fill=(80, 70, 60))
+    for x, y, *r in moths:  # (x, y) or (x, y, half-length px, half-width px)
+        rx, ry = r or (25, 12)
+        d.ellipse([x - rx, y - ry, x + rx, y + ry], fill=(80, 70, 60))
     buf = io.BytesIO()
     img.save(buf, "JPEG", quality=92)
     return buf.getvalue()
@@ -141,3 +142,43 @@ def test_linear_head_maps_to_species_and_zero_fills_missing_classes():
     assert set(out[0]) == {"CM", "OFM", "OBLR", "other_moth", "debris"}
     assert out[0]["CM"] > 0.99 and out[0]["debris"] == 0.0
     assert abs(sum(out[0].values()) - 1.0) < 1e-6
+
+
+def test_touching_pair_counts_two_and_reviewer_can_fix_the_count():
+    key = add_trap()
+    t0 = datetime.now(timezone.utc) - timedelta(hours=3)
+    pair = [(600, 300, 32, 14), (600, 329, 32, 14)]  # two ~10 mm moths lying side by side, touching
+    with TestClient(create_app()) as client:
+        upload(client, key, t0, pair, "p1")
+        upload(client, key, t0 + timedelta(hours=1), pair, "p2")
+        process_pending(Pipeline())
+        with session_scope() as db:
+            tracks = db.query(Track).filter(Track.status == "confirmed").all()
+            assert sum(t.n_insects for t in tracks) == 2
+            assert sum(services.week_counts(db, "T1").values()) == 2
+            clump = [t for t in tracks if t.n_insects > 1]
+        if clump:  # not split into two boxes: it's in the review queue with its count
+            assert "insects touching" in client.get("/review").text
+            client.post(f"/tracks/{clump[0].id}/review", data={"label": "CM", "count": "3"})
+            upload(client, key, t0 + timedelta(hours=2), pair, "p3")
+            process_pending(Pipeline())
+            with session_scope() as db:
+                assert services.week_counts(db, "T1")["CM"] == 3, "the reviewer's count stands"
+
+
+def test_old_database_gets_new_columns(tmp_path):
+    import sqlite3
+
+    from sentinel_server import db as db_mod
+
+    db_mod.reset_engine()
+    path = tmp_path / "data" / "sentinel.db"
+    path.unlink()
+    con = sqlite3.connect(path)
+    con.execute("CREATE TABLE tracks (id INTEGER PRIMARY KEY, card_id INTEGER)")
+    con.execute("INSERT INTO tracks (id, card_id) VALUES (1, 1)")
+    con.commit()
+    con.close()
+    db_mod.init_db()
+    con = sqlite3.connect(path)
+    assert con.execute("SELECT n_insects FROM tracks").fetchall() == [(1,)]
