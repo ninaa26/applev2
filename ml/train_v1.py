@@ -85,12 +85,16 @@ def embeddings(rows: list[dict], cache: Path, model_name: str, batch: int) -> tu
     missing = sorted({r["path"] for r in rows} - cached.keys())
     embedder = None
     if missing:
-        print(f"Embedding {len(missing)} new photos with {model_name} (cached: {len(cached)})")
+        print(f"Embedding {len(missing)} new photos with {model_name} (cached: {len(cached)})", flush=True)
         embedder = Embedder(model_name)
-        cached.update(zip(missing, embedder.images(missing, batch)))
         cache.parent.mkdir(parents=True, exist_ok=True)
-        paths = sorted(cached)
-        np.savez(cache, paths=np.array(paths), feats=np.stack([cached[p] for p in paths]).astype(np.float16))
+        chunk = batch * 32  # save as we go, so a crash or a stalled GPU doesn't lose an hour of work
+        for start in range(0, len(missing), chunk):
+            part = missing[start:start + chunk]
+            cached.update(zip(part, embedder.images(part, batch)))
+            paths = sorted(cached)
+            np.savez(cache, paths=np.array(paths), feats=np.stack([cached[p] for p in paths]).astype(np.float16))
+            print(f"  saved {min(start + chunk, len(missing))}/{len(missing)} new embeddings", flush=True)
     return np.stack([cached[r["path"]] for r in rows]).astype(np.float32), embedder
 
 
