@@ -10,6 +10,9 @@ ones are kept, since most moth photos are adults. OFM and lesser appleworm are s
 so every photo of every observation is kept; the common species get one photo per
 observation, which gives more distinct moths for the same download.
 
+The bycatch_* labels are New York flies, parasitoid wasps, beetles, lacewings, leafhoppers and
+spiders: insects that land on the liner but aren't moths.
+
 iNaturalist lists OFM as *Aspila molesta* and lesser appleworm as *Aspila prunivora*.
 manifest.csv records each photo's licence and attribution for the report's credits.
 """
@@ -44,6 +47,14 @@ CLASSES = {
     # Other tortricids photographed in New York: the moths most likely to be confused with ours.
     "other_tortricid": ({"taxon_id": 47155, "place_id": NEW_YORK,
                          "without_taxon_id": "47153,1507298,143728,1507295,208118"}, 1500, False),
+    # Non-moth bycatch that ends up on delta-trap liners, as negatives for the other_insect class
+    # (Hong et al. 2020 and Mamdouh & Khattab 2021 added non-target insects the same way).
+    "bycatch_fly": ({"taxon_id": 47822, "place_id": NEW_YORK}, 300, False),         # Diptera
+    "bycatch_wasp": ({"taxon_id": 47200, "place_id": NEW_YORK}, 300, False),        # Ichneumonoidea (parasitoid wasps)
+    "bycatch_beetle": ({"taxon_id": 47208, "place_id": NEW_YORK}, 300, False),      # Coleoptera
+    "bycatch_lacewing": ({"taxon_id": 48763, "place_id": NEW_YORK}, 300, False),    # Neuroptera
+    "bycatch_leafhopper": ({"taxon_id": 53237, "place_id": NEW_YORK}, 300, False),  # Cicadellidae
+    "bycatch_spider": ({"taxon_id": 47118, "place_id": NEW_YORK}, 300, False),      # Araneae
 }
 
 

@@ -10,16 +10,18 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .db import Base
 
 # Classes the trap classifier can output. PC is not caught in delta traps.
-SPECIES = ["CM", "OFM", "OBLR", "other_moth", "debris"]
+SPECIES = ["CM", "OFM", "OBLR", "other_moth", "other_insect", "debris"]
 SPECIES_LABELS = {
     "CM": "Codling moth",
     "OFM": "Oriental fruit moth",
     "OBLR": "Obliquebanded leafroller",
     "other_moth": "Other moth",
+    "other_insect": "Other insect (not a moth)",
     "debris": "Debris / not an insect",
     "unclassified": "Insect (not yet classified)",
 }
 PESTS = ["CM", "OFM", "OBLR"]
+NOT_CATCHES = {"other_insect", "debris"}  # kept on the liner record, left out of moth counts
 
 
 def utcnow() -> datetime:

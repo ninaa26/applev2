@@ -8,7 +8,8 @@ Sources, all optional:
   data/inat/manifest.csv    from fetch_inat.py
   data/own/<label>/<card>/*.jpg
                             our own photos: crops from staged cards or trap liners, one folder per
-                            card. Labels: CM, OFM, OBLR, other_moth, debris (or any fine label below).
+                            card. Labels: CM, OFM, OBLR, other_moth, other_insect, debris
+                            (or any fine label below).
   data/own/locked_test.txt  card folder names set aside for the final evaluation (one per line).
                             These get split "locked" and train_v1.py never touches them unless --final.
 
@@ -45,6 +46,13 @@ CLASS_OF = {
     "lookalike_RBLR": "other_moth",
     "other_tortricid": "other_moth",
     "other_moth": "other_moth",
+    "bycatch_fly": "other_insect",
+    "bycatch_wasp": "other_insect",
+    "bycatch_beetle": "other_insect",
+    "bycatch_lacewing": "other_insect",
+    "bycatch_leafhopper": "other_insect",
+    "bycatch_spider": "other_insect",
+    "other_insect": "other_insect",
     "debris": "debris",
 }
 SOURCE_RANK = {"own": 0, "inat": 1, "ami": 2}

@@ -5,13 +5,13 @@
 ```bash
 uv venv --python 3.12 .venv && uv pip install -p .venv/bin/python -r requirements.txt
 python3 fetch_ami.py --out data/ami --other-moths 60     # ~4,000 photos (AMI / GBIF)
-python3 fetch_inat.py --out data/inat                    # ~7,300 photos (iNaturalist, research grade, CC)
+python3 fetch_inat.py --out data/inat                    # ~9,100 photos (iNaturalist, research grade, CC; incl. ~1,800 non-moth bycatch)
 .venv/bin/python build_dataset.py                        # merge, de-duplicate, split -> data/dataset.csv
 .venv/bin/python train_v1.py                             # BioCLIP 2 features -> v0 zero-shot + v1 head -> models/v1/
 ```
 
 **Adding our own photos later:** save insect crops as `data/own/<label>/<card>/*.jpg` (labels `CM`, `OFM`,
-`OBLR`, `other_moth`, `debris`; one folder per staged card), list the cards set aside for the final
+`OBLR`, `other_moth`, `other_insect`, `debris`; one folder per staged card), list the cards set aside for the final
 evaluation in `data/own/locked_test.txt`, then re-run `build_dataset.py` and `train_v1.py`. Only new
 photos get embedded. Run `train_v1.py --final` once, at the end, for the report's numbers.
 

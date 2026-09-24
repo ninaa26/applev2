@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from . import phenology
-from .models import Capture, Card, Event, Track, Trap, WeatherDay, utcnow
+from .models import NOT_CATCHES, Capture, Card, Event, Track, Trap, WeatherDay, utcnow
 from .settings import get_settings
 
 
@@ -47,7 +47,7 @@ def start_new_card(db: Session, trap_id: str, at: datetime | None = None, note: 
 
 
 def counted_tracks(db: Session, trap_id: str, since: datetime | None = None) -> list[Track]:
-    """Confirmed insects that count as catches (not rejected, not debris)."""
+    """Confirmed moths that count as catches (not rejected, not bycatch or debris)."""
     q = (
         select(Track)
         .join(Card, Track.card_id == Card.id)
@@ -55,7 +55,7 @@ def counted_tracks(db: Session, trap_id: str, since: datetime | None = None) -> 
     )
     if since is not None:
         q = q.where(Track.first_seen_at >= since)
-    return [t for t in db.scalars(q) if t.label != "debris"]
+    return [t for t in db.scalars(q) if t.label not in NOT_CATCHES]
 
 
 def daily_counts(db: Session, trap_id: str, days: int = 30) -> list[dict]:

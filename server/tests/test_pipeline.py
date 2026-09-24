@@ -131,6 +131,22 @@ def test_review_overrides_model_and_reject_removes_count():
             assert services.pending_reviews(db, "T1") == []
 
 
+def test_bycatch_is_kept_but_not_counted():
+    key = add_trap()
+    t0 = datetime.now(timezone.utc) - timedelta(hours=3)
+    with TestClient(create_app()) as client:
+        upload(client, key, t0, MOTHS[:2], "b1")
+        upload(client, key, t0 + timedelta(hours=1), MOTHS[:2], "b2")
+        process_pending(Pipeline())
+        with session_scope() as db:
+            ids = [t.id for t in services.pending_reviews(db, "T1")]
+        client.post(f"/tracks/{ids[0]}/review", data={"label": "OFM"})
+        client.post(f"/tracks/{ids[1]}/review", data={"label": "other_insect"})
+        with session_scope() as db:
+            assert services.week_counts(db, "T1") == {"OFM": 1}
+            assert db.get(Track, ids[1]).label == "other_insect"
+
+
 def test_linear_head_maps_to_species_and_zero_fills_missing_classes():
     import numpy as np
 
@@ -138,6 +154,6 @@ def test_linear_head_maps_to_species_and_zero_fills_missing_classes():
 
     W = np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32)
     out = linear_head_probs(np.array([[5.0, 0.0]], dtype=np.float32), W, np.zeros(2, np.float32), ["CM", "OFM"])
-    assert set(out[0]) == {"CM", "OFM", "OBLR", "other_moth", "debris"}
+    assert set(out[0]) == {"CM", "OFM", "OBLR", "other_moth", "other_insect", "debris"}
     assert out[0]["CM"] > 0.99 and out[0]["debris"] == 0.0
     assert abs(sum(out[0].values()) - 1.0) < 1e-6

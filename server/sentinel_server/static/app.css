@@ -1,7 +1,7 @@
 :root{
   --ground:#F3F5F1; --surface:#FFFFFF; --sunk:#E8ECE5; --ink:#1B241E; --muted:#58645B; --rule:#D3DAD0;
   --accent:#9E2432; --leaf:#2F5D3E; --leaf-soft:#E1ECE3;
-  --cm:#9E2432; --ofm:#B66A12; --oblr:#2F6E8C; --other:#6B6F68; --debris:#A7ADA4; --unc:#5B4A8B;
+  --cm:#9E2432; --ofm:#B66A12; --oblr:#2F6E8C; --other:#6B6F68; --debris:#A7ADA4; --insect:#8A8660; --unc:#5B4A8B;
   --ok:#2F7A45; --warn:#A8690C; --crit:#B3261E;
   --sans:"IBM Plex Sans",-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
@@ -12,7 +12,7 @@
     color-scheme:dark;
     --ground:#121713; --surface:#1A211C; --sunk:#222B24; --ink:#E6ECE6; --muted:#9BA89E; --rule:#2F3A32;
     --accent:#E0717C; --leaf:#8CC49D; --leaf-soft:#1F2F24;
-    --cm:#E0717C; --ofm:#E3A24F; --oblr:#6FB3D3; --other:#A3A89F; --debris:#6F756C; --unc:#A897D8;
+    --cm:#E0717C; --ofm:#E3A24F; --oblr:#6FB3D3; --other:#A3A89F; --debris:#6F756C; --insect:#9C976E; --unc:#A897D8;
     --ok:#6CC38A; --warn:#E3A24F; --crit:#F08077;
   }
 }
@@ -45,13 +45,13 @@ td.n{font-family:var(--mono);text-align:right}
 .sp{display:inline-flex;align-items:center;gap:6px}
 .dot{width:9px;height:9px;border-radius:50%;display:inline-block}
 .c-CM{background:var(--cm)}.c-OFM{background:var(--ofm)}.c-OBLR{background:var(--oblr)}
-.c-other_moth{background:var(--other)}.c-debris{background:var(--debris)}.c-unclassified{background:var(--unc)}
+.c-other_moth{background:var(--other)}.c-debris{background:var(--debris)}.c-other_insect{background:var(--insect)}.c-unclassified{background:var(--unc)}
 .photo{position:relative;max-width:100%}
 .photo img{width:100%;height:auto;display:block;border-radius:6px}
 .photo svg{position:absolute;inset:0;width:100%;height:100%}
 .photo rect{fill:none;stroke-width:4}
 .s-CM{stroke:var(--cm)}.s-OFM{stroke:var(--ofm)}.s-OBLR{stroke:var(--oblr)}.s-other_moth{stroke:var(--other)}
-.s-debris{stroke:var(--debris)}.s-unclassified{stroke:var(--unc)}
+.s-debris{stroke:var(--debris)}.s-other_insect{stroke:var(--insect)}.s-unclassified{stroke:var(--unc)}
 .s-candidate{stroke-dasharray:14 10}
 .bars{display:flex;align-items:flex-end;gap:3px;height:140px;border-bottom:1px solid var(--rule);padding-top:8px}
 .bar{flex:1;display:flex;flex-direction:column-reverse;min-width:6px}
