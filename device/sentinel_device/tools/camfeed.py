@@ -13,6 +13,7 @@ or `pkill -f sentinel-camfeed`.
 from __future__ import annotations
 
 import argparse
+import errno
 import subprocess
 import threading
 import time
@@ -42,6 +43,15 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
 
     import cv2  # type: ignore
+
+    host = args.host or tailscale_ip()
+    try:
+        server = ThreadingHTTPServer((host, args.port), None)
+    except OSError as e:
+        if e.errno == errno.EADDRINUSE:
+            print(f"Live view is already running: http://{host}:{args.port}")
+            return 0
+        raise
 
     cam_cfg = config_mod.load(args.config)["camera"]
     if cam_cfg["backend"] != "usb":
@@ -97,11 +107,11 @@ def main(argv: list[str] | None = None) -> int:
             except (BrokenPipeError, ConnectionResetError):
                 pass
 
+    server.RequestHandlerClass = Handler
     threading.Thread(target=grab, daemon=True).start()
-    host = args.host or tailscale_ip()
     print(f"Live view: http://{host}:{args.port}  (Ctrl-C to stop)", flush=True)
     try:
-        ThreadingHTTPServer((host, args.port), Handler).serve_forever()
+        server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
