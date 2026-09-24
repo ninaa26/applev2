@@ -48,8 +48,13 @@ MODELS = {
         Milestone(250, "First spray for overwintering generation; second spray 10–14 days later"),
     )),
     "OFM": PestModel("OFM", "Oriental fruit moth", 45, "biofix (first sustained catch)", (
-        # First-generation timing is tied to petal fall; the second flight is predicted from Jan 1.
-        Milestone(1000, "2nd flight expected (1000–1400 DD base 45 °F from Jan 1)"),
+        # UC IPM OFM phenology models (Croft et al. 1980, validated in Michigan; Rice et al. 1984),
+        # both base 45 °F from biofix. They use a 90 °F horizontal upper cutoff that NEWA's BE
+        # degree days don't; it rarely matters in Ithaca. The 2nd flight is also predicted from
+        # Jan 1 (1000–1400 DD), shown separately on the trap page.
+        Milestone(50, "Egg laying begins"),
+        Milestone(200, "Egg hatch begins: time larval sprays for the first generation"),
+        Milestone(965, "Next generation's moths start flying"),
     )),
     "OBLR": PestModel("OBLR", "Obliquebanded leafroller", 43, "biofix (first catch; traps out by June 1)", (
         Milestone(350, "Egg hatch: spray targeting larvae (history of OBLR); second spray 10–14 days later"),

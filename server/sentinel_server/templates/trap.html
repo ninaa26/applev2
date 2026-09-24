@@ -42,7 +42,7 @@
         <dt>DD since biofix</dt><dd class="mono">{{ '%.0f'|format(pheno.dd) }}{% if pheno.missing_days %} <span class="muted">({{ pheno.missing_days }} days without weather data)</span>{% endif %}</dd>
         <dt>Next</dt><dd>{{ '%.0f DD: %s'|format(pheno.next.dd, pheno.next.label) if pheno.next else 'All milestones passed' }}</dd>
         {% endif %}
-        {% if pheno.dd_jan1 is defined %}<dt>DD since Jan 1</dt><dd class="mono">{{ '%.0f'|format(pheno.dd_jan1) }}</dd>{% endif %}
+        {% if pheno.dd_jan1 is defined %}<dt>DD since Jan 1</dt><dd class="mono">{{ '%.0f'|format(pheno.dd_jan1) }} <span class="muted">(2nd flight expected at 1000–1400)</span></dd>{% endif %}
         <dt>Weather</dt><dd class="muted">{{ pheno.weather_source }}</dd>
       </dl>
       {% else %}<p class="muted">No model for this lure.</p>{% endif %}

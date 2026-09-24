@@ -31,6 +31,13 @@ def test_sustained_biofix_needs_two_weeks_in_a_row():
     assert ph.sustained_biofix([]) is None
 
 
+def test_ofm_milestones_are_since_biofix():
+    ofm = ph.MODELS["OFM"]
+    assert ph.next_milestone(ofm, 0).dd == 50
+    assert ph.next_milestone(ofm, 150).dd == 200
+    assert ph.next_milestone(ofm, 500).dd == 965
+
+
 def test_next_milestone_cm():
     cm = ph.MODELS["CM"]
     assert ph.next_milestone(cm, 0).dd == 50
