@@ -13,7 +13,7 @@ device/     Raspberry Pi 5 software: wake → LED → photo → queue → upload
 server/     FastAPI + SQLite (Postgres later): upload API, detection/tracking/counting worker, dashboard
 ml/         training-data tools (AMI fetch) and model notes
 hardware/   mockup trap template, 3D-printable camera mount + liner tray, calibration prints
-docs/       bring-up, wiring, running the server on the Mac, camera bench test
+docs/       bring-up, wiring, running the server on the Mac, camera bench test, measuring accuracy
 ```
 
 ## Quick start (no hardware needed)

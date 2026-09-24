@@ -160,6 +160,23 @@ def cmd_import_weather(args) -> int:
     return 0
 
 
+def cmd_evaluate(args) -> int:
+    """Score counts, detection and biofix against a person's count (see evaluate.py for the file formats)."""
+    from . import evaluate as ev
+
+    init_db()
+    targets = ev.Targets(count=args.count_target, iomin=args.iomin, biofix_days=args.biofix_days)
+    counts = ev.read_counts(args.counts) if args.counts else None
+    boxes = ev.read_boxes(args.boxes) if args.boxes else None
+    with session_scope() as db:
+        md = ev.to_markdown(ev.evaluate(db, counts, boxes, targets))
+    print(md)
+    if args.out:
+        args.out.write_text(md)
+        print(f"saved {args.out}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="sentinel-server", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -207,6 +224,15 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("csv", type=Path)
     p.add_argument("--source", default="newa:station")
     p.set_defaults(fn=cmd_import_weather)
+
+    p = sub.add_parser("evaluate", help="score counts, detection (IoMin) and biofix against manual truth")
+    p.add_argument("--counts", type=Path, help="CSV card,date,label,count from counting the liners by hand")
+    p.add_argument("--boxes", type=Path, help="CSV photo,x1,y1,x2,y2[,label] of insects drawn on some photos")
+    p.add_argument("--out", type=Path, help="also save the report (Markdown)")
+    p.add_argument("--count-target", type=float, default=0.80, help="pass mark for count accuracy (default 0.80)")
+    p.add_argument("--iomin", type=float, default=0.5, help="detection match threshold (default 0.5)")
+    p.add_argument("--biofix-days", type=int, default=1, help="biofix passes if within this many days (default 1)")
+    p.set_defaults(fn=cmd_evaluate)
 
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
