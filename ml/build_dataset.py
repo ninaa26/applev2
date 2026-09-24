@@ -49,7 +49,14 @@ CLASS_OF = {
     "lookalike_RBLR": "other_moth",
     "other_tortricid": "other_moth",
     "other_moth": "other_moth",
-    "other_insect": "debris",  # flies, wasps, beetles, bugs: not a moth, so not counted
+    # Non-moth bycatch is its own class: an insect, but not a moth, so it isn't counted.
+    "other_insect": "other_insect",
+    "bycatch_fly": "other_insect",
+    "bycatch_wasp": "other_insect",
+    "bycatch_beetle": "other_insect",
+    "bycatch_lacewing": "other_insect",
+    "bycatch_leafhopper": "other_insect",
+    "bycatch_spider": "other_insect",
     "debris": "debris",
 }
 SOURCE_RANK = {"own": 0, "inat": 1, "ami": 2, "synth": 3}

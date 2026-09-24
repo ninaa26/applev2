@@ -24,6 +24,7 @@ PROMPTS = {
     "OFM": "a photo of Grapholita molesta, oriental fruit moth",
     "OBLR": "a photo of Choristoneura rosaceana, obliquebanded leafroller",
     "other_moth": "a photo of a small moth",
+    "other_insect": "a photo of a fly, wasp, beetle or other small insect that is not a moth",
     "debris": "a photo of dirt, a leaf fragment or debris on sticky paper",
 }
 

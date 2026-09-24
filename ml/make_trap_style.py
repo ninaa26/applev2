@@ -20,8 +20,9 @@ For each flatbug cutout (data/cutouts/, from segment_moths.py):
 Plus `debris` crops of bare liner (grid lines, crossings, glare, shadows) at random sizes.
 
 Each synthetic photo inherits its source photo's group (so its split), which keeps a moth and its
-pasted copies on the same side of the train/test line. Rare labels get more copies per cutout
-(--per-label), capped at --max-copies. data/synth/manifest.csv lists everything.
+pasted copies on the same side of the train/test line. Each class gets about --per-class photos,
+shared equally by its labels (other_moth has 4, other_insect 7), so rare labels get more copies per
+cutout, capped at --max-copies. data/synth/manifest.csv lists everything.
 """
 
 from __future__ import annotations
@@ -36,6 +37,8 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageFilter
 
+from build_dataset import CLASS_OF
+
 # Resting length in mm (head to wing tips), from the NEWA / UC IPM / TortAI descriptions.
 LENGTH_MM = {
     "CM": (9.0, 11.0),
@@ -46,6 +49,12 @@ LENGTH_MM = {
     "other_tortricid": (6.0, 13.0),
     "other_moth": (6.0, 20.0),
     "other_insect": (3.0, 15.0),
+    "bycatch_fly": (3.0, 12.0),
+    "bycatch_wasp": (3.0, 15.0),
+    "bycatch_beetle": (3.0, 12.0),
+    "bycatch_lacewing": (10.0, 20.0),
+    "bycatch_leafhopper": (3.0, 10.0),
+    "bycatch_spider": (2.0, 10.0),
 }
 PPM = (5.0, 16.0)  # px/mm: ~7 on the current webcam, ~15 expected with the Camera Module 3
 PAD = 0.35  # server crop padding (server/sentinel_server/pipeline/classify.py: crop)
@@ -145,7 +154,7 @@ def sheet(paths: list[Path], dest: Path, cell: int = 128) -> None:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--data", type=Path, default=Path("data"))
-    ap.add_argument("--per-label", type=int, default=2500, help="target photos per fine label")
+    ap.add_argument("--per-class", type=int, default=5000, help="target photos per class, shared by its labels")
     ap.add_argument("--max-copies", type=int, default=12, help="most copies of any one cutout")
     ap.add_argument("--debris", type=int, default=2000, help="bare-liner debris crops")
     ap.add_argument("--preview", type=int, default=0, help="only write a contact sheet of this many")
@@ -167,8 +176,12 @@ def main(argv=None) -> int:
         out = out / "preview"
     else:
         jobs = []
+        labels_in = defaultdict(int)
+        for label in by_label:
+            labels_in[CLASS_OF[label]] += 1
         for label, rows in sorted(by_label.items()):
-            copies = min(args.max_copies, max(1, round(args.per_label / len(rows))))
+            target = args.per_class / labels_in[CLASS_OF[label]]
+            copies = min(args.max_copies, max(1, round(target / len(rows))))
             jobs += [(r, k) for r in rows for k in range(copies)]
             print(f"  {label:16} {len(rows):5} cutouts x {copies:2} = {len(rows) * copies}")
     out.mkdir(parents=True, exist_ok=True)

@@ -15,8 +15,9 @@ python3 fetch_inat.py --out data/inat                    # ~8,500 photos (iNatur
 ```
 
 **Classes** (what the server stores): `CM`, `OFM`, `OBLR`, `other_moth` (other tortricids, lesser
-appleworm, redbanded leafroller, 60 common NE moths) and `debris`: bare liner (grid, glare, shadows)
-plus non-moth bycatch, fetched as `other_insect` (flies, wasps, beetles, true bugs photographed in NY).
+appleworm, redbanded leafroller, 60 common NE moths), `other_insect` (non-moth bycatch photographed in
+NY: `other_insect` and the `bycatch_*` labels: flies, wasps, beetles, bugs, lacewings, leafhoppers,
+spiders) and `debris` (bare liner: grid, glare, shadows; later real leaf bits and insect remains).
 
 **Trap-style photos.** Web photos are sharp, full size and naturally lit. In the trap a CM is ~70 px
 long (webcam) under orange light on a gridded liner. `segment_moths.py` cuts each insect out with
