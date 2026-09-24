@@ -1,5 +1,29 @@
 # ML data and experiments
 
+## Quick start: dataset → v0/v1 species ID
+
+```bash
+uv venv --python 3.12 .venv && uv pip install -p .venv/bin/python -r requirements.txt
+python3 fetch_ami.py --out data/ami --other-moths 60     # ~4,000 photos (AMI / GBIF)
+python3 fetch_inat.py --out data/inat                    # ~7,300 photos (iNaturalist, research grade, CC)
+.venv/bin/python build_dataset.py                        # merge, de-duplicate, split -> data/dataset.csv
+.venv/bin/python train_v1.py                             # BioCLIP 2 features -> v0 zero-shot + v1 head -> models/v1/
+```
+
+**Adding our own photos later:** save insect crops as `data/own/<label>/<card>/*.jpg` (labels `CM`, `OFM`,
+`OBLR`, `other_moth`, `debris`; one folder per staged card), list the cards set aside for the final
+evaluation in `data/own/locked_test.txt`, then re-run `build_dataset.py` and `train_v1.py`. Only new
+photos get embedded. Run `train_v1.py --final` once, at the end, for the report's numbers.
+
+**Don't quote the web-photo test scores as trap accuracy.** BioCLIP 2 was trained on iNaturalist/GBIF
+photos (TreeOfLife-200M), so it has likely seen these exact test photos with their names, and they
+show whole moths in natural poses rather than moths flattened on a glue liner. On Sep 24 2026 the
+AMI-only test gave v0 zero-shot 0.72 balanced accuracy and v1 0.996: a sign the pipeline works,
+not how well the trap will do.
+
+**Using the model in the server:** in `server/.env` set `SENTINEL_CLASSIFIER=bioclip-v1` and
+`SENTINEL_CLASSIFIER_HEAD=../ml/models/v1/head.npz`.
+
 ## Get training photos from AMI (primary external source)
 
 ```bash
@@ -20,5 +44,5 @@ never to report accuracy. Accuracy numbers come from our own staged-card photos,
 | Version | Detector | Species ID | Where it lives |
 |---|---|---|---|
 | v0 | baseline OpenCV → flatbug | none → BioCLIP 2 zero-shot | `server/sentinel_server/pipeline/` (`SENTINEL_DETECTOR`, `SENTINEL_CLASSIFIER`) |
-| v1 | flatbug | BioCLIP 2 / InsectNet / DINOv2 features + logistic regression | next: train on labelled crops from the review queue + AMI |
+| v1 | flatbug | BioCLIP 2 features + logistic regression (`train_v1.py`); InsectNet / DINOv2 comparison still to do | `ml/train_v1.py` → `models/v1/head.npz`, server `SENTINEL_CLASSIFIER=bioclip-v1` |
 | v2 | fine-tuned flatbug or YOLO11 | best of v1 vs fine-tuned EfficientNet-B0 | Colab or a Cornell GPU |

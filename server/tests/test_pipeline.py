@@ -122,3 +122,15 @@ def test_review_overrides_model_and_reject_removes_count():
         with session_scope() as db:
             assert services.week_counts(db, "T1") == {"CM": 1}
             assert services.pending_reviews(db, "T1") == []
+
+
+def test_linear_head_maps_to_species_and_zero_fills_missing_classes():
+    import numpy as np
+
+    from sentinel_server.pipeline.classify import linear_head_probs
+
+    W = np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32)
+    out = linear_head_probs(np.array([[5.0, 0.0]], dtype=np.float32), W, np.zeros(2, np.float32), ["CM", "OFM"])
+    assert set(out[0]) == {"CM", "OFM", "OBLR", "other_moth", "debris"}
+    assert out[0]["CM"] > 0.99 and out[0]["debris"] == 0.0
+    assert abs(sum(out[0].values()) - 1.0) < 1e-6

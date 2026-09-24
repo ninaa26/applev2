@@ -8,3 +8,4 @@ server/data/
 ml/data/
 device/data/
 *.egg-info/
+ml/models/
