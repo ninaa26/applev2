@@ -1,0 +1,38 @@
+[project]
+name = "sentinel-server"
+version = "0.1.0"
+description = "Orchard Sentinel server: receives trap photos, detects and tracks insects, computes degree days, serves the dashboard."
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "sqlalchemy>=2.0",
+    "python-multipart>=0.0.9",
+    "jinja2>=3.1",
+    "pillow>=10.0",
+    "numpy>=1.26",
+    "opencv-python-headless>=4.9",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "httpx>=0.27"]
+postgres = ["psycopg[binary]>=3.1"]
+# Heavy ML extras: install only on the machine that runs the worker.
+bioclip = ["open_clip_torch>=2.24", "torch>=2.2"]
+flatbug = ["flat-bug @ git+https://github.com/darsa-group/flat-bug.git"]
+
+[project.scripts]
+sentinel-server = "sentinel_server.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["sentinel_server*"]
+
+[tool.setuptools.package-data]
+sentinel_server = ["templates/*.html", "static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

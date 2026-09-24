@@ -1,0 +1,16 @@
+[Unit]
+Description=Orchard Sentinel wake cycle (photograph liner, upload, schedule next wake, power off)
+Wants=network-online.target tailscaled.service
+After=network-online.target tailscaled.service time-sync.target
+
+[Service]
+Type=oneshot
+User=sentinel
+# Give Wi-Fi/Tailscale a moment; the cycle still works offline (photos stay queued).
+ExecStartPre=/bin/sleep 15
+ExecStart=/opt/sentinel/venv/bin/sentinel-cycle --config /etc/sentinel/config.toml
+# Hardware watchdog backstop: if the cycle hangs, systemd kills it and the next boot retries.
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

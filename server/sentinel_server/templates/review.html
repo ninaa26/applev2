@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% set nav = 'review' %}
+{% block title %}Review queue · Orchard Sentinel{% endblock %}
+{% block main %}
+<div>
+  <h1>Review queue</h1>
+  <p class="muted">Insects the model wasn't sure about. Your label overrides the model, counts right away, and becomes training data for the next model version.</p>
+</div>
+{% if items %}
+<div class="review-grid">
+  {% for it in items %}{% set t = it.track %}
+  <div class="ritem">
+    {% if it.det %}<a href="/captures/{{ it.det.capture_id }}"><img src="/crops/{{ it.det.id }}.jpg" alt="Insect #{{ t.id }}" loading="lazy"></a>{% endif %}
+    <div style="font-size:13px">
+      <b>#{{ t.id }}</b> · first seen {{ t.first_seen_at|local }}<br>
+      <span class="muted">Model: {{ SPECIES_LABELS.get(t.species, t.species) }}{% if t.species_conf %} ({{ '%.0f'|format(100 * t.species_conf) }}%){% endif %} · seen in {{ t.n_seen }} photos</span>
+    </div>
+    <form method="post" action="/tracks/{{ t.id }}/review" class="btns">
+      <input type="hidden" name="next" value="/review">
+      {% for sp in SPECIES %}<button type="submit" name="label" value="{{ sp }}" class="{{ 'primary' if sp == t.species }}">{{ sp.replace('_', ' ') }}</button>{% endfor %}
+      <button type="submit" name="label" value="reject" title="Not an insect / don't count">reject</button>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="notice">Nothing to review right now.</div>
+{% endif %}
+{% endblock %}

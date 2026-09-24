@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="655.8756276314948mm" height="380.0mm" viewBox="0 0 655.8756276314948 380.0">
+<style>.cut{fill:none;stroke:#000;stroke-width:0.4}.fold{fill:none;stroke:#1a6;stroke-width:0.4;stroke-dasharray:4 3}.mark{fill:none;stroke:#b22;stroke-width:0.4}.txt{font:5px sans-serif;fill:#222}</style>
+<rect class="cut" x="20.0" y="20.0" width="615.8756276314948" height="280"/>
+<line class="fold" x1="35.0" y1="20.0" x2="35.0" y2="300.0"/>
+<line class="fold" x1="227.93781381574738" y1="20.0" x2="227.93781381574738" y2="300.0"/>
+<line class="fold" x1="420.87562763149475" y1="20.0" x2="420.87562763149475" y2="300.0"/>
+<line class="fold" x1="620.8756276314948" y1="20.0" x2="620.8756276314948" y2="300.0"/>
+<rect class="cut" x="224.93781381574738" y="180.0" width="6" height="18"/>
+<text class="txt" x="232.93781381574738" y="186.0">cable slot (camera mount centred on this fold, halfway along)</text>
+<circle class="cut" cx="150.76268828944842" cy="90.0" r="3.0"/>
+<circle class="cut" cx="150.76268828944842" cy="230.0" r="3.0"/>
+<circle class="cut" cx="305.11293934204633" cy="90.0" r="3.0"/>
+<circle class="cut" cx="305.11293934204633" cy="230.0" r="3.0"/>
+<rect class="mark" x="430.8756276314948" y="70.0" width="180" height="180"/>
+<rect class="mark" x="508.8756276314948" y="154.0" width="24" height="12"/>
+<text class="txt" x="430.8756276314948" y="68.0">liner 180 × 180 mm · red box = lure spot (masked)</text>
+<text class="txt" x="19.5" y="30.0">glue tab</text>
+<text class="txt" x="123.4689069078737" y="30.0">roof A</text>
+<text class="txt" x="316.40672072362105" y="30.0">roof B</text>
+<text class="txt" x="512.8756276314948" y="30.0">floor</text>
+<text class="txt" x="620.3756276314948" y="30.0">tab</text>
+<line class="cut" x1="20.0" y1="320.0" x2="70.0" y2="320.0"/>
+<text class="txt" x="20.0" y="328.0">50 mm: measure this after printing (print at 100 %)</text>
+<text class="txt" x="20.0" y="338.0">floor 200 mm · length 280 mm · apex 165 mm · roof panels 192.9 mm wide · green dashed = fold · black = cut</text>
+</svg>

@@ -1,0 +1,28 @@
+[project]
+name = "sentinel-device"
+version = "0.1.0"
+description = "Orchard Sentinel trap firmware: wake, photograph the liner, upload, sleep."
+requires-python = ">=3.11"
+dependencies = [
+    "requests>=2.31",
+    "smbus2>=0.4",
+    "numpy>=1.24",
+    "pillow>=10.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+sentinel-cycle = "sentinel_device.cycle:main"
+sentinel-focus-sweep = "sentinel_device.tools.focus_sweep:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["sentinel_device*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

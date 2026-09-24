@@ -1,0 +1,14 @@
+{# Photo with detection boxes. Needs: cap, tracks (track_id -> Track) #}
+<div class="photo">
+  <img src="/media/{{ cap.image_path }}" alt="Liner photo from {{ cap.captured_at|local }}">
+  {% if cap.width %}
+  <svg viewBox="0 0 {{ cap.width }} {{ cap.height }}" preserveAspectRatio="none" aria-hidden="true">
+    {% for d in cap.detections %}
+      {% set t = tracks.get(d.track_id) %}
+      {% set lab = t.label if t else 'unclassified' %}
+      <rect x="{{ d.x1 }}" y="{{ d.y1 }}" width="{{ d.x2 - d.x1 }}" height="{{ d.y2 - d.y1 }}"
+            class="s-{{ lab }} {{ 's-candidate' if t and t.status != 'confirmed' }}"><title>{{ SPECIES_LABELS.get(lab, lab) }}{% if t %} · insect #{{ t.id }} · {{ t.status }}{% endif %}</title></rect>
+    {% endfor %}
+  </svg>
+  {% endif %}
+</div>

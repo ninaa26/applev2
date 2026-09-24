@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% set nav = 'overview' %}
+{% block title %}Photo {{ cap.id }} · Orchard Sentinel{% endblock %}
+{% block main %}
+<div>
+  <p><a href="/traps/{{ trap.id }}">← {{ trap.id }}</a></p>
+  <h1>Photo {{ cap.captured_at|local('%b %d, %Y %H:%M') }}</h1>
+  <p class="muted">Liner #{{ cap.card_id }} · <span class="pill {{ cap.status }}">{{ cap.status }}</span>{% if cap.model_version %} · {{ cap.model_version }}{% endif %}{% if cap.error %} · {{ cap.error }}{% endif %}</p>
+</div>
+<div class="grid g2">
+  <div class="card">{% include "_photo.html" %}</div>
+  <div class="card">
+    <h2>Readings</h2>
+    <dl class="kv" style="margin-top:8px">
+      <dt>Wake</dt><dd>{{ cap.wake_reason or '—' }}</dd>
+      <dt>Temperature</dt><dd class="mono">{{ '%.1f °C'|format(cap.temp_c) if cap.temp_c is not none else '—' }}</dd>
+      <dt>Humidity</dt><dd class="mono">{{ '%.0f %%'|format(cap.rh) if cap.rh is not none else '—' }}</dd>
+      <dt>Battery</dt><dd class="mono">{{ '%.2f V'|format(cap.battery_v) if cap.battery_v else '—' }}</dd>
+      <dt>Camera</dt><dd class="mono" style="font-size:12px">{{ cap.meta.camera | tojson if cap.meta.camera else '—' }}</dd>
+    </dl>
+    <h2 style="margin-top:16px">Insects in this photo</h2>
+    <table>
+      <thead><tr><th>Insect</th><th>Label</th><th>Status</th><th style="text-align:right">Conf.</th></tr></thead>
+      <tbody>
+      {% for d in cap.detections %}{% set t = tracks.get(d.track_id) %}
+        <tr><td><a href="/crops/{{ d.id }}.jpg">#{{ d.track_id }}</a></td>
+            <td><span class="sp"><i class="dot c-{{ t.label if t else 'unclassified' }}"></i>{{ SPECIES_LABELS.get(t.label, t.label) if t else '—' }}</span></td>
+            <td><span class="pill {{ t.review_status if t else '' }}">{{ t.status if t else '' }} · {{ t.review_status if t else '' }}</span></td>
+            <td class="n">{{ '%.2f'|format(t.species_conf) if t else '' }}</td></tr>
+      {% else %}<tr><td colspan="4" class="muted">None found.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

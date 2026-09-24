@@ -1,0 +1,37 @@
+# Copy to /etc/sentinel/config.toml on the Pi (or pass --config).
+# Values under [camera] and [schedule] are defaults; the server can override
+# them in its reply to every upload.
+
+trap_id = "T1"
+api_key = "paste-the-key-printed-by-`sentinel-server add-trap`"
+server_url = "http://sentinel-mac:8000"   # Tailscale MagicDNS name of the Mac
+data_dir = "/var/lib/sentinel"            # queue/, sent/, state.json live here
+timezone = "America/New_York"
+
+[schedule]
+# Local times to wake and photograph. Dusk shot matters most: moths fly at dusk.
+times = ["07:00", "10:00", "13:00", "16:00", "19:30", "22:00"]
+halt_after_cycle = true    # false on the bench: stay on after capturing
+manual_wake_is_new_card = true  # field: wake by power button = fresh liner installed
+
+[camera]
+backend = "picamera2"      # "fake" for testing on a laptop
+lens_position = 6.5        # dioptres (1 / metres); ~15 cm => 6.7. Tune with sentinel-focus-sweep.
+exposure_us = 8000
+analogue_gain = 1.0
+colour_gains = [1.9, 1.6]  # fixed white balance (red, blue); tune once under the LEDs
+jpeg_quality = 95
+settle_s = 1.5             # let the LEDs and sensor settle before the still
+
+[led]
+enabled = true
+gpio = 17                  # MOSFET gate for the LED strip
+
+[sensors]
+sht4x = true               # SHT45 temp/humidity on I2C bus 1, address 0x44
+ina219 = false             # battery monitor on I2C bus 1, address 0x40
+ina219_shunt_ohms = 0.1
+
+[upload]
+timeout_s = 30
+max_per_cycle = 20         # drain at most this many queued photos per wake

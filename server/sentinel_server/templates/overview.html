@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% set nav = 'overview' %}
+{% block title %}Traps · Orchard Sentinel{% endblock %}
+{% block head %}<meta http-equiv="refresh" content="60">{% endblock %}
+{% block main %}
+<div>
+  <h1>All traps</h1>
+  <p class="muted">New catches in the last 7 days. Pending reviews aren't counted until a person confirms them.</p>
+</div>
+
+{% if not rows %}
+<div class="notice">No traps yet. Create one on the server with <code>sentinel-server add-trap T1 --lure CM --name "Bench"</code>, then point a device at it.</div>
+{% endif %}
+
+{% if rows %}
+<div class="card tbl">
+<table>
+  <thead><tr><th>Trap</th><th>Status</th>{% for sp in PESTS %}<th style="text-align:right">{{ sp }}</th>{% endfor %}<th style="text-align:right">Other</th><th style="text-align:right">To review</th><th>Liner since</th><th>Battery</th><th>Degree days</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  {% set h = r.health %}
+  <tr>
+    <td><a href="/traps/{{ r.trap.id }}"><b>{{ r.trap.id }}</b></a> <span class="muted">{{ r.trap.name }} · {{ r.trap.lure }} lure</span></td>
+    <td><span class="pill {{ h.state }}">{% if h.state == 'never' %}No photos yet{% else %}{{ h.state|capitalize }} · {{ h.last.received_at|ago }}{% endif %}</span></td>
+    {% for sp in PESTS %}<td class="n">{{ r.week.get(sp, 0) }}</td>{% endfor %}
+    <td class="n">{{ r.week.get('other_moth', 0) + r.week.get('unclassified', 0) }}</td>
+    <td class="n">{% if r.pending %}<a href="/review">{{ r.pending }}</a>{% else %}0{% endif %}</td>
+    <td class="mono">{{ r.card.installed_at|local('%b %d') if r.card else '—' }}</td>
+    <td class="mono">{{ '%.2f V'|format(h.last.battery_v) if h.last and h.last.battery_v else '—' }}</td>
+    <td>{% if r.pheno and r.pheno.biofix %}<span class="mono">{{ '%.0f'|format(r.pheno.dd) }}</span> <span class="muted">since {{ r.pheno.biofix.strftime('%b %d') }}</span>{% elif r.pheno %}<span class="muted">No biofix yet</span>{% else %}—{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Recent events</h2>
+  {% if events %}
+  <table><tbody>
+  {% for e in events %}
+    <tr><td class="mono muted" style="width:130px">{{ e.at|local }}</td><td>{{ e.trap_id or '' }}</td><td>{{ e.kind.replace('_',' ') }}</td><td class="muted">{{ e.payload.note or e.payload.detections or '' }}</td></tr>
+  {% endfor %}
+  </tbody></table>
+  {% else %}<p class="muted">Nothing yet.</p>{% endif %}
+</div>
+{% endblock %}

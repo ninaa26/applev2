@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% set nav = 'overview' %}
+{% block title %}{{ trap.id }} · Orchard Sentinel{% endblock %}
+{% block head %}<meta http-equiv="refresh" content="120">{% endblock %}
+{% block main %}
+<div style="display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:flex-end">
+  <div>
+    <h1>{{ trap.id }} <span class="muted" style="font-size:18px">{{ trap.name }}</span></h1>
+    <p class="muted">{{ trap.lure }} lure{% if trap.block %} · {{ trap.block }}{% endif %} · liner installed {{ card.installed_at|local if card else '—' }}
+      · <span class="pill {{ health.state }}">{% if health.state == 'never' %}No photos yet{% else %}{{ health.state|capitalize }} · last photo {{ health.last.received_at|ago }}{% endif %}</span></p>
+    {% if health.device_error %}<p class="pill error">Trap reported: {{ health.device_error }}</p>{% endif %}
+  </div>
+  <form method="post" action="/traps/{{ trap.id }}/new-card">
+    <input type="hidden" name="note" value="installed from dashboard">
+    <button class="primary" type="submit">New liner installed</button>
+  </form>
+</div>
+
+<div class="grid g2">
+  <div class="card" style="display:flex;flex-direction:column;gap:10px">
+    {% if latest %}
+      <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
+        <h2>Latest photo</h2>
+        <span class="muted mono">{{ latest.captured_at|local }} · <span class="pill {{ latest.status }}">{{ latest.status }}</span> · <a href="/captures/{{ latest.id }}">details</a></span>
+      </div>
+      {% set cap = latest %}{% include "_photo.html" %}
+      <p class="muted" style="font-size:12.5px">Dashed boxes are candidates, seen in one photo so far. They count once they show up in a second photo.</p>
+    {% else %}
+      <p class="muted">No photos from this trap yet.</p>
+    {% endif %}
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:16px">
+    <div class="card">
+      <h2>{{ pheno.model.name if pheno else 'Degree days' }}</h2>
+      {% if pheno %}
+      <dl class="kv" style="margin-top:8px">
+        <dt>Base temp</dt><dd class="mono">{{ '%.0f'|format(pheno.model.base_f) }} °F (BE method)</dd>
+        <dt>Clock starts</dt><dd>{{ pheno.model.start }}</dd>
+        <dt>Biofix</dt><dd>{{ pheno.biofix.strftime('%b %d, %Y') if pheno.biofix else 'Not yet: needs more than 1 moth two weeks in a row' }}</dd>
+        {% if pheno.biofix %}
+        <dt>DD since biofix</dt><dd class="mono">{{ '%.0f'|format(pheno.dd) }}{% if pheno.missing_days %} <span class="muted">({{ pheno.missing_days }} days without weather data)</span>{% endif %}</dd>
+        <dt>Next</dt><dd>{{ '%.0f DD: %s'|format(pheno.next.dd, pheno.next.label) if pheno.next else 'All milestones passed' }}</dd>
+        {% endif %}
+        {% if pheno.dd_jan1 is defined %}<dt>DD since Jan 1</dt><dd class="mono">{{ '%.0f'|format(pheno.dd_jan1) }}</dd>{% endif %}
+        <dt>Weather</dt><dd class="muted">{{ pheno.weather_source }}</dd>
+      </dl>
+      {% else %}<p class="muted">No model for this lure.</p>{% endif %}
+    </div>
+    <div class="card">
+      <h2>Review</h2>
+      <p>{% if pending %}<a href="/review">{{ pending }} insect{{ 's' if pending != 1 }}</a> waiting for a person to confirm.{% else %}Nothing waiting.{% endif %}</p>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px">
+    <h2>New catches per day, last 30 days</h2>
+    <span class="muted" style="display:flex;gap:12px;flex-wrap:wrap;font-size:12.5px">
+      {% for sp in ['CM','OFM','OBLR','other_moth','unclassified'] %}<span class="sp"><i class="dot c-{{ sp }}"></i>{{ SPECIES_LABELS[sp] }}</span>{% endfor %}
+    </span>
+  </div>
+  <div class="bars" role="img" aria-label="Daily new catches by species">
+    {% for r in daily %}
+      <div class="bar" title="{{ r.date.strftime('%b %d') }}: {% for k, v in r.counts.items() %}{{ k }} {{ v }} {% endfor %}">
+        {% for sp in ['CM','OFM','OBLR','other_moth','unclassified'] %}{% if r.counts.get(sp) %}<i class="c-{{ sp }}" style="height:{{ 120 * r.counts[sp] / peak }}px"></i>{% endif %}{% endfor %}
+      </div>
+    {% endfor %}
+  </div>
+  <div class="axis"><span>{{ daily[0].date.strftime('%b %d') }}</span><span>peak {{ peak }}/day</span><span>{{ daily[-1].date.strftime('%b %d') }}</span></div>
+</div>
+
+<div class="card">
+  <h2>Recent photos</h2>
+  <div class="strip">
+    {% for c in caps %}
+      <a href="/captures/{{ c.id }}"><img src="/media/{{ c.image_path }}" alt="" loading="lazy">{{ c.captured_at|local('%b %d %H:%M') }}<br>{{ c.detections|length }} boxes</a>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}
