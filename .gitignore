@@ -10,3 +10,6 @@ device/data/
 *.egg-info/
 ml/models/
 camera_bench/
+
+# model weights (flatbug downloads flat_bug_M.pt into the working dir; train_v2 writes models/v2/*.pt)
+*.pt
