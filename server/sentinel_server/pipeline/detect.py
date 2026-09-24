@@ -79,8 +79,12 @@ class BaselineDetector:
 
     def __init__(self, grid_mm: float = 25.4, min_len_mm: float = 3.0, max_len_mm: float = 30.0,
                  min_contrast: float = 0.20, fallback_liner_mm: float = 200.0, bg_object_mm: float = 15.0,
-                 moth_area_mm2: float = 30.0, clump_factor: float = 1.8):
+                 lens: str | float = "auto", moth_area_mm2: float = 30.0, clump_factor: float = 1.8):
         self.grid_mm = grid_mm
+        # Barrel distortion bends the grid lines, which breaks grid finding and line removal.
+        # "auto": estimated from the grid on a liner's first photo, then reused for that liner.
+        self.lens = lens
+        self._lens_cache: dict = {}
         self.min_len_mm = min_len_mm
         self.max_len_mm = max_len_mm
         self.min_contrast = min_contrast
@@ -94,11 +98,12 @@ class BaselineDetector:
         self.max_single_width_mm = 7.0  # widest single moth at rest
         self.last: dict = {}
 
-    def detect(self, image_path: Path) -> list[Box]:
+    def detect(self, image_path: Path, key=None) -> list[Box]:
+        """`key` names the camera + liner (e.g. (trap, card)): photos with the same key share a lens estimate."""
         img = cv2.imread(str(image_path))
         if img is None:
             raise ValueError(f"cannot read image {image_path}")
-        return self.detect_array(img)
+        return self.detect_array(img, key)
 
     def _clump_count(self, mask: np.ndarray, typical: float, px_per_mm: float) -> int:
         """How many insects an unsplittable blob holds. Size alone misleads (an OBLR is 1.5x a CM's
@@ -118,7 +123,25 @@ class BaselineDetector:
         # estimate against 1.2 moths so a pair of large moths isn't called three
         return max(2, int(area / (1.2 * typical) + 0.5))
 
-    def detect_array(self, img: np.ndarray) -> list[Box]:
+    def lens_k(self, img: np.ndarray, key=None) -> float:
+        if self.lens != "auto":
+            return float(self.lens)
+        if key is None:
+            return estimate_lens_k(img)
+        if key not in self._lens_cache:
+            self._lens_cache[key] = estimate_lens_k(img)
+        return self._lens_cache[key]
+
+    def detect_array(self, img: np.ndarray, key=None) -> list[Box]:
+        k = self.lens_k(img, key)
+        if k == 0:
+            boxes = self._detect(img)
+        else:
+            boxes = [distort_box(b, k, img.shape[1], img.shape[0]) for b in self._detect(undistort(img, k))]
+        self.last["lens_k"] = k
+        return boxes
+
+    def _detect(self, img: np.ndarray) -> list[Box]:
         h0, w0 = img.shape[:2]
         f = min(1.0, self.WORK_MAX_SIDE / max(h0, w0))
         work = cv2.resize(img, None, fx=f, fy=f, interpolation=cv2.INTER_AREA) if f < 1 else img
@@ -299,7 +322,7 @@ def find_grid(img: np.ndarray, min_score: float = 5.0) -> Grid:
     chans = [img] if img.ndim == 2 else [img[..., c] for c in range(img.shape[2])]
     best = Grid((), 0.0, 0.0)
     for ch in chans:
-        if (ch >= 250).mean() > 0.2 or np.median(ch) < 15:
+        if (ch >= 250).mean() > 0.9 or np.median(ch) < 15:
             continue  # clipped or black channel: JPEG noise there looks like lines
         g = _find_grid_1ch(ch.astype(np.float32), min_score)
         if g.pitch_px < 0.03 * max(ch.shape):  # finer than any real liner grid at our distances: noise
@@ -374,6 +397,74 @@ def _period(p: np.ndarray, min_lag: int = 6) -> float | None:
     return None
 
 
+# --- lens distortion -------------------------------------------------------------------------
+# One-parameter radial model (OpenCV's k1): a point at normalised radius r from the photo centre
+# is seen at r * (1 + k r^2), with r measured in half-diagonals, so k doesn't depend on resolution.
+# k < 0 is barrel distortion (wide and fisheye lenses). A checkerboard calibration would give
+# more terms; for finding insects on a grid, straight lines are what matters.
+
+def _camera(w: int, h: int) -> np.ndarray:
+    f = 0.5 * float(np.hypot(w, h))
+    return np.array([[f, 0, w / 2], [0, f, h / 2], [0, 0, 1]], np.float64)
+
+
+def undistort(img: np.ndarray, k: float) -> np.ndarray:
+    """Straighten the photo. Same size and centre scale; the outermost corners are cropped."""
+    h, w = img.shape[:2]
+    cam = _camera(w, h)
+    m1, m2 = cv2.initUndistortRectifyMap(cam, np.array([k, 0, 0, 0], np.float64), None, cam, (w, h), cv2.CV_32FC1)
+    return cv2.remap(img, m1, m2, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+
+
+def distort_points(pts: np.ndarray, k: float, w: int, h: int) -> np.ndarray:
+    """Straightened-photo pixel coordinates (N×2) -> where they are in the original photo."""
+    f = 0.5 * float(np.hypot(w, h))
+    c = np.array([w / 2, h / 2])
+    n = (np.asarray(pts, np.float64) - c) / f
+    r2 = (n ** 2).sum(axis=1, keepdims=True)
+    return n * (1 + k * r2) * f + c
+
+
+def distort_box(b: Box, k: float, w: int, h: int) -> Box:
+    xs, ys = (b.x1, b.cx, b.x2), (b.y1, b.cy, b.y2)
+    p = distort_points(np.array([(x, y) for x in xs for y in ys]), k, w, h)
+    return Box(float(max(0, p[:, 0].min())), float(max(0, p[:, 1].min())),
+               float(min(w, p[:, 0].max())), float(min(h, p[:, 1].max())), b.conf, b.n)
+
+
+LENS_K_RANGE = (-0.5, 0.1)
+
+
+def estimate_lens_k(img: np.ndarray, min_gain: float = 1.25) -> float:
+    """The k that makes the liner's grid lines straightest (0 if there is no grid or no clear gain).
+
+    Straight, evenly spaced lines give sharp peaks when the photo is projected along them, so the
+    grid score from find_grid peaks at the right k. Channels are summed: the grid shows best in
+    different channels under different light. Takes a few seconds; the detector caches it per liner.
+    """
+    f = min(1.0, 640 / max(img.shape[:2]))
+    small = cv2.resize(img, None, fx=f, fy=f, interpolation=cv2.INTER_AREA) if f < 1 else img
+    chans = [small] if small.ndim == 2 else [small[..., c] for c in range(small.shape[2])]
+    chans = [c for c in chans if (c >= 250).mean() <= 0.9 and np.median(c) >= 5]
+    if not chans:
+        return 0.0
+
+    def score(k: float) -> float:
+        return sum(_find_grid_1ch(undistort(c, k).astype(np.float32), 5.0).score for c in chans)
+
+    lo, hi = LENS_K_RANGE
+    tried = {round(float(k), 4): score(float(k)) for k in np.arange(lo, hi + 1e-9, 0.05)}
+    best = max(tried, key=tried.get)
+    for k in (round(best - 0.025, 4), round(best + 0.025, 4)):
+        if lo <= k <= hi:
+            tried[k] = score(k)
+    best = max(tried, key=tried.get)
+    base = tried.get(0.0, 0.0)
+    if tried[best] <= 0 or (best != 0 and tried[best] < min_gain * base):
+        return 0.0
+    return best
+
+
 class FlatbugDetector:  # pragma: no cover - needs the flatbug package + weights
     """Pretrained arthropod detector (github.com/darsa-group/flat-bug), which tiles large images itself.
 
@@ -389,7 +480,7 @@ class FlatbugDetector:  # pragma: no cover - needs the flatbug package + weights
         self.model = Predictor(model=str(weights), device="mps:0" if _has_mps() else "cpu", dtype="float32")
         self.version = f"flatbug-{Path(weights).stem}"
 
-    def detect(self, image_path: Path) -> list[Box]:
+    def detect(self, image_path: Path, key=None) -> list[Box]:
         pred = self.model(str(image_path))
         boxes = pred.boxes.cpu().tolist() if hasattr(pred.boxes, "cpu") else list(pred.boxes)
         confs = pred.confs.cpu().tolist() if hasattr(pred.confs, "cpu") else list(pred.confs)
@@ -410,7 +501,7 @@ def make_detector(name: str):
 
     s = get_settings()
     if name == "baseline":
-        return BaselineDetector(grid_mm=s.grid_mm)
+        return BaselineDetector(grid_mm=s.grid_mm, lens=s.lens_k)
     if name == "flatbug":
         models = s.data_dir / "models"
         models.mkdir(parents=True, exist_ok=True)

@@ -63,6 +63,10 @@ it found and the grid it measured (spacing in px, angle, px/mm), and saves copie
 Measure your liner's grid spacing once with a ruler and set `SENTINEL_GRID_MM` in `.env`: the
 detector uses it to turn pixels into millimetres (it ignores anything under 3 mm or over 30 mm).
 If the lure isn't in the photo, clear the default lure mask: `sentinel-server set-mask T1 --none`.
+With a wide or fisheye lens the grid lines bend; the detector straightens the photo first (it tries
+lens corrections until the grid lines are straightest, once per liner) and prints the `lens k` it used:
+0 for a normal lens, around −0.2 for the wide lens we tried. If it guesses wrong on a nearly empty
+or very crowded liner, fix it with `SENTINEL_LENS_K=-0.2` in `.env` (or try values with `detect --lens`).
 
 ## 6. Field mode
 

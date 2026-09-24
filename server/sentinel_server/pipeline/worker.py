@@ -33,7 +33,7 @@ class Pipeline:
     def process(self, db: Session, cap: Capture) -> None:
         trap = db.get(Trap, cap.trap_id)
         path = get_settings().media_dir / cap.image_path
-        boxes = self.detector.detect(path)
+        boxes = self.detector.detect(path, key=(cap.trap_id, cap.card_id))
         with Image.open(path) as img:
             w, h = img.size
             boxes = [b for b in boxes if not in_mask(b, trap.mask, w, h)]
