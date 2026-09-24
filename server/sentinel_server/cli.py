@@ -105,6 +105,8 @@ def cmd_detect(args) -> int:
     from .pipeline.detect import make_detector
 
     det = make_detector(args.detector or get_settings().detector)
+    if args.lens is not None and hasattr(det, "lens"):
+        det.lens = "auto" if args.lens == "auto" else float(args.lens)
     args.out.mkdir(parents=True, exist_ok=True)
     for path in args.images:
         boxes = det.detect(path)
@@ -117,7 +119,7 @@ def cmd_detect(args) -> int:
         if info.get("grid") is not None:
             g = info["grid"]
             grid = f"grid {g.pitch_px / info['work_scale']:.0f}px at {', '.join(f'{a:.1f}°' for a in g.angles)}" if g.score else "no grid found"
-            line += f"  ({grid}; {info['px_per_mm']:.1f} px/mm)"
+            line += f"  ({grid}; {info['px_per_mm']:.1f} px/mm; lens k {info.get('lens_k', 0):+.3f})"
             cv2.putText(img, f"{len(boxes)} found | {info['px_per_mm']:.1f} px/mm", (8, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 0), 1)
         cv2.imwrite(str(args.out / path.name), img)
         print(line)
@@ -192,6 +194,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("images", type=Path, nargs="+")
     p.add_argument("--out", type=Path, default=Path("overlays"))
     p.add_argument("--detector", choices=["baseline", "flatbug"])
+    p.add_argument("--lens", help="baseline: lens distortion k, or 'auto' (default: SENTINEL_LENS_K)")
     p.set_defaults(fn=cmd_detect)
 
     p = sub.add_parser("set-mask", help="set (or show) the area a trap's detector ignores")
