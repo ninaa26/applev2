@@ -13,7 +13,7 @@ device/     Raspberry Pi 5 software: wake → LED → photo → queue → upload
 server/     FastAPI + SQLite (Postgres later): upload API, detection/tracking/counting worker, dashboard
 ml/         training-data tools (AMI fetch) and model notes
 hardware/   mockup trap template, 3D-printable camera mount + liner tray, calibration prints
-docs/       bring-up, wiring, running the server on the Mac
+docs/       bring-up, wiring, running the server on the Mac, camera bench test
 ```
 
 ## Quick start (no hardware needed)
@@ -25,7 +25,7 @@ cd server && uv venv --python 3.12 .venv && uv pip install -p .venv/bin/python -
 ```
 
 Then run the device software with the fake camera ([docs/server-on-mac.md](docs/server-on-mac.md#try-it-without-a-pi)).
-With the Pi and camera: [docs/bring-up.md](docs/bring-up.md).
+With the Pi and camera: [docs/bring-up.md](docs/bring-up.md). Choosing between cameras: [docs/camera-bench.md](docs/camera-bench.md).
 
 ## What works today
 

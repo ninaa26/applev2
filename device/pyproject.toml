@@ -12,10 +12,13 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+# Laptops only; on the Pi use apt python3-opencv (seen through --system-site-packages).
+bench = ["opencv-python>=4.8"]
 
 [project.scripts]
 sentinel-cycle = "sentinel_device.cycle:main"
 sentinel-focus-sweep = "sentinel_device.tools.focus_sweep:main"
+sentinel-camera-bench = "sentinel_device.tools.camera_bench:main"
 
 [build-system]
 requires = ["setuptools>=68"]

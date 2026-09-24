@@ -9,3 +9,4 @@ ml/data/
 device/data/
 *.egg-info/
 ml/models/
+camera_bench/
