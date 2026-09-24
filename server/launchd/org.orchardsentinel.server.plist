@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>org.orchardsentinel.server</string>
+    <!-- Orchard Sentinel dev server: API + dashboard + worker on :8000.
+         caffeinate -s keeps the Mac awake while it's on AC power so traps can upload. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/caffeinate</string>
+        <string>-s</string>
+        <string>/Users/ninaiscool/Developer/Active/applev2/server/.venv/bin/sentinel-server</string>
+        <string>serve</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/ninaiscool/Developer/Active/applev2/server</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+    <key>StandardOutPath</key>
+    <string>/Users/ninaiscool/Developer/Active/applev2/server/data/server.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/ninaiscool/Developer/Active/applev2/server/data/server.log</string>
+</dict>
+</plist>

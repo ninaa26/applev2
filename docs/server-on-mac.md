@@ -23,6 +23,22 @@ caffeinate -s .venv/bin/sentinel-server serve     # caffeinate keeps the Mac awa
 
 Dashboard: http://localhost:8000 on the Mac, or `http://<mac's tailscale name>:8000` from teammates' laptops and the Pi.
 
+### Keep it running (start at login, restart on crash)
+
+`server/launchd/org.orchardsentinel.server.plist` runs the same command as a macOS LaunchAgent.
+It is set up on Nina's MacBook Air; the paths in it are absolute, so edit them for another Mac.
+
+```bash
+cp server/launchd/org.orchardsentinel.server.plist ~/Library/LaunchAgents/
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/org.orchardsentinel.server.plist
+```
+
+- Logs: `server/data/server.log`
+- Restart after changing `.env` or pulling new code: `launchctl kickstart -k gui/$(id -u)/org.orchardsentinel.server`
+- Stop for good: `launchctl bootout gui/$(id -u)/org.orchardsentinel.server`
+
+Don't also start `sentinel-server serve` by hand while it's loaded: the second copy can't get port 8000.
+
 ## Tailscale on the Mac
 
 Install the Tailscale app, log in with the team account, and turn on MagicDNS in the Tailscale admin console. The Mac's name (e.g. `sentinel-mac`) is what goes in each trap's `server_url`. Campus Wi-Fi usually blocks devices from reaching each other directly; Tailscale gets around that without opening any ports to the internet.
