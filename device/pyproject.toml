@@ -19,6 +19,7 @@ bench = ["opencv-python>=4.8"]
 sentinel-cycle = "sentinel_device.cycle:main"
 sentinel-focus-sweep = "sentinel_device.tools.focus_sweep:main"
 sentinel-camera-bench = "sentinel_device.tools.camera_bench:main"
+sentinel-camfeed = "sentinel_device.tools.camfeed:main"
 
 [build-system]
 requires = ["setuptools>=68"]
