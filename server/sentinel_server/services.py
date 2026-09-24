@@ -67,13 +67,16 @@ def daily_counts(db: Session, trap_id: str, days: int = 30) -> list[dict]:
     for t in counted_tracks(db, trap_id, since):
         d = local_date(t.first_seen_at)
         if d >= start:
-            buckets[d][t.label] += 1
+            buckets[d][t.label] += t.n_insects
     return [{"date": start + timedelta(days=i), "counts": dict(buckets[start + timedelta(days=i)])} for i in range(days)]
 
 
 def week_counts(db: Session, trap_id: str) -> Counter:
     since = utcnow() - timedelta(days=7)
-    return Counter(t.label for t in counted_tracks(db, trap_id, since))
+    out: Counter = Counter()
+    for t in counted_tracks(db, trap_id, since):
+        out[t.label] += t.n_insects
+    return out
 
 
 def pending_reviews(db: Session, trap_id: str | None = None) -> list[Track]:
@@ -116,11 +119,18 @@ def weather_days(db: Session, trap_id: str) -> tuple[dict[date, tuple[float, flo
     return phenology.daily_extremes_f(readings), f"trap:{trap_id}"
 
 
+def lure_catch_dates(db: Session, trap: Trap, card_ids: set[int] | None = None) -> list[date]:
+    """Local date of each catch of the trap's lure species, one entry per insect."""
+    return sorted(local_date(t.first_seen_at) for t in counted_tracks(db, trap.id)
+                  if t.label == trap.lure and (card_ids is None or t.card_id in card_ids)
+                  for _ in range(t.n_insects))
+
+
 def phenology_status(db: Session, trap: Trap) -> dict | None:
     model = phenology.MODELS.get(trap.lure)
     if model is None:
         return None
-    catch_dates = sorted(local_date(t.first_seen_at) for t in counted_tracks(db, trap.id) if t.label == trap.lure)
+    catch_dates = lure_catch_dates(db, trap)
     biofix = phenology.sustained_biofix(catch_dates)
     days, source = weather_days(db, trap.id)
     today = local_date(utcnow())

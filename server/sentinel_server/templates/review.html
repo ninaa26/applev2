@@ -14,9 +14,11 @@
     <div style="font-size:13px">
       <b>#{{ t.id }}</b> · first seen {{ t.first_seen_at|local }}<br>
       <span class="muted">Model: {{ SPECIES_LABELS.get(t.species, t.species) }}{% if t.species_conf %} ({{ '%.0f'|format(100 * t.species_conf) }}%){% endif %} · seen in {{ t.n_seen }} photos</span>
+      {% if t.n_insects > 1 %}<br><b>Looks like {{ t.n_insects }} insects touching.</b> <span class="muted">Counted as {{ t.n_insects }}; fix the number below if that's wrong.</span>{% endif %}
     </div>
     <form method="post" action="/tracks/{{ t.id }}/review" class="btns">
       <input type="hidden" name="next" value="/review">
+      {% if t.n_insects > 1 %}<label class="muted">How many? <input type="number" name="count" min="1" max="50" value="{{ t.n_insects }}" style="width:4em"></label>{% endif %}
       {% for sp in SPECIES %}<button type="submit" name="label" value="{{ sp }}" class="{{ 'primary' if sp == t.species }}">{{ sp.replace('_', ' ') }}</button>{% endfor %}
       <button type="submit" name="label" value="reject" title="Not an insect / don't count">reject</button>
     </form>

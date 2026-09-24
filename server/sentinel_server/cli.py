@@ -105,6 +105,8 @@ def cmd_detect(args) -> int:
     from .pipeline.detect import make_detector
 
     det = make_detector(args.detector or get_settings().detector)
+    if args.lens is not None and hasattr(det, "lens"):
+        det.lens = "auto" if args.lens == "auto" else float(args.lens)
     args.out.mkdir(parents=True, exist_ok=True)
     for path in args.images:
         boxes = det.detect(path)
@@ -117,7 +119,7 @@ def cmd_detect(args) -> int:
         if info.get("grid") is not None:
             g = info["grid"]
             grid = f"grid {g.pitch_px / info['work_scale']:.0f}px at {', '.join(f'{a:.1f}°' for a in g.angles)}" if g.score else "no grid found"
-            line += f"  ({grid}; {info['px_per_mm']:.1f} px/mm)"
+            line += f"  ({grid}; {info['px_per_mm']:.1f} px/mm; lens k {info.get('lens_k', 0):+.3f})"
             cv2.putText(img, f"{len(boxes)} found | {info['px_per_mm']:.1f} px/mm", (8, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 0), 1)
         cv2.imwrite(str(args.out / path.name), img)
         print(line)
@@ -158,6 +160,23 @@ def cmd_import_weather(args) -> int:
     return 0
 
 
+def cmd_evaluate(args) -> int:
+    """Score counts, detection and biofix against a person's count (see evaluate.py for the file formats)."""
+    from . import evaluate as ev
+
+    init_db()
+    targets = ev.Targets(count=args.count_target, iomin=args.iomin, biofix_days=args.biofix_days)
+    counts = ev.read_counts(args.counts) if args.counts else None
+    boxes = ev.read_boxes(args.boxes) if args.boxes else None
+    with session_scope() as db:
+        md = ev.to_markdown(ev.evaluate(db, counts, boxes, targets))
+    print(md)
+    if args.out:
+        args.out.write_text(md)
+        print(f"saved {args.out}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="sentinel-server", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -192,6 +211,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("images", type=Path, nargs="+")
     p.add_argument("--out", type=Path, default=Path("overlays"))
     p.add_argument("--detector", choices=["baseline", "flatbug"])
+    p.add_argument("--lens", help="baseline: lens distortion k, or 'auto' (default: SENTINEL_LENS_K)")
     p.set_defaults(fn=cmd_detect)
 
     p = sub.add_parser("set-mask", help="set (or show) the area a trap's detector ignores")
@@ -204,6 +224,15 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("csv", type=Path)
     p.add_argument("--source", default="newa:station")
     p.set_defaults(fn=cmd_import_weather)
+
+    p = sub.add_parser("evaluate", help="score counts, detection (IoMin) and biofix against manual truth")
+    p.add_argument("--counts", type=Path, help="CSV card,date,label,count from counting the liners by hand")
+    p.add_argument("--boxes", type=Path, help="CSV photo,x1,y1,x2,y2[,label] of insects drawn on some photos")
+    p.add_argument("--out", type=Path, help="also save the report (Markdown)")
+    p.add_argument("--count-target", type=float, default=0.80, help="pass mark for count accuracy (default 0.80)")
+    p.add_argument("--iomin", type=float, default=0.5, help="detection match threshold (default 0.5)")
+    p.add_argument("--biofix-days", type=int, default=1, help="biofix passes if within this many days (default 1)")
+    p.set_defaults(fn=cmd_evaluate)
 
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")

@@ -9,6 +9,7 @@ def isolated_env(tmp_path, monkeypatch):
     monkeypatch.delenv("SENTINEL_DATABASE_URL", raising=False)
     monkeypatch.setenv("SENTINEL_DETECTOR", "baseline")
     monkeypatch.setenv("SENTINEL_CLASSIFIER", "none")
+    monkeypatch.setenv("SENTINEL_LENS_K", "0")  # the lens estimate has its own tests in test_detect.py
     monkeypatch.chdir(tmp_path)
     settings_mod.reset_settings()
     db_mod.reset_engine()

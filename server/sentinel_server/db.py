@@ -44,6 +44,26 @@ def init_db() -> None:
     from . import models  # noqa: F401  (register tables)
 
     Base.metadata.create_all(engine())
+    _add_missing_columns()
+
+
+def _add_missing_columns() -> None:
+    """create_all doesn't alter existing tables: add columns that newer code expects.
+    Only for columns with a server default, so old rows get a sensible value."""
+    from sqlalchemy import inspect, text
+
+    eng = engine()
+    insp = inspect(eng)
+    with eng.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            if not insp.has_table(table.name):
+                continue
+            have = {c["name"] for c in insp.get_columns(table.name)}
+            for col in table.columns:
+                if col.name not in have and col.server_default is not None:
+                    ddl = col.type.compile(eng.dialect)
+                    conn.execute(text(f'ALTER TABLE {table.name} ADD COLUMN {col.name} {ddl} '
+                                      f"NOT NULL DEFAULT {col.server_default.arg}"))
 
 
 @contextmanager

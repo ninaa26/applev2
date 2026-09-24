@@ -1,10 +1,12 @@
 """Baseline detector on liners that look like the real trap: orange roof, red grid, perspective, vignetting."""
 
+from pathlib import Path
+
 import cv2
 import numpy as np
 import pytest
 
-from sentinel_server.pipeline.detect import BaselineDetector, find_grid
+from sentinel_server.pipeline.detect import BaselineDetector, distort_points, estimate_lens_k, find_grid
 
 W, H = 640, 480
 PX_PER_MM = 7.0
@@ -102,3 +104,96 @@ def test_insect_on_a_grid_line_is_found():
     on_line = (x_line, H / 2, 9, 4, 0.35, 88)  # lies along a vertical grid line
     img = liner([on_line], angle=0.0, keystone=0.0)
     assert near(centres(BaselineDetector().detect_array(img)), on_line[0], on_line[1])
+
+
+def total(boxes):
+    return sum(b.n for b in boxes)
+
+
+@pytest.mark.parametrize("pair,label", [
+    (((300, 240, 10, 4, 0.35, 90), (329, 240, 10, 4, 0.35, 90)), "side by side, wings touching"),
+    (((250, 240, 10, 4, 0.35, 0), (318, 240, 10, 4, 0.35, 0)), "end to end"),
+    (((300, 240, 10, 4, 0.35, 60), (318, 250, 10, 4, 0.35, 120)), "crossed, overlapping"),
+])
+def test_touching_pair_counts_as_two(pair, label):
+    boxes = BaselineDetector().detect_array(liner(list(pair), angle=0.0, keystone=0.0))
+    assert total(boxes) == 2, f"{label}: {[(round(b.cx), round(b.cy), b.n) for b in boxes]}"
+
+
+def test_single_moths_are_not_split():
+    moths = [(130, 140, 10, 4, 0.35, 70), (500, 120, 12, 5, 0.55, 150), (330, 250, 6, 2.5, 0.35, 20)]
+    boxes = BaselineDetector().detect_array(liner(moths, angle=4.0))
+    assert len(boxes) == 3 and total(boxes) == 3
+
+
+def test_clump_is_never_one_insect():
+    """Four overlapping moths cover about three moths' area: area can't count them exactly, so
+    the guarantee is only that a clump counts as more than one and goes to review (n > 1)."""
+    clump = [(300 + dx, 240 + dy, 10, 4, 0.35, a) for dx, dy, a in
+             [(0, 0, 90), (26, 0, 90), (13, 20, 0), (13, -22, 10)]]
+    boxes = BaselineDetector().detect_array(liner(clump, angle=0.0, keystone=0.0))
+    assert total(boxes) >= 2
+    assert len(boxes) > 1 or boxes[0].n > 1
+
+
+def barrel(img: np.ndarray, k: float) -> np.ndarray:
+    """What a wide lens with distortion k would see of the flat scene `img`."""
+    h, w = img.shape[:2]
+    f = 0.5 * np.hypot(w, h)
+    cam = np.array([[f, 0, w / 2], [0, f, h / 2], [0, 0, 1]], np.float64)
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+    pts = np.stack([xx.ravel(), yy.ravel()], axis=1).reshape(-1, 1, 2)
+    src = cv2.undistortPoints(pts, cam, np.array([k, 0, 0, 0], np.float64), P=cam).reshape(h, w, 2)
+    return cv2.remap(img, src[..., 0], src[..., 1], cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+
+
+INNER_MOTHS = MOTHS[:4]  # the edge moth is cropped away when a wide-lens photo is straightened
+
+
+def test_lens_estimate_is_zero_for_a_straight_photo():
+    assert estimate_lens_k(liner(angle=4.0, keystone=0.08)) == 0.0
+
+
+@pytest.mark.parametrize("k", [-0.15, -0.3])
+def test_wide_lens_liner(k):
+    img = barrel(liner([*INNER_MOTHS, SPECK], angle=3.0, keystone=0.0, seed=4), k)
+    assert estimate_lens_k(img) == pytest.approx(k, abs=0.05)
+    det = BaselineDetector()
+    boxes = det.detect_array(img)
+    # boxes come back in the original (curved) photo's coordinates
+    expected = distort_points(np.array([m[:2] for m in INNER_MOTHS], float), k, W, H)
+    found = centres(boxes)
+    for x, y in expected:
+        assert near(found, x, y, tol=15), f"missed insect at {x:.0f},{y:.0f}"
+    assert len(boxes) == len(INNER_MOTHS)
+    assert det.last["px_per_mm"] == pytest.approx(PX_PER_MM, rel=0.1)
+
+
+def test_fisheye_empty_liner_has_no_detections():
+    img = barrel(liner(angle=-5.0, keystone=0.05, seed=4), -0.45)
+    assert BaselineDetector().detect_array(img) == []
+    assert BaselineDetector(lens=0).detect_array(img) != []  # uncorrected, bent grid lines read as insects
+
+
+FIXTURES = Path(__file__).parent / "fixtures"
+
+
+@pytest.mark.parametrize("name,k", [("empty_liner_webcam.jpg", 0.0), ("empty_liner_wide.jpg", -0.2)])
+def test_real_empty_liners(name, k):
+    """Real trap photos (Sep 24 2026) of liners with nothing on them: USB webcam, and a wide lens."""
+    det = BaselineDetector()
+    assert det.detect(FIXTURES / name) == []
+    assert det.last["lens_k"] == pytest.approx(k, abs=0.05)
+
+
+def test_lens_estimate_is_cached_per_liner(monkeypatch):
+    import sentinel_server.pipeline.detect as d
+
+    calls = []
+    monkeypatch.setattr(d, "estimate_lens_k", lambda img: calls.append(1) or 0.0)
+    det = BaselineDetector()
+    img = liner()
+    det.detect_array(img, key=("T1", 1))
+    det.detect_array(img, key=("T1", 1))
+    det.detect_array(img, key=("T1", 2))
+    assert len(calls) == 2
