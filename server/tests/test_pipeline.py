@@ -95,6 +95,12 @@ def test_counts_each_insect_once_and_new_card_resets():
             assert confirmed == 3, "three moths, each counted once despite 4 photos"
             assert sum(services.week_counts(db, "T1").values()) == 3
 
+        # re-running the liner with a new model gives the same counts (and doesn't trip foreign keys)
+        with session_scope() as db:
+            assert Pipeline().reprocess_card(db, caps[0].card_id) == 4
+        with session_scope() as db:
+            assert db.query(Track).filter(Track.status == "confirmed").count() == 3
+
         # dashboard pages render
         for path in ["/", "/traps/T1", "/review", f"/captures/{caps[-1].id}", "/api/v1/traps", "/api/v1/traps/T1/counts"]:
             assert client.get(path).status_code == 200, path

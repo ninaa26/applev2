@@ -94,12 +94,13 @@ class Pipeline:
     def reprocess_card(self, db: Session, card_id: int) -> int:
         """Re-run every photo of a card from scratch (e.g. after a model upgrade)."""
         caps = list(db.scalars(select(Capture).where(Capture.card_id == card_id).order_by(Capture.captured_at)))
-        for t in db.scalars(select(Track).where(Track.card_id == card_id, Track.reviewed_label.is_(None))):
-            db.delete(t)
-        for c in caps:
+        for c in caps:  # detections first: they reference the tracks
             for d in list(c.detections):
                 db.delete(d)
             c.status = "new"
+        db.flush()
+        for t in db.scalars(select(Track).where(Track.card_id == card_id, Track.reviewed_label.is_(None))):
+            db.delete(t)
         db.flush()
         for c in caps:
             self.process(db, c)
