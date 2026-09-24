@@ -6,6 +6,8 @@ each crop with text prompts for our classes.
 `bioclip-v1` puts the linear head trained by ml/train_v1.py on the same features
 (SENTINEL_CLASSIFIER_HEAD points at its head.npz). Classes the head wasn't trained
 on (e.g. debris, before we have debris crops) get probability 0.
+`cnn-v2` is the fine-tuned CNN from ml/train_v2.py (SENTINEL_CLASSIFIER_MODEL points at
+its models/v2/<arch>.pt).
 """
 
 from __future__ import annotations
@@ -101,6 +103,32 @@ class BioClipLinear(_BioClip):  # pragma: no cover
         return linear_head_probs(feats, self.W, self.b, self.classes)
 
 
+class FineTunedCNN:  # pragma: no cover - needs torch + torchvision
+    def __init__(self, model_path: str):
+        import torch
+        from torchvision import models, transforms
+
+        ck = torch.load(model_path, map_location="cpu", weights_only=False)
+        self.torch, self.classes = torch, list(ck["classes"])
+        m = getattr(models, ck["arch"])(num_classes=len(self.classes))
+        m.load_state_dict(ck["state_dict"])
+        self.device = "mps" if torch.backends.mps.is_available() else "cpu"
+        self.model = m.to(self.device).eval()
+        size = ck["size"]
+        self.preprocess = transforms.Compose([transforms.Resize((size, size)), transforms.ToTensor(),
+                                              transforms.Normalize(ck["mean"], ck["std"])])
+        self.version = f"cnn-v2:{ck['arch']}"
+
+    def classify(self, crops: list[Image.Image]) -> list[dict[str, float]]:
+        if not crops:
+            return []
+        torch = self.torch
+        with torch.no_grad():
+            x = torch.stack([self.preprocess(c.convert("RGB")) for c in crops]).to(self.device)
+            p = self.model(x).softmax(dim=-1).cpu().numpy()
+        return [{s: float(row[self.classes.index(s)]) if s in self.classes else 0.0 for s in SPECIES} for row in p]
+
+
 def make_classifier(name: str):
     if name == "none":
         return NoClassifier()
@@ -111,4 +139,9 @@ def make_classifier(name: str):
         if not head:
             raise ValueError("SENTINEL_CLASSIFIER=bioclip-v1 needs SENTINEL_CLASSIFIER_HEAD=<path to ml/models/v1/head.npz>")
         return BioClipLinear(head)
+    if name == "cnn-v2":
+        path = os.environ.get("SENTINEL_CLASSIFIER_MODEL", "")
+        if not path:
+            raise ValueError("SENTINEL_CLASSIFIER=cnn-v2 needs SENTINEL_CLASSIFIER_MODEL=<path to ml/models/v2/<arch>.pt>")
+        return FineTunedCNN(path)
     raise ValueError(f"unknown classifier {name!r}")

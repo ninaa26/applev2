@@ -11,6 +11,10 @@ Sources, all optional:
                             card. Labels: CM, OFM, OBLR, other_moth, debris (or any fine label below).
   data/own/locked_test.txt  card folder names set aside for the final evaluation (one per line).
                             These get split "locked" and train_v1.py never touches them unless --final.
+  data/synth/manifest.csv   from make_trap_style.py: web moths pasted onto liner photos. Each one
+                            takes its source photo's group, so it lands in the same split, and is
+                            dropped if its source photo was dropped. Not de-duplicated (they are
+                            all different by construction).
 
 Duplicates: AMI photos that came from iNaturalist are matched by photo id and the iNat copy
 is kept. Then every image gets a 256-bit difference hash (16x16); near-identical images
@@ -45,9 +49,10 @@ CLASS_OF = {
     "lookalike_RBLR": "other_moth",
     "other_tortricid": "other_moth",
     "other_moth": "other_moth",
+    "other_insect": "debris",  # flies, wasps, beetles, bugs: not a moth, so not counted
     "debris": "debris",
 }
-SOURCE_RANK = {"own": 0, "inat": 1, "ami": 2}
+SOURCE_RANK = {"own": 0, "inat": 1, "ami": 2, "synth": 3}
 INAT_PHOTO = re.compile(r"(?:inaturalist-open-data[^/]*/photos|static\.inaturalist\.org/photos)/(\d+)/")
 MIN_SIDE = 100
 
@@ -95,6 +100,18 @@ def read_own(data: Path) -> tuple[list[dict], set[str]]:
             rows.append({"path": str(img), "label": label, "source": "own", "group": f"card:{card}",
                          "inat_photo": "", "license": "own", "credit": "Orchard Sentinel team"})
     return rows, locked
+
+
+def read_synth(data: Path) -> list[dict]:
+    path = data / "synth" / "manifest.csv"
+    if not path.exists():
+        return []
+    with open(path, newline="") as f:
+        return [{"path": r["path"], "label": r["label"], "source": "synth", "source_path": r["source_path"],
+                 # bare-liner debris has no source photo: each crop is its own group
+                 "group": "" if r["source_path"] else f"liner:{Path(r['path']).stem}",
+                 "inat_photo": "", "license": "derived", "credit": r["source_path"] or r["liner"]}
+                for r in csv.DictReader(f)]
 
 
 def dhash(path: str) -> np.ndarray | None:
@@ -147,12 +164,12 @@ def main(argv=None) -> int:
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args(argv)
 
-    ami, inat = read_ami(args.data), read_inat(args.data)
+    ami, inat, synth = read_ami(args.data), read_inat(args.data), read_synth(args.data)
     own, locked = read_own(args.data)
     inat_ids = {r["inat_photo"] for r in inat}
     ami_kept = [r for r in ami if not (r["inat_photo"] and r["inat_photo"] in inat_ids)]
     print(f"Sources: own {len(own)}, iNat {len(inat)}, AMI {len(ami)} "
-          f"({len(ami) - len(ami_kept)} AMI photos already in the iNat download)")
+          f"({len(ami) - len(ami_kept)} AMI photos already in the iNat download), trap-style synthetic {len(synth)}")
 
     rows = sorted(own + inat + ami_kept, key=lambda r: SOURCE_RANK[r["source"]])
     for r in rows:
@@ -183,22 +200,39 @@ def main(argv=None) -> int:
         card = r["group"].removeprefix("card:")
         r["split"] = "locked" if r["source"] == "own" and card in locked else split_of(r["group"], args.seed, args.val, args.test)
 
+    # Synthetic photos follow their source photo; those whose source was dropped go too.
+    kept = {r["path"]: r for r in rows}
+    n_synth = len(synth)
+    synth = [s for s in synth if not s["source_path"] or s["source_path"] in kept]
+    for s in synth:
+        src = kept.get(s["source_path"])
+        s["group"] = src["group"] if src else s["group"]
+        s["class"] = CLASS_OF[s["label"]]
+        s["split"] = src["split"] if src else split_of(s["group"], args.seed, args.val, args.test)
+    if n_synth:
+        print(f"Kept {len(synth)}/{n_synth} synthetic photos (the rest came from dropped photos)")
+    rows += synth
+
     out = args.data / "dataset.csv"
     fields = ["path", "label", "class", "source", "group", "split", "license", "credit", "dhash"]
     with open(out, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
         w.writeheader()
         for r in rows:
-            w.writerow({**r, "dhash": "".join(f"{int(x):016x}" for x in r["dhash"])})
+            h = r.get("dhash")
+            w.writerow({**r, "dhash": "".join(f"{int(x):016x}" for x in h) if h is not None else ""})
 
-    table: dict[str, Counter] = defaultdict(Counter)
+    table: dict[tuple[str, str], Counter] = defaultdict(Counter)
+    groups: dict[tuple[str, str], set] = defaultdict(set)
     for r in rows:
-        table[r["label"]][r["split"]] += 1
-    print(f"\n{'label':16} {'class':11} {'train':>6} {'val':>5} {'test':>5} {'locked':>6}  groups")
-    for label in sorted(table, key=lambda l: (CLASS_OF[l], l)):
-        c = table[label]
-        groups = len({r["group"] for r in rows if r["label"] == label})
-        print(f"{label:16} {CLASS_OF[label]:11} {c['train']:6} {c['val']:5} {c['test']:5} {c['locked']:6}  {groups}")
+        key = (r["label"], "trap-style" if r["source"] == "synth" else "photos")
+        table[key][r["split"]] += 1
+        groups[key].add(r["group"])
+    print(f"\n{'label':16} {'class':11} {'kind':10} {'train':>6} {'val':>5} {'test':>5} {'locked':>6}  groups")
+    for key in sorted(table, key=lambda k: (CLASS_OF[k[0]], k)):
+        c = table[key]
+        print(f"{key[0]:16} {CLASS_OF[key[0]]:11} {key[1]:10} {c['train']:6} {c['val']:5} {c['test']:5} {c['locked']:6}"
+              f"  {len(groups[key])}")
     print(f"\nWrote {len(rows)} rows to {out}")
     return 0
 

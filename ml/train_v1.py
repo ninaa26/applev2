@@ -145,13 +145,18 @@ def main(argv=None) -> int:
     y = np.array([idx[r["class"]] for r in rows])
     split = np.array([r["split"] for r in rows])
     tr, va, te, lk = (split == s for s in ("train", "val", "test", "locked"))
-    print(f"Classes {classes}; train {tr.sum()}, val {va.sum()}, test {te.sum()}, locked {lk.sum()}")
+    synth = np.array([r["source"] == "synth" for r in rows])
+    tests = {"test · web photos": te & ~synth, "test · trap-style": te & synth}
+    tests = {k: m for k, m in tests.items() if m.any()}
+    print(f"Classes {classes}; train {tr.sum()}, val {va.sum()}, test {te.sum()} "
+          f"({(te & synth).sum()} trap-style), locked {lk.sum()}")
 
     results = {}
     # v0: zero-shot, text prompts only.
     embedder = embedder or Embedder(args.model)
     T = embedder.texts([PROMPTS[c] for c in classes])
-    results["v0 zero-shot · test"] = report(y[te], (X[te] @ T.T).argmax(1), classes)
+    for name, m in tests.items():
+        results[f"v0 zero-shot · {name}"] = report(y[m], (X[m] @ T.T).argmax(1), classes)
 
     # v1: pick C on val, then refit on train + val.
     best = None
@@ -164,7 +169,8 @@ def main(argv=None) -> int:
     C = best[0]
     trva = tr | va
     clf = LogisticRegression(C=C, class_weight="balanced", max_iter=3000).fit(X[trva], y[trva])
-    results[f"v1 linear head (C={C}) · test"] = report(y[te], clf.predict(X[te]), classes)
+    for name, m in tests.items():
+        results[f"v1 linear head (C={C}) · {name}"] = report(y[m], clf.predict(X[m]), classes)
     if args.final and lk.any():
         results["v0 zero-shot · LOCKED own cards"] = report(y[lk], (X[lk] @ T.T).argmax(1), classes)
         results[f"v1 linear head · LOCKED own cards"] = report(y[lk], clf.predict(X[lk]), classes)
@@ -173,11 +179,14 @@ def main(argv=None) -> int:
     np.savez(args.out / "head.npz", classes=np.array(classes), W=clf.coef_.astype(np.float32),
              b=clf.intercept_.astype(np.float32), model=np.array(args.model))
     (args.out / "metrics.json").write_text(json.dumps(results, indent=2))
-    by_source = {s: int(sum(1 for r in rows if r["source"] == s and r["split"] == "train")) for s in ("inat", "ami", "own")}
+    by_source = {s: int(sum(1 for r in rows if r["source"] == s and r["split"] == "train"))
+                 for s in ("inat", "ami", "own", "synth")}
     md = ["# Species ID v0 / v1", "",
           f"BioCLIP 2 image features. Training photos by source: {by_source}.",
-          "Test = held-out **web photos** (grouped by observation). These are live or pinned moths, not moths",
-          "on a sticky liner, so treat them as a sanity check; the report's numbers come from `--final`", "on our own locked cards.",
+          "Test = held-out **web photos** (grouped by observation), and their **trap-style** copies (the same",
+          "moths cut out and pasted onto our liner photos at trap resolution, make_trap_style.py). Neither is",
+          "a real moth on a real liner, so treat both as sanity checks; the report's numbers come from `--final`",
+          "on our own locked cards.",
           "BioCLIP 2 was itself trained on iNaturalist/GBIF photos (TreeOfLife-200M), so it has likely seen",
           "many of these test photos with their species names. Web-photo scores are optimistic for that reason too.", ""]
     md += [format_report(k, v) for k, v in results.items()]

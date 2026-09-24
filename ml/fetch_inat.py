@@ -44,6 +44,9 @@ CLASSES = {
     # Other tortricids photographed in New York: the moths most likely to be confused with ours.
     "other_tortricid": ({"taxon_id": 47155, "place_id": NEW_YORK,
                          "without_taxon_id": "47153,1507298,143728,1507295,208118"}, 1500, False),
+    # Non-moth bycatch in New York (flies, wasps/bees, beetles, true bugs): trained as debris, so
+    # an insect that isn't a moth doesn't get counted as one.
+    "other_insect": ({"taxon_id": "47822,47201,47208,47744", "place_id": NEW_YORK}, 1200, False),
 }
 
 

@@ -60,6 +60,8 @@ for i in 1 2 3 4 5; do .venv/bin/sentinel-cycle --config config.toml --no-halt; 
 |---|---|---|
 | `SENTINEL_DETECTOR=flatbug` | `uv pip install -p .venv/bin/python -e '.[flatbug]'` | Pretrained insect detector, which also works on crowded cards. Weights (50 MB) download to `data/models/` on first use |
 | `SENTINEL_CLASSIFIER=bioclip` | `uv pip install -p .venv/bin/python -e '.[bioclip]'` | BioCLIP 2 zero-shot species ID (model v0) |
+| `SENTINEL_CLASSIFIER=bioclip-v1` + `SENTINEL_CLASSIFIER_HEAD=../ml/models/v1/head.npz` | same `[bioclip]` extra | BioCLIP 2 + the linear head from `ml/train_v1.py` (model v1) |
+| `SENTINEL_CLASSIFIER=cnn-v2` + `SENTINEL_CLASSIFIER_MODEL=../ml/models/v2/efficientnet_b0.pt` | same `[bioclip]` extra (brings torch + torchvision) | fine-tuned CNN from `ml/train_v2.py` (model v2) |
 
 The default `baseline` detector needs no downloads: it finds the liner's printed grid (which gives the
 scale in px/mm), removes the grid lines, and keeps dark blobs 3–30 mm long. Try either detector on
