@@ -109,6 +109,7 @@ def main(argv=None) -> int:
     ap.add_argument("--samples-per-epoch", type=int, default=12000,
                     help="class-balanced draws per epoch (the rare classes repeat, the common ones are subsampled)")
     ap.add_argument("--workers", type=int, default=6)
+    ap.add_argument("--device", default="auto", help="auto (mps > cuda > cpu), or cpu if the GPU stalls")
     ap.add_argument("--final", action="store_true", help="also evaluate on the locked test cards")
     args = ap.parse_args(argv)
 
@@ -116,7 +117,9 @@ def main(argv=None) -> int:
     from torch.utils.data import DataLoader, WeightedRandomSampler
 
     torch.manual_seed(0)
-    device = "mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu"
+    device = args.device
+    if device == "auto":
+        device = "mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu"
     rows = [r for r in load_rows(args.data) if r["split"] != "locked" or args.final]
     classes = sorted({r["class"] for r in rows if r["split"] == "train"})
     idx = {c: k for k, c in enumerate(classes)}
