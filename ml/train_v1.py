@@ -133,7 +133,7 @@ def main(argv=None) -> int:
     ap.add_argument("--data", type=Path, default=Path("data"))
     ap.add_argument("--out", type=Path, default=Path("models/v1"))
     ap.add_argument("--model", default=MODEL)
-    ap.add_argument("--batch", type=int, default=64)
+    ap.add_argument("--batch", type=int, default=16, help="64 hangs the GPU on a 16 GB M3 (Metal never returns)")
     ap.add_argument("--final", action="store_true", help="also evaluate on the locked test cards")
     args = ap.parse_args(argv)
 
