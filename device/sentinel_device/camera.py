@@ -160,7 +160,7 @@ class FakeCamera:
     """Synthetic liner: pale card, grid lines, a lure in the middle, and moths that accumulate."""
 
     WIDTH, HEIGHT = 2304, 1296
-    # The whole liner (~200 mm) across the frame: ~11.5 px/mm, so the 25.4 mm grid is ~290 px.
+    # The whole card (198 mm) across the frame: ~11.6 px/mm, so the 25 mm grid is ~290 px.
     GRID_PX = 290
     SPECIES = {  # rough body length in px at this resolution, and a colour
         "CM": (110, (95, 80, 70)),

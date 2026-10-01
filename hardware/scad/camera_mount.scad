@@ -3,15 +3,17 @@
 // (lens facing straight down, out of the open pocket) and a channel for the ribbon cable,
 // which leaves through a slot in the roof. The roof itself keeps rain off the camera.
 //
-// Set floor_w and apex to YOUR measured trap (see hardware/mockup_template.py).
+// Set to the Alpha Scents red plastic delta trap (hardware/TRAP.md). Its 110 mm peak is too low
+// for this inside mount to see the whole card (lens 85 mm up sees ~113 mm of the 174 mm across);
+// the lens needs to sit ~131-150 mm up, above the roof peak. Redesign as a roof housing before printing.
 // Camera numbers follow the Raspberry Pi Camera Module 3 board (25 x 24 mm, M2 holes
 // on a 21 x 12.5 mm pattern). Check them against the official mechanical drawing
 // before printing.
 // Not yet test-printed.
 
 /* [Trap] */
-floor_w = 200;      // mm, inside floor width
-apex    = 165;      // mm, floor to inside apex
+floor_w = 195;      // mm, inside floor width
+apex    = 110;      // mm, floor to inside apex
 /* [Mount] */
 mount_len   = 45;   // mm along the trap
 drop        = 25;   // mm from the apex down to the camera face (matches --cam-drop); face must be >= 26 mm wide

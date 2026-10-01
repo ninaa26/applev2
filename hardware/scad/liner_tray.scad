@@ -5,8 +5,10 @@
 // A small raised seat in the middle holds the lure in the spot the software masks out.
 // Not yet test-printed. Large trays can be printed in two halves (split = true).
 
-liner_w = 180;   // mm, measured liner width  (across the trap)
-liner_l = 180;   // mm, measured liner length (along the trap)
+liner_w = 174;   // mm, Alpha Scents insert card across the trap (hardware/TRAP.md)
+liner_l = 198;   // mm, along the trap
+floor_w = 195;   // mm, trap floor the tray must fit on
+floor_l = 227;   // mm, floor between the folded-up end flaps
 clear   = 1.0;   // slack around the liner
 rim     = 18;    // border that carries the markers
 base_t  = 2.0;
@@ -44,4 +46,6 @@ if (split) {
     tray();
 }
 
+if (W > floor_w || L > floor_l)
+    echo(str("WARNING: tray ", W, " x ", L, " mm does not fit the ", floor_w, " x ", floor_l, " mm floor; shrink rim/marker."));
 echo(str("Tray ", W, " x ", L, " mm. Mask for the dashboard (fractions of the image) is set per trap on the server."));

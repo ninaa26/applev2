@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="720" viewBox="0 0 680 720" role="img">
+<title>Alpha Scents red plastic delta trap, measured dimensions (mm, drawn 1 unit = 1 mm)</title>
+<style>
+text{font-family:-apple-system,Helvetica,Arial,sans-serif;fill:#2C2C2A}
+.th{font-size:14px;font-weight:500}.ts{font-size:12px;fill:#5F5E5A}
+.trap{fill:#D85A30;fill-opacity:.08;stroke:#D85A30;stroke-width:2.5;stroke-linejoin:round}
+.flap{fill:#D85A30;fill-opacity:.6}.dim{stroke:#888780;stroke-width:1}
+.card{fill:#888780;fill-opacity:.12;stroke:#5F5E5A;stroke-width:1.5}.grid{stroke:#888780;stroke-width:1}
+</style>
+<rect width="680" height="720" fill="#fff"/>
+<text class="th" x="160" y="60" text-anchor="middle">End view</text>
+<text class="ts" x="160" y="78" text-anchor="middle">looking in through the opening</text>
+<text class="th" x="493" y="60" text-anchor="middle">Side view</text>
+<text class="ts" x="493" y="78" text-anchor="middle">roof panel facing you</text>
+<path class="trap" d="M62.5 300 L160 190 L257.5 300 Z"/>
+<polygon points="62.5,300 257.5,300 234.9,274.5 85.1,274.5" fill="#D85A30" fill-opacity=".3" stroke="#D85A30" stroke-width="1.5"/>
+<text class="ts" x="160" y="292" text-anchor="middle">end flap</text>
+<text class="ts" x="100" y="238" text-anchor="end">150 mm</text>
+<text class="ts" x="220" y="238">150 mm</text>
+<g class="dim"><line x1="290" y1="190" x2="290" y2="300"/><line x1="284" y1="190" x2="296" y2="190"/><line x1="284" y1="300" x2="296" y2="300"/></g>
+<text class="ts" x="300" y="249">110 mm</text>
+<g class="dim"><line x1="62.5" y1="322" x2="257.5" y2="322"/><line x1="62.5" y1="316" x2="62.5" y2="328"/><line x1="257.5" y1="316" x2="257.5" y2="328"/></g>
+<text class="ts" x="160" y="342" text-anchor="middle">195 mm floor</text>
+<rect class="trap" x="380" y="190" width="227" height="110"/>
+<rect x="394.5" y="295" width="198" height="3" fill="#5F5E5A"/>
+<rect class="flap" x="380" y="274.5" width="6" height="25.5"/>
+<rect class="flap" x="601" y="274.5" width="6" height="25.5"/>
+<text class="ts" x="372" y="291" text-anchor="end">flap up</text>
+<text class="ts" x="615" y="291">flap up</text>
+<g class="dim"><line x1="380" y1="322" x2="607" y2="322"/><line x1="380" y1="316" x2="380" y2="328"/><line x1="607" y1="316" x2="607" y2="328"/></g>
+<text class="ts" x="493" y="342" text-anchor="middle">227 mm with flaps up</text>
+<text class="th" x="340" y="388" text-anchor="middle">Floor from above, assembled</text>
+<text class="ts" x="340" y="406" text-anchor="middle">roof removed · flaps folded up · card sits between them</text>
+<rect x="226.5" y="450" width="227" height="195" fill="#D85A30" fill-opacity=".08" stroke="#D85A30" stroke-width="1.5"/>
+<rect class="flap" x="222" y="450" width="6" height="195"/>
+<rect class="flap" x="452" y="450" width="6" height="195"/>
+<text class="ts" x="214" y="551" text-anchor="end">flap up</text>
+<text class="ts" x="466" y="551">flap up</text>
+<rect class="card" x="241" y="460.5" width="198" height="174"/>
+<rect x="241" y="460.5" width="22" height="174" fill="#888780" fill-opacity=".35"/>
+<g class="grid">
+<line x1="263" y1="460.5" x2="263" y2="634.5"/><line x1="288.1" y1="460.5" x2="288.1" y2="634.5"/><line x1="313.3" y1="460.5" x2="313.3" y2="634.5"/><line x1="338.4" y1="460.5" x2="338.4" y2="634.5"/><line x1="363.6" y1="460.5" x2="363.6" y2="634.5"/><line x1="388.7" y1="460.5" x2="388.7" y2="634.5"/><line x1="413.9" y1="460.5" x2="413.9" y2="634.5"/>
+<line x1="263" y1="485.4" x2="439" y2="485.4"/><line x1="263" y1="510.2" x2="439" y2="510.2"/><line x1="263" y1="535.1" x2="439" y2="535.1"/><line x1="263" y1="559.9" x2="439" y2="559.9"/><line x1="263" y1="584.8" x2="439" y2="584.8"/><line x1="263" y1="609.7" x2="439" y2="609.7"/>
+</g>
+<g class="dim"><line x1="241" y1="436" x2="439" y2="436"/><line x1="241" y1="430" x2="241" y2="442"/><line x1="263" y1="430" x2="263" y2="442"/><line x1="439" y1="430" x2="439" y2="442"/></g>
+<text class="ts" x="252" y="426" text-anchor="middle">22</text>
+<text class="ts" x="351" y="426" text-anchor="middle">198 mm card (22 mm header + 7 × 25 mm grid)</text>
+<g class="dim"><line x1="150" y1="460.5" x2="150" y2="634.5"/><line x1="144" y1="460.5" x2="156" y2="460.5"/><line x1="144" y1="634.5" x2="156" y2="634.5"/></g>
+<text class="ts" x="142" y="551" text-anchor="end">174 mm card</text>
+<g class="dim"><line x1="520" y1="450" x2="520" y2="645"/><line x1="514" y1="450" x2="526" y2="450"/><line x1="514" y1="645" x2="526" y2="645"/></g>
+<text class="ts" x="530" y="551">195 mm floor</text>
+<g class="dim"><line x1="226.5" y1="661" x2="453.5" y2="661"/><line x1="226.5" y1="655" x2="226.5" y2="667"/><line x1="453.5" y1="655" x2="453.5" y2="667"/></g>
+<text class="ts" x="340" y="681" text-anchor="middle">227 mm between flaps (278 mm flat incl. two 25.5 mm flaps)</text>
+<text class="ts" x="340" y="706" text-anchor="middle">Alpha Scents red plastic delta trap · measured · details in TRAP.md</text>
+</svg>

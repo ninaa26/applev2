@@ -228,7 +228,7 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--camera", required=True, help="short name, e.g. brio101")
         p.add_argument("--tag", default="centre", help="shot label, e.g. centre / corner / dim")
         p.add_argument("--distance-mm", type=float, default=150, help="lens to card (recorded only)")
-        p.add_argument("--liner", default="180x180", help="liner WxL in mm, for the fits-in-view check")
+        p.add_argument("--liner", default="174x198", help="liner WxL in mm, for the fits-in-view check")
         p.add_argument("--out", type=Path, default=Path("camera_bench"))
         if name == "shoot":
             p.add_argument("--backend", choices=["usb", "picamera2"], required=True)

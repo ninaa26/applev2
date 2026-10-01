@@ -12,7 +12,7 @@ Planning pages: [spec](https://claude.ai/artifact/GaBWYoqoXfmxyqFotrfH41) ·
 device/     Raspberry Pi 5 software: wake → LED → photo → queue → upload → set RTC alarm → power off
 server/     FastAPI + SQLite (Postgres later): upload API, detection/tracking/counting worker, dashboard
 ml/         training-data tools (AMI fetch) and model notes
-hardware/   mockup trap template, 3D-printable camera mount + liner tray, calibration prints
+hardware/   trap dimensions (TRAP.md), mockup trap template, 3D-printable camera mount + liner tray, calibration prints
 docs/       bring-up, wiring, running the server on the Mac, camera bench test, measuring accuracy
 ```
 
