@@ -85,3 +85,79 @@ def test_clipped_fraction_reports_worst_channel():
     frame[:5, :, 1] = 255        # half the green clipped
     assert clipped_fraction(frame) == 1.0
     assert clipped_fraction(frame[..., :2]) == 0.5
+
+
+def _queue_one(tmp_path: Path) -> uploader.Queue:
+    q = uploader.Queue(tmp_path)
+    img = tmp_path / "20261001T000000Z_T1.jpg"
+    img.write_bytes(b"jpeg")
+    q.add(img, {"capture_uid": img.stem})
+    return q
+
+
+def _http_error(status: int):
+    def fail(*a, **k):
+        r = requests.Response()
+        r.status_code = status
+        raise requests.HTTPError(f"{status}", response=r)
+    return fail
+
+
+@pytest.mark.parametrize("status", [401, 403, 404, 500])
+def test_auth_and_server_errors_keep_photos_queued(tmp_path: Path, monkeypatch, status):
+    q = _queue_one(tmp_path)
+    monkeypatch.setattr(uploader, "upload_one", _http_error(status))
+    n, _, err = uploader.drain(q, "http://x", "k", 1, 10)
+    assert n == 0 and err and len(q.pending()) == 1
+
+
+def test_bad_photo_is_parked(tmp_path: Path, monkeypatch):
+    q = _queue_one(tmp_path)
+    monkeypatch.setattr(uploader, "upload_one", _http_error(422))
+    n, _, err = uploader.drain(q, "http://x", "k", 1, 10)
+    assert n == 0 and err is None and q.pending() == [] and len(list((q.queue_dir / "rejected").glob("*.jpg"))) == 1
+
+
+def test_drain_stops_at_deadline(tmp_path: Path, monkeypatch):
+    q = _queue_one(tmp_path)
+    monkeypatch.setattr(uploader, "upload_one", lambda *a: {"config": {}})
+    n, _, err = uploader.drain(q, "http://x", "k", 1, 10, deadline=0.0)  # already past
+    assert n == 0 and "out of time" in err and len(q.pending()) == 1
+
+
+def _field_config(tmp_path: Path) -> Path:
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(f'trap_id = "T1"\napi_key = "k"\nserver_url = "http://127.0.0.1:9"\n'
+                   f'data_dir = "{tmp_path / "data"}"\n[schedule]\nhalt_after_cycle = true\n'
+                   f'[camera]\nbackend = "fake"\n[led]\nenabled = false\n[sensors]\nsht4x = false\n')
+    return cfg
+
+
+def _halt_spies(monkeypatch):
+    from sentinel_device import cycle
+    calls = {"rtc": [], "poweroff": []}
+    monkeypatch.setattr(cycle.hardware, "set_rtc_wake", lambda t: calls["rtc"].append(t) or True)
+    monkeypatch.setattr(cycle.subprocess, "run", lambda cmd, **k: calls["poweroff"].append(cmd))
+    monkeypatch.setattr(cycle, "drain", lambda *a, **k: (0, None, "server unreachable: test"))
+    return cycle, calls
+
+
+def test_cycle_still_sets_alarm_and_halts_when_capture_crashes(tmp_path: Path, monkeypatch):
+    cycle, calls = _halt_spies(monkeypatch)
+
+    def boom(*a, **k):
+        raise IndexError("list index out of range")  # what Picamera2() raises with no camera attached
+    monkeypatch.setattr(cycle, "capture_once", boom)
+    assert cycle.run(_field_config(tmp_path), halt=None) == 2
+    assert len(calls["rtc"]) == 1 and calls["poweroff"]
+
+
+def test_cycle_survives_a_broken_schedule_from_the_server(tmp_path: Path, monkeypatch):
+    import json
+    cycle, calls = _halt_spies(monkeypatch)
+    cfg = _field_config(tmp_path)
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data" / "state.json").write_text(json.dumps({"remote_config": {"schedule": {"times": ["25:99"]},
+                                                                                "camera": {"backend": "nope"}}}))
+    assert cycle.run(cfg, halt=None) == 2
+    assert len(calls["rtc"]) == 1 and calls["poweroff"]

@@ -9,7 +9,8 @@ User=sentinel
 # Give Wi-Fi/Tailscale a moment; the cycle still works offline (photos stay queued).
 ExecStartPre=/bin/sleep 15
 ExecStart=/opt/sentinel/venv/bin/sentinel-cycle --config /etc/sentinel/config.toml
-# Hardware watchdog backstop: if the cycle hangs, systemd kills it and the next boot retries.
+# Backstop for a hung cycle. A killed cycle sets no wake alarm and doesn't power off, so the cycle
+# stops starting uploads after UPLOAD_BUDGET_S (cycle.py) to finish well inside this.
 TimeoutStartSec=300
 
 [Install]

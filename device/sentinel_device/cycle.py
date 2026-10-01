@@ -13,11 +13,12 @@ import logging
 import shutil
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
 from . import __version__, config as config_mod, hardware
-from .camera import CaptureError, make_camera
+from .camera import make_camera
 from .schedule import next_wake, wake_reason
 from .state import State
 from .uploader import Queue, drain
@@ -58,44 +59,69 @@ def capture_once(cfg: dict, data_dir: Path, reason: str, state: State, new_card:
     return Queue(data_dir).add(tmp, meta)
 
 
+# The systemd unit kills the cycle after 300 s (15 s of it waiting for Wi-Fi). A killed cycle never
+# sets the wake alarm or powers off, so uploads stop starting after this many seconds of the cycle.
+UPLOAD_BUDGET_S = 180
+
+
+def _schedule(cfgs: list[dict]) -> tuple[datetime, bool]:
+    """(next wake, halt?) from the first config whose schedule works: a bad schedule pushed by the
+    server falls back to the local file, then the built-in defaults, so the trap always wakes again."""
+    for cfg in cfgs:
+        try:
+            sched = cfg["schedule"]
+            return next_wake(datetime.now(timezone.utc), sched["times"], cfg["timezone"]), bool(sched["halt_after_cycle"])
+        except Exception as e:
+            log.error("unusable schedule %r: %s", cfg.get("schedule"), e)
+    raise RuntimeError("no usable schedule")  # the built-in defaults always work
+
+
 def run(cfg_path: Path | None, halt: bool | None, capture: bool = True, new_card: bool = False) -> int:
+    started = time.monotonic()
     base_cfg = config_mod.load(cfg_path)
     data_dir = Path(base_cfg["data_dir"])
     data_dir.mkdir(parents=True, exist_ok=True)
     state = State(data_dir)
     cfg = config_mod.load(cfg_path, remote=state.get("remote_config"))
 
-    now = datetime.now(timezone.utc)
-    reason = wake_reason(now, state.get("expected_wake"))
-    # In the field, pressing the Pi 5 power button to wake the trap means "I just put in a fresh liner".
-    new_card = new_card or (reason == "manual" and cfg["schedule"].get("manual_wake_is_new_card", False))
-    log.info("wake (%s), trap %s, sw %s%s", reason, cfg["trap_id"], __version__, ", NEW CARD" if new_card else "")
-
+    # Whatever goes wrong from here on (no camera, bad settings from the server, network trouble),
+    # the cycle must still reach the end: set the wake alarm and power off.
     error = None
-    if capture:
-        try:
-            path = capture_once(cfg, data_dir, reason, state, new_card)
-            log.info("captured %s", path.name)
-        except (CaptureError, OSError) as e:
-            error = f"capture failed: {e}"
-            log.error(error)
+    try:
+        now = datetime.now(timezone.utc)
+        reason = wake_reason(now, state.get("expected_wake"))
+        # In the field, pressing the Pi 5 power button to wake the trap means "I just put in a fresh liner".
+        new_card = new_card or (reason == "manual" and cfg["schedule"].get("manual_wake_is_new_card", False))
+        log.info("wake (%s), trap %s, sw %s%s", reason, cfg["trap_id"], __version__, ", NEW CARD" if new_card else "")
 
-    queue = Queue(data_dir)
-    uploaded, reply, up_err = drain(
-        queue, cfg["server_url"], cfg["api_key"], cfg["upload"]["timeout_s"], cfg["upload"]["max_per_cycle"]
-    )
-    log.info("uploaded %d, %d still queued", uploaded, len(queue.pending()))
-    error = error or up_err
-    if reply and isinstance(reply.get("config"), dict):
-        state.set("remote_config", reply["config"])
-        cfg = config_mod.load(cfg_path, remote=reply["config"])
+        if capture:
+            try:
+                path = capture_once(cfg, data_dir, reason, state, new_card)
+                log.info("captured %s", path.name)
+            except Exception as e:
+                error = f"capture failed: {e.__class__.__name__}: {e}"
+                log.exception(error)
 
-    wake_at = next_wake(datetime.now(timezone.utc), cfg["schedule"]["times"], cfg["timezone"])
+        queue = Queue(data_dir)
+        uploaded, reply, up_err = drain(
+            queue, cfg["server_url"], cfg["api_key"], cfg["upload"]["timeout_s"], cfg["upload"]["max_per_cycle"],
+            deadline=started + UPLOAD_BUDGET_S,
+        )
+        log.info("uploaded %d, %d still queued", uploaded, len(queue.pending()))
+        error = error or up_err
+        if reply and isinstance(reply.get("config"), dict):
+            state.set("remote_config", reply["config"])
+            cfg = config_mod.load(cfg_path, remote=reply["config"])
+    except Exception as e:
+        error = error or f"cycle failed: {e.__class__.__name__}: {e}"
+        log.exception(error)
+
+    wake_at, cfg_halt = _schedule([cfg, base_cfg, config_mod.DEFAULTS])
     state.set("expected_wake", wake_at.isoformat())
     state.set("last_error", error)
     state.save()
 
-    should_halt = cfg["schedule"]["halt_after_cycle"] if halt is None else halt
+    should_halt = cfg_halt if halt is None else halt
     if should_halt:
         if not hardware.set_rtc_wake(int(wake_at.timestamp())):
             log.error("not halting: RTC alarm could not be set, so the trap would never wake")

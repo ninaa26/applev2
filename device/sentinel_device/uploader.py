@@ -11,11 +11,16 @@ from __future__ import annotations
 import json
 import logging
 import shutil
+import time
 from pathlib import Path
 
 import requests
 
 log = logging.getLogger(__name__)
+
+# Replies meaning "this photo or its metadata is bad": it will never be accepted, so park it.
+# Anything else (401 wrong key, 404 wrong URL, 5xx) is a setup or server problem: keep it queued.
+PARK_STATUSES = {400, 413, 415, 422}
 
 
 class Queue:
@@ -65,16 +70,19 @@ def upload_one(server_url: str, api_key: str, image: Path, timeout_s: float) -> 
     return r.json()
 
 
-def drain(queue: Queue, server_url: str, api_key: str, timeout_s: float, max_items: int) -> tuple[int, dict | None, str | None]:
-    """Upload up to max_items. Returns (uploaded, last server reply, error message)."""
+def drain(queue: Queue, server_url: str, api_key: str, timeout_s: float, max_items: int,
+          deadline: float | None = None) -> tuple[int, dict | None, str | None]:
+    """Upload up to max_items, starting no upload after `deadline` (time.monotonic()).
+    Returns (uploaded, last server reply, error message)."""
     uploaded, reply = 0, None
     for image in queue.pending()[:max_items]:
+        if deadline is not None and time.monotonic() >= deadline:
+            return uploaded, reply, f"out of time: {len(queue.pending())} photos left for the next wake"
         try:
             reply = upload_one(server_url, api_key, image, timeout_s)
         except requests.HTTPError as e:
             status = e.response.status_code if e.response is not None else None
-            if status is not None and 400 <= status < 500 and status not in (408, 429):
-                # The server will never accept this file (bad metadata, unknown trap): park it.
+            if status in PARK_STATUSES:
                 bad = queue.queue_dir / "rejected"
                 bad.mkdir(exist_ok=True)
                 for p in (image, image.with_suffix(".json")):
