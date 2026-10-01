@@ -42,12 +42,14 @@ def load_rows(data: Path) -> list[dict]:
 
 
 class Embedder:
-    def __init__(self, model_name: str):
+    def __init__(self, model_name: str, device: str = "auto"):
         import open_clip
         import torch
 
         self.torch = torch
-        self.device = "mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu"
+        if device == "auto":
+            device = "mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = device
         self.model, _, self.preprocess = open_clip.create_model_and_transforms(model_name)
         self.model = self.model.to(self.device).eval()
         self.tokenizer = open_clip.get_tokenizer(model_name)
@@ -76,7 +78,8 @@ class Embedder:
         return torch.nn.functional.normalize(f, dim=-1).float().cpu().numpy()
 
 
-def embeddings(rows: list[dict], cache: Path, model_name: str, batch: int) -> tuple[np.ndarray, Embedder | None]:
+def embeddings(rows: list[dict], cache: Path, model_name: str, batch: int,
+               device: str = "auto") -> tuple[np.ndarray, Embedder | None]:
     """Row-aligned embedding matrix, computing only paths not already cached."""
     cached: dict[str, np.ndarray] = {}
     if cache.exists():
@@ -85,12 +88,16 @@ def embeddings(rows: list[dict], cache: Path, model_name: str, batch: int) -> tu
     missing = sorted({r["path"] for r in rows} - cached.keys())
     embedder = None
     if missing:
-        print(f"Embedding {len(missing)} new photos with {model_name} (cached: {len(cached)})")
-        embedder = Embedder(model_name)
-        cached.update(zip(missing, embedder.images(missing, batch)))
+        print(f"Embedding {len(missing)} new photos with {model_name} (cached: {len(cached)})", flush=True)
+        embedder = Embedder(model_name, device)
         cache.parent.mkdir(parents=True, exist_ok=True)
-        paths = sorted(cached)
-        np.savez(cache, paths=np.array(paths), feats=np.stack([cached[p] for p in paths]).astype(np.float16))
+        chunk = batch * 32  # save as we go, so a crash or a stalled GPU doesn't lose an hour of work
+        for start in range(0, len(missing), chunk):
+            part = missing[start:start + chunk]
+            cached.update(zip(part, embedder.images(part, batch)))
+            paths = sorted(cached)
+            np.savez(cache, paths=np.array(paths), feats=np.stack([cached[p] for p in paths]).astype(np.float16))
+            print(f"  saved {min(start + chunk, len(missing))}/{len(missing)} new embeddings", flush=True)
     return np.stack([cached[r["path"]] for r in rows]).astype(np.float32), embedder
 
 
@@ -129,7 +136,9 @@ def main(argv=None) -> int:
     ap.add_argument("--data", type=Path, default=Path("data"))
     ap.add_argument("--out", type=Path, default=Path("models/v1"))
     ap.add_argument("--model", default=MODEL)
-    ap.add_argument("--batch", type=int, default=64)
+    ap.add_argument("--batch", type=int, default=16, help="64 hangs the GPU on a 16 GB M3 (Metal never returns)")
+    ap.add_argument("--device", default="auto",
+                    help="auto (mps > cuda > cpu) or e.g. cpu: on the 16 GB M3, mps stalls in Metal after a few thousand photos")
     ap.add_argument("--final", action="store_true", help="also evaluate on the locked test cards")
     args = ap.parse_args(argv)
 
@@ -137,7 +146,7 @@ def main(argv=None) -> int:
 
     rows = [r for r in load_rows(args.data) if r["split"] != "locked" or args.final]
     slug = args.model.split("/")[-1].replace(":", "_")
-    X, embedder = embeddings(rows, args.data / "embeddings" / f"{slug}.npz", args.model, args.batch)
+    X, embedder = embeddings(rows, args.data / "embeddings" / f"{slug}.npz", args.model, args.batch, args.device)
 
     classes = sorted({r["class"] for r in rows if r["split"] == "train"})
     idx = {c: k for k, c in enumerate(classes)}
@@ -154,7 +163,7 @@ def main(argv=None) -> int:
 
     results = {}
     # v0: zero-shot, text prompts only.
-    embedder = embedder or Embedder(args.model)
+    embedder = embedder or Embedder(args.model, args.device)
     T = embedder.texts([PROMPTS[c] for c in classes])
     for name, m in tests.items():
         results[f"v0 zero-shot · {name}"] = report(y[m], (X[m] @ T.T).argmax(1), classes)
