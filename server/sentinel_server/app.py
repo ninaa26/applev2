@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 import threading
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -24,6 +25,8 @@ from .models import PESTS, SPECIES, SPECIES_LABELS, Capture, Detection, Event, R
 from .settings import get_settings
 
 HERE = Path(__file__).parent
+# A capture uid becomes a file name: letters, digits, "_" and "-" only, so it can't point outside media/.
+SAFE_UID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,79}")
 templates = Jinja2Templates(directory=str(HERE / "templates"))
 
 
@@ -96,6 +99,8 @@ def create_app(start_worker: bool = False) -> FastAPI:
             raise HTTPException(422, f"meta trap_id {m.get('trap_id')!r} does not match this key's trap {trap.id!r}")
         captured = captured.astimezone(timezone.utc).replace(tzinfo=None) if captured.tzinfo else captured
         uid = str(m.get("capture_uid") or Path(image.filename or "capture").stem)
+        if not SAFE_UID.fullmatch(uid):
+            raise HTTPException(422, f"bad capture_uid {uid!r}: use letters, digits, _ and - (max 80)")
 
         existing = db.scalar(select(Capture).where(Capture.trap_id == trap.id, Capture.uid == uid))
         if existing is not None:

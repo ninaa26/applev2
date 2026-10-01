@@ -198,3 +198,37 @@ def test_old_database_gets_new_columns(tmp_path):
     db_mod.init_db()
     con = sqlite3.connect(path)
     assert con.execute("SELECT n_insects FROM tracks").fetchall() == [(1,)]
+
+
+def test_rejection_sticks_on_later_photos_and_reprocess():
+    key = add_trap()
+    t0 = datetime.now(timezone.utc) - timedelta(hours=4)
+    with TestClient(create_app()) as client:
+        upload(client, key, t0, MOTHS[:2], "j1")
+        upload(client, key, t0 + timedelta(hours=1), MOTHS[:2], "j2")
+        process_pending(Pipeline())
+        with session_scope() as db:
+            ids = [t.id for t in services.pending_reviews(db, "T1")]
+        client.post(f"/tracks/{ids[0]}/review", data={"label": "reject"})
+        upload(client, key, t0 + timedelta(hours=2), MOTHS[:2], "j3")  # the rejected one is seen again
+        process_pending(Pipeline())
+        with session_scope() as db:
+            assert db.get(Track, ids[0]).review_status == "rejected"
+            assert ids[0] not in [t.id for t in services.pending_reviews(db, "T1")]
+            card_id = db.get(Track, ids[0]).card_id
+        with session_scope() as db:  # reviews point at rejected tracks: reprocess must keep them
+            assert Pipeline().reprocess_card(db, card_id) == 3
+        with session_scope() as db:
+            assert db.get(Track, ids[0]).review_status == "rejected"
+
+
+def test_capture_uid_cannot_leave_the_media_folder():
+    key = add_trap()
+    with TestClient(create_app()) as client:
+        now = datetime.now(timezone.utc)
+        for uid in ("../../../../escaped", "a/b", ".hidden", ""):
+            r = upload(client, key, now, MOTHS, uid)
+            if uid:
+                assert r.status_code == 422, uid
+    from sentinel_server.settings import get_settings
+    assert not list(get_settings().data_dir.parent.rglob("escaped.jpg"))

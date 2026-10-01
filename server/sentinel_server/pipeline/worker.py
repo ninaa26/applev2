@@ -58,7 +58,7 @@ class Pipeline:
                 t.misses = 0
                 t.last_seen_at = cap.captured_at
                 t.x1, t.y1, t.x2, t.y2 = box.x1, box.y1, box.x2, box.y2
-                if t.reviewed_label is None:  # a reviewer's count stands
+                if not t.reviewed:  # a reviewer's count stands
                     t.n_insects = box.n
             else:
                 t = Track(
@@ -75,7 +75,7 @@ class Pipeline:
                     summed[k] = summed.get(k, 0.0) + v
                 t.prob_sum = summed
                 t.n_classified += 1
-            if t.reviewed_label is None:
+            if not t.reviewed:
                 t.species, t.species_conf, t.review_status = trk.consensus(t.prob_sum, t.n_classified)
                 if t.n_insects > 1:  # touching insects: a person checks the count
                     t.review_status = "review"
@@ -104,8 +104,9 @@ class Pipeline:
                 db.delete(d)
             c.status = "new"
         db.flush()
-        for t in db.scalars(select(Track).where(Track.card_id == card_id, Track.reviewed_label.is_(None))):
-            db.delete(t)
+        for t in db.scalars(select(Track).where(Track.card_id == card_id)):
+            if not t.reviewed:  # people's labels and rejections are kept (and reviews point at them)
+                db.delete(t)
         db.flush()
         for c in caps:
             self.process(db, c)

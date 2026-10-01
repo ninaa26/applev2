@@ -115,6 +115,11 @@ class Track(Base):
     def label(self) -> str:
         return self.reviewed_label or self.species
 
+    @property
+    def reviewed(self) -> bool:
+        """A person labelled or rejected it: the model no longer changes its label or count."""
+        return self.reviewed_label is not None or self.review_status == "rejected"
+
 
 class Detection(Base):
     __tablename__ = "detections"
