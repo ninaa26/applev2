@@ -29,6 +29,13 @@ larger photos of a *blank* liner, taken by the trap camera, in `data/liners/`. T
 all from the webcam in the lab, so the trap-style set knows little about lighting variety; add more
 as soon as the Camera Module 3 is in the trap, and re-run `make_trap_style.py`.
 
+**Photos of used field cards.** Put phone photos of real liners (e.g. Trécé Pherocon VI cards, same
+25 mm grid) in `data/field/inbox/`, full resolution, and run `crop_field_cards.py`. flatbug finds
+each insect, the grid around it gives px/mm (per insect, so cards shot at an angle work), and it
+writes crops, RGBA cutouts, numbered overview photos (`data/field/boxes/`) and `data/field/labels.csv`
+to fill in. These are real moths on glue but not our liner or camera, so keep them apart from
+`data/own/`; until an expert has labelled them they're for checking the detector, not for scoring species ID.
+
 **Photos from the trap itself.** `export_server_crops.py --server ../server/data` writes every insect
 reviewed on the dashboard (confirmed/relabelled → that label, rejected → `debris`) into
 `data/own/<label>/<card>/`, cropped exactly like the server crops for the classifier.
