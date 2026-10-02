@@ -171,7 +171,7 @@ def field_jobs(data: Path) -> list[dict]:
         if held.exists() else set()
     with open(labels, newline="") as f:
         return [r for r in csv.DictReader(f)
-                if r["label"] in CLASS_OF and r["cutout"] and r["photo"] not in held_out]
+                if r["label"] in CLASS_OF and r["cutout"] not in ("", "-") and r["photo"] not in held_out]
 
 
 def make_field(args, liners) -> list[dict]:
