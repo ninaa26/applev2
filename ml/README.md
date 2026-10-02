@@ -61,7 +61,8 @@ cp ~/Downloads/<folder>/*.jpg data/field/inbox/
 `crop_field_cards.py` takes px/mm from each card's printed grid (`--grid-mm`, default 25), measured
 around each insect so a card shot at an angle still gets the right scale. The labelling page has two
 passes. Pass 1 (anyone): moth / other insect / debris, Delete for things that aren't on the card or
-aren't insects, drag to box an insect flatbug missed, drag a box's handles to fix it, ⌘Z to undo.
+aren't insects, B (or the Draw box button) then drag to box an insect flatbug missed, drag a box's
+handles to fix it, ⌘Z to undo. Drag or two-finger scroll pans; pinch, wheel or double-click zooms; F fits.
 Pass 2 (a trained eye): the species of every `moth`. `labels.csv` records which boxes flatbug got
 right, which it got wrong (`skip`), which needed fixing (`flatbug-edited`) and which it missed
 (`manual`), which is also flatbug's score on field cards. Oct 1 2026, 11 cards: 63% of 95 moths
@@ -74,6 +75,28 @@ Insects and debris with species-free labels train the classifier through `make_t
 resolution and as photographed, with crops it trained on reported apart (`data/field/eval.md`).
 `--mask-neighbours` greys out the other boxes inside each crop first. Oct 2 2026, crops it never
 trained on, trap resolution: 92/94 moths, 8/9 other insects, 2/3 debris; masking changed nothing overall.
+
+**Other people's liner photos** (`data/web_liners/`, gitignored; its README lists every source and
+license). Collected for liners like ours: white delta liners with a ~25 mm printed grid. Public Roboflow
+sets with hand-drawn moth boxes: Trécé CM cards, OFM trap-camera liners, Insect Science delta liners,
+grape-moth cards; photos that don't look like our liner are kept apart in `nongrid/`.
+
+```bash
+.venv/bin/python eval_detector_roboflow.py --trap-ppm 8   # baseline and flatbug vs the boxes, native and at trap px/mm
+.venv/bin/python eval_detector_combine.py                 # what a shape filter and baseline+flatbug add
+.venv/bin/python import_roboflow_labels.py ofm-ervins     # a set's boxes + detector boxes -> label_field_cards.py folder
+.venv/bin/python label_field_cards.py --data data/web_liners/label/ofm-ervins --port 8767
+.venv/bin/python carry_liner_labels.py --data data/web_liners/label/ofm-ervins --write   # labeller stopped first
+```
+
+Oct 2 2026, recall of boxed moths: the server's baseline detector found 89–94% on the OFM liners and
+full-size CM cards, flatbug 43–60% (20% on OFM at 8 px/mm); both miss most moths under ~25 px long. A
+shape filter on baseline boxes (short side ≥ 2.5 mm, long/short ≤ 3.5) halved its false boxes for ~1%
+of moths. Only the target moth was boxed in these sets, so precision is a lower bound until the bycatch
+is labelled (the OFM set is being labelled in pass 1). `recover_roboflow_originals.py` moved stretched
+export boxes back onto original uploads (already run). Trap-camera sets photograph the same liner on
+several days: `carry_liner_labels.py` copies labels between them, and train/test splits must keep a
+liner's (or a card's) photos together.
 
 ## Get training photos from AMI (primary external source)
 

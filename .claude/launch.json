@@ -6,6 +6,12 @@
       "runtimeExecutable": "/bin/sh",
       "runtimeArgs": ["-c", "cd ml && exec .venv/bin/python label_field_cards.py --port 8765"],
       "port": 8765
+    },
+    {
+      "name": "ofm-labeler",
+      "runtimeExecutable": "/bin/sh",
+      "runtimeArgs": ["-c", "cd ml && exec .venv/bin/python label_field_cards.py --data data/web_liners/label/ofm-ervins --port 8766"],
+      "port": 8766
     }
   ]
 }
