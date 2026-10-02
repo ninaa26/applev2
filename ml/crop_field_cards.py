@@ -23,7 +23,8 @@ Re-runs only add new photos and never touch existing labels.
 `--cutouts`, after labelling: boxes drawn by hand or resized have no flatbug outline, so flatbug is
 run again on just that box's neighbourhood (enlarged when small) and the outline that best fills
 the box becomes its cutout. Where flatbug sees nothing (debris isn't an arthropod; small or pale
-insects), the object is separated from the white card by colour instead (contrast_mask). Stop
+insects), the object is separated from the white card by colour instead (contrast_mask). A cutout
+of `-` means "checked, no usable cutout" (e.g. the grid stuck to it) and is left alone. Stop
 label_field_cards.py first: it holds labels.csv in memory.
 """
 

@@ -68,6 +68,12 @@ right, which it got wrong (`skip`), which needed fixing (`flatbug-edited`) and w
 found, worst on pale OBLR on a white card; 7 of 81 boxes were not insects (leg clumps, a leaf bud, the lure).
 Leg clumps and wing bits on the card are `debris`, not deleted: the trap sees them too.
 These are real moths on glue but not our liner or camera, so they stay apart from `data/own/`.
+Insects and debris with species-free labels train the classifier through `make_trap_style.py
+--field` (cards in `data/field/test_cards.txt` are held out); `eval_field_cards.py` then scores
+`models/v1/head.npz` on every labelled crop as moth / other insect / debris, at the trap camera's
+resolution and as photographed, with crops it trained on reported apart (`data/field/eval.md`).
+`--mask-neighbours` greys out the other boxes inside each crop first. Oct 2 2026, crops it never
+trained on, trap resolution: 92/94 moths, 8/9 other insects, 2/3 debris; masking changed nothing overall.
 
 ## Get training photos from AMI (primary external source)
 
