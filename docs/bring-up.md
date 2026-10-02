@@ -60,7 +60,7 @@ channel under an orange trap roof. Set `usb_controls` in `[camera]` (names from
 **Check detection on the bench** (on the Mac): copy a few photos over and run
 `.venv/bin/sentinel-server detect photo1.jpg photo2.jpg --out overlays/`. It prints how many insects
 it found and the grid it measured (spacing in px, angle, px/mm), and saves copies with boxes drawn.
-Measure your liner's grid spacing once with a ruler and set `SENTINEL_GRID_MM` in `.env`: the
+Set the liner's grid spacing as `SENTINEL_GRID_MM` in `.env` (25 for the Alpha Scents card; measure others with a ruler): the
 detector uses it to turn pixels into millimetres (it ignores anything under 3 mm or over 30 mm).
 If the lure isn't in the photo, clear the default lure mask: `sentinel-server set-mask T1 --none`.
 With a wide or fisheye lens the grid lines bend; the detector straightens the photo first (it tries

@@ -116,8 +116,10 @@ def read_synth(data: Path) -> list[dict]:
         return []
     with open(path, newline="") as f:
         return [{"path": r["path"], "label": r["label"], "source": "synth", "source_path": r["source_path"],
-                 # bare-liner debris has no source photo: each crop is its own group
-                 "group": "" if r["source_path"] else f"liner:{Path(r['path']).stem}",
+                 # bare-liner debris has no source photo: each crop is its own group;
+                 # field-card photos (make_trap_style.py --field) bring their card as the group
+                 "group": r.get("group") or ("" if r["source_path"] else f"liner:{Path(r['path']).stem}"),
+                 "own_group": bool(r.get("group")),
                  "inat_photo": "", "license": "derived", "credit": r["source_path"] or r["liner"]}
                 for r in csv.DictReader(f)]
 
@@ -211,9 +213,9 @@ def main(argv=None) -> int:
     # Synthetic photos follow their source photo; those whose source was dropped go too.
     kept = {r["path"]: r for r in rows}
     n_synth = len(synth)
-    synth = [s for s in synth if not s["source_path"] or s["source_path"] in kept]
+    synth = [s for s in synth if s["own_group"] or not s["source_path"] or s["source_path"] in kept]
     for s in synth:
-        src = kept.get(s["source_path"])
+        src = None if s["own_group"] else kept.get(s["source_path"])
         s["group"] = src["group"] if src else s["group"]
         s["class"] = CLASS_OF[s["label"]]
         s["split"] = src["split"] if src else split_of(s["group"], args.seed, args.val, args.test)

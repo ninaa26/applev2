@@ -7,7 +7,8 @@ Every candidate camera photographs the same printed checkerboard from the same h
 
 1. Print `hardware/print/checkerboard.png` at **100 %**. Check one square: it must be 12.0 mm.
    Tape it flat to something stiff.
-2. Mark the trap height: lens **150 mm** above the card (the planned apex mount). Use a stack
+2. Mark the trap height: lens **150 mm** above the card (above the 110 mm roof peak, the height
+   that covers the whole card; see `hardware/TRAP.md`). Use a stack
    of books, a clamp or the mockup trap. Keep that height the same for every camera.
 3. Lighting: use the same light for every camera, ideally the trap LEDs, and otherwise one
    lamp. Avoid glare on the paper.

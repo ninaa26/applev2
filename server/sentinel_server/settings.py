@@ -39,7 +39,7 @@ class Settings:
     detector: str = field(default_factory=lambda: os.environ.get("SENTINEL_DETECTOR", "baseline"))
     classifier: str = field(default_factory=lambda: os.environ.get("SENTINEL_CLASSIFIER", "none"))
     # Spacing of the liner's printed grid; the baseline detector uses it to work out the image scale.
-    grid_mm: float = field(default_factory=lambda: float(os.environ.get("SENTINEL_GRID_MM", "25.4")))
+    grid_mm: float = field(default_factory=lambda: float(os.environ.get("SENTINEL_GRID_MM", "25")))
     # Lens distortion: "auto" (estimated from the liner grid) or a fixed k (0 = none, negative = barrel).
     lens_k: str | float = field(default_factory=lambda: _lens(os.environ.get("SENTINEL_LENS_K", "auto")))
     worker_poll_s: float = field(default_factory=lambda: float(os.environ.get("SENTINEL_WORKER_POLL_S", "3")))

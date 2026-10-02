@@ -10,7 +10,7 @@ from sentinel_server.pipeline.detect import BaselineDetector, distort_points, es
 
 W, H = 640, 480
 PX_PER_MM = 7.0
-GRID_MM = 25.4
+GRID_MM = 25.0
 
 
 def liner(moths=(), angle=4.0, keystone=0.08, seed=0) -> np.ndarray:

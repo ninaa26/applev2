@@ -77,7 +77,7 @@ class BaselineDetector:
     version = "baseline-cv-0.3"
     WORK_MAX_SIDE = 1600
 
-    def __init__(self, grid_mm: float = 25.4, min_len_mm: float = 3.0, max_len_mm: float = 30.0,
+    def __init__(self, grid_mm: float = 25.0, min_len_mm: float = 3.0, max_len_mm: float = 30.0,
                  min_contrast: float = 0.20, fallback_liner_mm: float = 200.0, bg_object_mm: float = 15.0,
                  lens: str | float = "auto", moth_area_mm2: float = 30.0, clump_factor: float = 1.8):
         self.grid_mm = grid_mm

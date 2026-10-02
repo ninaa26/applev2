@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "field-labeler",
+      "runtimeExecutable": "/bin/sh",
+      "runtimeArgs": ["-c", "cd ml && exec .venv/bin/python label_field_cards.py --port 8765"],
+      "port": 8765
+    }
+  ]
+}
