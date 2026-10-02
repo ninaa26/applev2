@@ -2,7 +2,6 @@
 
     python crop_field_cards.py                      # data/field/inbox/*.jpg -> data/field/; only new photos
     python crop_field_cards.py --grid-mm 25         # the card's printed grid spacing (default 25)
-    python crop_field_cards.py --cutouts            # after labelling: outline the boxes that have none
 
 The photos are phone shots of used liners (e.g. Trécé Pherocon VI delta cards), not trap-camera
 photos, so they are kept apart from data/own/. What they add is real moths on real glue: worn,
@@ -17,14 +16,9 @@ flattened, tilted, touching. For each photo:
      cutout (data/field/cutouts/) that make_trap_style.py can paste onto our own liner;
   4. data/field/boxes/<photo>.jpg shows the photo with every insect numbered.
 
-Label them with label_field_cards.py (or fill in the `label` column of data/field/labels.csv).
-Re-runs only add new photos and never touch existing labels.
-
-`--cutouts`, after labelling: boxes drawn by hand or resized have no flatbug outline, so flatbug is
-run again on just that box's neighbourhood (enlarged when small) and the outline that best fills
-the box becomes its cutout. Where flatbug sees nothing (debris isn't an arthropod; small or pale
-insects), the object is separated from the white card by colour instead (contrast_mask). Stop
-label_field_cards.py first: it holds labels.csv in memory.
+Fill in the `label` column of data/field/labels.csv (CM, OFM, OBLR, lookalike_RBLR, lookalike_LAW,
+other_tortricid, other_moth, other_insect, debris; `skip` for anything off the card, the lure, a
+leaf, or a box around two insects). Re-runs only add new photos and never touch existing labels.
 """
 
 from __future__ import annotations
@@ -115,86 +109,6 @@ def cutout(img: Image.Image, contour: np.ndarray, box) -> Image.Image:
     return rgba.crop(box)
 
 
-def contrast_mask(img: Image.Image, box) -> np.ndarray | None:
-    """Outline of whatever sits in the box on a pale card: pixels unlike the box's border colour,
-    the blob nearest the centre. Box-sized bool mask, or None when nothing stands out."""
-    x1, y1, x2, y2 = box
-    a = np.asarray(img.crop(box), dtype=np.float32)
-    h, w = a.shape[:2]
-    if h < 4 or w < 4:
-        return None
-    border = np.concatenate([a[0], a[-1], a[:, 0], a[:, -1]])
-    diff = np.linalg.norm(a - np.median(border, axis=0), axis=2)
-    diff = cv2.GaussianBlur(diff, (0, 0), max(1.0, min(h, w) / 100))
-    t, _ = cv2.threshold(np.clip(diff, 0, 255).astype(np.uint8), 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    if t < 20:  # nothing clearly unlike the card
-        return None
-    m = (diff > t).astype(np.uint8)
-    k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-    m = cv2.morphologyEx(cv2.morphologyEx(m, cv2.MORPH_CLOSE, k), cv2.MORPH_OPEN, k)
-    n, lab, stats, cent = cv2.connectedComponentsWithStats(m)
-    if n < 2:
-        return None
-    # biggest blobs near the centre win: area divided by distance from the centre
-    score = [stats[i, cv2.CC_STAT_AREA] / (1 + np.hypot(*(cent[i] - (w / 2, h / 2)))) for i in range(1, n)]
-    keep = lab == 1 + int(np.argmax(score))
-    keep = cv2.morphologyEx(keep.astype(np.uint8), cv2.MORPH_CLOSE, k).astype(bool)
-    frac = keep.mean()
-    return keep if 0.03 < frac < 0.9 else None
-
-
-def fill_cutouts(predictor, data: Path, rows: list[dict]) -> int:
-    """Give every kept box without a cutout one: flatbug on the box's neighbourhood, best-matching outline."""
-    import torch
-
-    todo = [r for r in rows if r["label"] not in ("", "skip") and not r["cutout"]]
-    print(f"{len(todo)} labelled boxes without a cutout")
-    done = 0
-    images: dict[str, Image.Image] = {}
-    for r in todo:
-        if r["photo"] not in images:
-            with Image.open(data / "inbox" / r["photo"]) as im:
-                images = {r["photo"]: ImageOps.exif_transpose(im).convert("RGB")}  # one photo in memory
-        img = images[r["photo"]]
-        x1, y1, x2, y2 = (int(r[k]) for k in ("x1", "y1", "x2", "y2"))
-        m = max(x2 - x1, y2 - y1) // 2
-        rx, ry = max(0, x1 - m), max(0, y1 - m)
-        region = img.crop((rx, ry, min(img.width, x2 + m), min(img.height, y2 + m)))
-        up = max(1.0, 640 / max(region.size))  # flatbug skips things under ~32 px
-        if up > 1:
-            region = region.resize((round(region.width * up), round(region.height * up)), Image.LANCZOS)
-        t = torch.from_numpy(np.asarray(region).copy()).permute(2, 0, 1)
-        pred = predictor(t, path=r["crop"], single_scale=True)
-        best, best_iou = None, 0.25  # an outline must cover a fair part of the box to count
-        for c in pred.contours:
-            c = c.cpu().numpy().astype(np.float32) / up + (rx, ry)
-            if len(c) < 3:
-                continue
-            bx1, by1 = c.min(axis=0)
-            bx2, by2 = c.max(axis=0)
-            inter = max(0, min(x2, bx2) - max(x1, bx1)) * max(0, min(y2, by2) - max(y1, by1))
-            iou = inter / ((x2 - x1) * (y2 - y1) + (bx2 - bx1) * (by2 - by1) - inter)
-            if iou > best_iou:
-                best, best_iou = c, iou
-        dest = data / "cutouts" / f"{Path(r['photo']).stem}_{r['n']}{'m' if r['source'] == 'manual' else 'e'}.png"
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        if best is not None:
-            box = tuple(int(v) for v in (*best.min(axis=0), *(best.max(axis=0) + 1)))
-            cutout(img, best, box).save(dest)
-        else:
-            m = contrast_mask(img, (x1, y1, x2, y2))
-            if m is None:
-                print(f"  {r['photo']} #{r['n']} ({r['label']}): nothing stands out from the card, no cutout")
-                continue
-            ys, xs = np.nonzero(m)
-            rgba = img.crop((x1, y1, x2, y2))
-            rgba.putalpha(Image.fromarray(m.astype(np.uint8) * 255))
-            rgba.crop((xs.min(), ys.min(), xs.max() + 1, ys.max() + 1)).save(dest)
-        r["cutout"] = str(dest)
-        done += 1
-    return done
-
-
 def draw_boxes(img: Image.Image, rows: list[dict], dest: Path) -> None:
     im = img.copy()
     d = ImageDraw.Draw(im)
@@ -216,24 +130,10 @@ def main(argv=None) -> int:
     ap.add_argument("--weights", default="flat_bug_M.pt")
     ap.add_argument("--grid-mm", type=float, default=25.0, help="printed grid spacing on the card")
     ap.add_argument("--min-conf", type=float, default=0.3, help="low on purpose: a miss is worse than a skip")
-    ap.add_argument("--cutouts", action="store_true", help="outline labelled boxes that have no cutout, then stop")
     args = ap.parse_args(argv)
 
     labels = args.data / "labels.csv"
     old = list(csv.DictReader(open(labels, newline=""))) if labels.exists() else []
-    if args.cutouts:
-        import torch
-        from flat_bug.predictor import Predictor
-
-        predictor = Predictor(model=args.weights, device="mps:0" if torch.backends.mps.is_available() else "cpu",
-                              dtype="float32")
-        n = fill_cutouts(predictor, args.data, old)
-        with open(labels, "w", newline="") as f:
-            w = csv.DictWriter(f, fieldnames=FIELDS, restval="")
-            w.writeheader()
-            w.writerows(old)
-        print(f"Wrote {n} cutouts")
-        return 0
     done = {r["photo"] for r in old}
     photos = [p for p in sorted((args.data / "inbox").iterdir())
               if p.suffix.lower() in (".jpg", ".jpeg", ".png", ".heic") and p.name not in done]

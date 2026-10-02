@@ -29,13 +29,6 @@ larger photos of a *blank* liner, taken by the trap camera, in `data/liners/`. T
 all from the webcam in the lab, so the trap-style set knows little about lighting variety; add more
 as soon as the Camera Module 3 is in the trap, and re-run `make_trap_style.py`.
 
-**Photos of used field cards.** Put phone photos of real liners (e.g. Trécé Pherocon VI cards, same
-25 mm grid) in `data/field/inbox/`, full resolution, and run `crop_field_cards.py`. flatbug finds
-each insect, the grid around it gives px/mm (per insect, so cards shot at an angle work), and it
-writes crops, RGBA cutouts, numbered overview photos (`data/field/boxes/`) and `data/field/labels.csv`
-to fill in. These are real moths on glue but not our liner or camera, so keep them apart from
-`data/own/`; until an expert has labelled them they're for checking the detector, not for scoring species ID.
-
 **Photos from the trap itself.** `export_server_crops.py --server ../server/data` writes every insect
 reviewed on the dashboard (confirmed/relabelled → that label, rejected → `debris`) into
 `data/own/<label>/<card>/`, cropped exactly like the server crops for the classifier.
@@ -55,6 +48,26 @@ not how well the trap will do.
 
 **Using the model in the server:** in `server/.env` set `SENTINEL_CLASSIFIER=bioclip-v1` and
 `SENTINEL_CLASSIFIER_HEAD=../ml/models/v1/head.npz`.
+
+**Photos of used field cards** (phone shots of real liners, e.g. Trécé Pherocon VI cards from the
+orchard; full-resolution originals, not the copies a chat app makes):
+
+```bash
+cp ~/Downloads/<folder>/*.jpg data/field/inbox/
+.venv/bin/python crop_field_cards.py          # flatbug boxes every insect -> data/field/labels.csv, crops/, cutouts/, boxes/
+.venv/bin/python label_field_cards.py         # label in the browser: http://localhost:8765
+```
+
+`crop_field_cards.py` takes px/mm from each card's printed grid (`--grid-mm`, default 25), measured
+around each insect so a card shot at an angle still gets the right scale. The labelling page has two
+passes. Pass 1 (anyone): moth / other insect / debris, Delete for things that aren't on the card or
+aren't insects, drag to box an insect flatbug missed, drag a box's handles to fix it, ⌘Z to undo.
+Pass 2 (a trained eye): the species of every `moth`. `labels.csv` records which boxes flatbug got
+right, which it got wrong (`skip`), which needed fixing (`flatbug-edited`) and which it missed
+(`manual`), which is also flatbug's score on field cards. Oct 1 2026, 11 cards: 63% of 95 moths
+found, worst on pale OBLR on a white card; 7 of 81 boxes were not insects (leg clumps, a leaf bud, the lure).
+Leg clumps and wing bits on the card are `debris`, not deleted: the trap sees them too.
+These are real moths on glue but not our liner or camera, so they stay apart from `data/own/`.
 
 ## Get training photos from AMI (primary external source)
 
