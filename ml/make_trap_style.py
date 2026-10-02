@@ -2,6 +2,7 @@
 
     python make_trap_style.py                       # after segment_moths.py; writes data/synth/
     python make_trap_style.py --preview 24          # contact sheet only: data/synth/preview.jpg
+    python make_trap_style.py --field               # only add photos made from field-card cutouts
 
 Why: the web photos are sharp, well lit and full size. In the trap a codling moth is ~70 px long
 (webcam, ~7 px/mm), lit orange through the trap roof, slightly blurred and JPEG'd, on a gridded
@@ -20,7 +21,14 @@ For each flatbug cutout (data/cutouts/, from segment_moths.py):
 Plus `debris` crops of bare liner (grid lines, crossings, glare, shadows) at random sizes.
 
 Each synthetic photo inherits its source photo's group (so its split), which keeps a moth and its
-pasted copies on the same side of the train/test line. Each class gets about --per-class photos,
+pasted copies on the same side of the train/test line.
+
+--field uses the labelled cutouts from photos of used field cards (crop_field_cards.py,
+label_field_cards.py): real insects, leg clumps and wing bits that sat on glue, pasted at their
+measured length. Only labels the classifier has (so not plain `moth` until the species pass), and
+never cards listed in data/field/test_cards.txt. Their photos are named field_*, grouped by card,
+and made from a random generator seeded by their name, so a re-run writes the same files (the v1
+embedding cache is keyed by path). A full run keeps them. Each class gets about --per-class photos,
 shared equally by its labels (other_moth has 4, other_insect 7), so rare labels get more copies per
 cutout, capped at --max-copies. data/synth/manifest.csv lists everything.
 """
@@ -31,7 +39,7 @@ import argparse
 import csv
 import random
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 
 import numpy as np
@@ -58,7 +66,8 @@ LENGTH_MM = {
 }
 PPM = (5.0, 16.0)  # px/mm: ~7 on the current webcam, ~15 expected with the Camera Module 3
 PAD = 0.35  # server crop padding (server/sentinel_server/pipeline/classify.py: crop)
-FIELDS = ["path", "label", "source_path", "liner", "ppm", "length_mm"]
+FIELDS = ["path", "label", "source_path", "liner", "ppm", "length_mm", "group"]
+FIELD_DEBRIS_MM = (2.0, 12.0)  # field debris with no measured length
 
 
 def load_liners(folder: Path) -> list[np.ndarray]:
@@ -99,9 +108,10 @@ def degrade(rng: random.Random, a: np.ndarray) -> Image.Image:
     return Image.fromarray(np.clip(a, 0, 255).astype(np.uint8))
 
 
-def paste_moth(rng: random.Random, cutout: Image.Image, label: str, liners) -> tuple[Image.Image, dict]:
+def paste_moth(rng: random.Random, cutout: Image.Image, label: str, liners,
+               length_mm: float | None = None) -> tuple[Image.Image, dict]:
     ppm = rng.uniform(*PPM)
-    length_mm = rng.uniform(*LENGTH_MM[label])
+    length_mm = length_mm or rng.uniform(*LENGTH_MM[label])
     long_px = max(8, int(round(length_mm * ppm)))
     s = long_px / max(cutout.size)
     moth = cutout.resize((max(1, round(cutout.width * s)), max(1, round(cutout.height * s))), Image.LANCZOS)
@@ -151,6 +161,49 @@ def sheet(paths: list[Path], dest: Path, cell: int = 128) -> None:
     out.save(dest, quality=90)
 
 
+def field_jobs(data: Path) -> list[dict]:
+    """Labelled field-card cutouts the classifier can learn from, minus the held-out cards."""
+    labels = data / "field" / "labels.csv"
+    if not labels.exists():
+        return []
+    held = data / "field" / "test_cards.txt"
+    held_out = {ln.strip() for ln in held.read_text().splitlines() if ln.strip() and not ln.startswith("#")} \
+        if held.exists() else set()
+    with open(labels, newline="") as f:
+        return [r for r in csv.DictReader(f)
+                if r["label"] in CLASS_OF and r["cutout"] and r["photo"] not in held_out]
+
+
+def make_field(args, liners) -> list[dict]:
+    rows = field_jobs(args.data)
+    print(f"{len(rows)} field cutouts x {args.field_copies}: "
+          + ", ".join(f"{k} {v}" for k, v in sorted(Counter(r["label"] for r in rows).items())))
+    out = []
+    for r in rows:
+        stem = Path(r["cutout"]).stem
+        with Image.open(r["cutout"]) as c:
+            cut = c.convert("RGBA")
+        for k in range(args.field_copies):
+            rng = random.Random(f"{args.seed}:{stem}:{k}")  # same name, same photo, on every run
+            measured = float(r["length_mm"]) if r["length_mm"] else None
+            length = (measured * rng.uniform(0.9, 1.1) if measured
+                      else rng.uniform(*LENGTH_MM.get(r["label"], FIELD_DEBRIS_MM)))
+            img, meta = paste_moth(rng, cut, r["label"], liners, length)
+            dest = args.data / "synth" / r["label"] / f"field_{stem}_{k}.jpg"
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            img.save(dest, quality=rng.randint(55, 90))
+            out.append({"path": str(dest), "label": r["label"], "source_path": str(args.data / "field" / "inbox" / r["photo"]),
+                        **meta, "group": f"field:{Path(r['photo']).stem}"})
+    return out
+
+
+def write_manifest(path: Path, rows: list[dict]) -> None:
+    with open(path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=FIELDS, restval="", extrasaction="ignore")
+        w.writeheader()
+        w.writerows(rows)
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--data", type=Path, default=Path("data"))
@@ -159,10 +212,20 @@ def main(argv=None) -> int:
     ap.add_argument("--debris", type=int, default=2000, help="bare-liner debris crops")
     ap.add_argument("--preview", type=int, default=0, help="only write a contact sheet of this many")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--field", action="store_true", help="only (re)make the photos from field-card cutouts")
+    ap.add_argument("--field-copies", type=int, default=40, help="photos per field cutout")
     args = ap.parse_args(argv)
     rng = random.Random(args.seed)
 
     liners = load_liners(args.data / "liners")
+    manifest_path = args.data / "synth" / "manifest.csv"
+    old = list(csv.DictReader(open(manifest_path, newline=""))) if manifest_path.exists() else []
+    is_field = lambda r: Path(r["path"]).name.startswith("field_")  # noqa: E731
+    if args.field:
+        new = make_field(args, liners)
+        write_manifest(manifest_path, [r for r in old if not is_field(r)] + new)
+        print(f"Wrote {len(new)} field trap-style photos to {args.data / 'synth'}")
+        return 0
     with open(args.data / "cutouts" / "manifest.csv", newline="") as f:
         cut = [r for r in csv.DictReader(f) if r["status"] == "ok" and r["label"] in LENGTH_MM]
     by_label = defaultdict(list)
@@ -210,10 +273,7 @@ def main(argv=None) -> int:
         sheet(written, args.data / "synth" / "preview.jpg")
         print(f"Wrote {args.data / 'synth' / 'preview.jpg'}")
         return 0
-    with open(out / "manifest.csv", "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=FIELDS)
-        w.writeheader()
-        w.writerows(manifest)
+    write_manifest(out / "manifest.csv", manifest + [r for r in old if is_field(r)])  # keep the field photos
     print(f"Wrote {len(manifest)} trap-style photos to {out}")
     return 0
 
