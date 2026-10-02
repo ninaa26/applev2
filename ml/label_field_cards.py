@@ -11,11 +11,13 @@ In the page there are two passes (buttons on the right; the page remembers which
                      8 other_insect  9 debris  0 moth (unsure); Tab visits the boxes still marked plain `moth`
   Delete / Backspace  not a bug or off the card: a box you drew is removed, flatbug's becomes `skip`
                       (drawn faintly; select it and press a number to bring it back)
-  drag on empty space box an insect flatbug missed (source=manual)
+  B (or the button)   draw mode on/off: in draw mode a drag boxes an insect flatbug missed (source=manual);
+                      Shift+drag draws a box without switching modes
   selected box        drag a corner or edge to resize, inside to move; flatbug's become source=flatbug-edited
   Cmd/Ctrl+Z          undo (Shift+Cmd+Z or Ctrl+Y redo), also the Undo / Redo buttons
   Tab / Shift+Tab     next / previous box to do;  ] / [  next / previous photo;  F  fit the photo
-  scroll              zoom at the cursor; right-drag or Space+drag pans
+  drag                pan, outside draw mode (also two-finger scroll on a trackpad, right-drag, Space+drag, arrow keys)
+  pinch / mouse wheel zoom at the cursor; double-click zooms in there (Shift: out); + / - zoom; F or 0 fits
 """
 
 from __future__ import annotations
@@ -168,6 +170,8 @@ PAGE = r"""<!doctype html>
   .modes button { flex:1; font:inherit; font-size:12px; padding:6px; border:1px solid var(--line); background:#fff; border-radius:6px; cursor:pointer; }
   .modes button.on { background:#1d1d1b; color:#fff; border-color:#1d1d1b; }
   .modes button:disabled { opacity:.4; cursor:default; }
+  #draw { width:100%; font:inherit; font-size:13px; padding:8px; border:1px solid var(--line); background:#fff; border-radius:6px; cursor:pointer; margin-bottom:4px; }
+  #draw.on { background:#2563eb; color:#fff; border-color:#2563eb; }
   .key { display:grid; grid-template-columns:22px 1fr auto; gap:4px 8px; align-items:center; }
   .key kbd { font:12px ui-monospace, monospace; border:1px solid var(--line); border-radius:4px; text-align:center; padding:1px 0; }
   .sw { width:12px; height:12px; border-radius:3px; display:inline-block; vertical-align:-1px; }
@@ -183,6 +187,7 @@ PAGE = r"""<!doctype html>
 <main id="main"><canvas id="cv"></canvas><div id="status"></div></main>
 <aside class="right">
   <div class="modes"><button id="undo" title="⌘Z">↶ Undo</button><button id="redo" title="⇧⌘Z">↷ Redo</button></div>
+  <button id="draw" title="B">▭ Draw box: off (B)</button>
   <h2>Pass</h2><div class="modes"><button data-m="1">1 · moth / insect / debris</button><button data-m="2">2 · species</button></div>
   <h2>Selected</h2><canvas id="zoom" width="256" height="256"></canvas><div id="info">Nothing selected</div>
   <h2>Keys</h2><div class="key" id="key"></div></aside>
@@ -205,10 +210,10 @@ function colorOf(l) {
 const HELP = {
   1: `<b>Click</b> a box, then <b>1</b> moth · <b>2</b> other insect · <b>3</b> debris.<br>
       <b>Delete</b>: not a bug, or off the card: the box disappears.<br>
-      <b>Drag</b> on empty space: box a missed insect.<br>
+      <b>B</b> (or the <b>Draw box</b> button): then drag to box a missed insect. <b>B</b> again to go back to panning. Shift+drag also draws.<br>
       <b>Selected box</b>: drag a corner or edge to resize, drag inside to move.<br>
       <b>⌘Z</b> undo · <b>⇧⌘Z</b> redo<br>
-      <b>Tab</b> next unlabelled · <b>[ ]</b> photos<br><b>Scroll</b> zoom · <b>right-drag</b> pan · <b>F</b> fit<br><br>
+      <b>Tab</b> next unlabelled · <b>[ ]</b> photos<br><b>Drag</b> or two-finger scroll: pan · <b>pinch</b>, wheel or <b>double-click</b>: zoom · <b>+ −</b> zoom · <b>arrows</b> pan · <b>F</b> fit<br><br>
       <b>debris</b>: on the card, not an insect (leaf bits, loose legs, scales, glue blobs). Keep these: the trap sees them too.<br>
       One box over two insects: resize it to one and draw the other.`,
   2: `Species, by a trained eye. <b>Tab</b> jumps to the next box still marked plain <b>moth</b>.<br>
@@ -217,7 +222,12 @@ const HELP = {
 };
 let pass = 1; try { pass = Number(localStorage.getItem("pass")) || 1; } catch (e) {}
 let data = {}, photo = null, img = new Image(), sel = -1;
-let view = {s:1, x:0, y:0}, drag = null, space = false;
+let view = {s:1, x:0, y:0}, drag = null, space = false, drawMode = false;
+function setDraw(on) {
+  drawMode = on; const b = document.getElementById("draw");
+  b.classList.toggle("on", on); b.textContent = on ? "▭ Draw box: ON (B)" : "▭ Draw box: off (B)";
+  cv.style.cursor = on ? "crosshair" : "grab";
+}
 const cv = document.getElementById("cv"), ctx = cv.getContext("2d"), main = document.getElementById("main");
 const zc = document.getElementById("zoom").getContext("2d");
 
@@ -260,6 +270,13 @@ function fit() {
   cv.width = main.clientWidth; cv.height = main.clientHeight;
   const s = Math.min(cv.width / img.width, cv.height / img.height);
   view = {s, x:(cv.width - img.width*s)/2, y:(cv.height - img.height*s)/2};
+  fitScale = s;
+}
+let fitScale = 1;
+function zoomAt(mx, my, k) {  // zoom by k keeping the image point under (mx,my) still; from half the fit to 12 screen px per photo px
+  const [ix,iy] = toImg(mx, my);
+  view.s = Math.min(Math.max(view.s * k, fitScale * 0.5), 12);
+  view.x = mx - ix*view.s; view.y = my - iy*view.s; draw();
 }
 const toImg = (mx,my) => [(mx - view.x)/view.s, (my - view.y)/view.s];
 const toScr = (x,y) => [x*view.s + view.x, y*view.s + view.y];
@@ -367,19 +384,22 @@ const CURSORS = {nw:"nwse-resize", se:"nwse-resize", ne:"nesw-resize", sw:"nesw-
 cv.addEventListener("contextmenu", e => e.preventDefault());
 cv.addEventListener("mousedown", e => {
   const p = toImg(e.offsetX, e.offsetY);
-  if (e.button === 2 || space) { drag = {mode:"pan", mx:e.offsetX, my:e.offsetY, vx:view.x, vy:view.y}; return; }
+  const pan = (click) => { drag = {mode:"pan", mx:e.offsetX, my:e.offsetY, vx:view.x, vy:view.y, click, moved:false}; };
+  if (e.button !== 0 || space) return pan(null);
+  if (e.shiftKey || drawMode && !grabAt(e.offsetX, e.offsetY)) { sel = -1; drag = {mode:"box", start:p, end:p}; draw(); showSel(); return; }
   const g = grabAt(e.offsetX, e.offsetY);
   if (g && (g !== "move" || hit(...p) === sel)) {
     const b = boxes()[sel]; drag = {mode:"edit", edges:g, start:p, orig:{...b}, before:snap(), moved:false}; return;
   }
-  const h = hit(...p);
-  if (h >= 0) { sel = h; draw(); showSel(); return; }
-  sel = -1; drag = {mode:"box", start:p, end:p}; draw(); showSel();
+  pan(hit(...p));  // a plain click selects the box under it (or nothing); a drag pans
 });
 window.addEventListener("mousemove", e => {
   const r = cv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
-  if (!drag) { if (e.target === cv) { const g = grabAt(mx, my); cv.style.cursor = g ? CURSORS[g] : "crosshair"; } return; }
-  if (drag.mode === "pan") { view.x = drag.vx + mx - drag.mx; view.y = drag.vy + my - drag.my; }
+  if (!drag) { if (e.target === cv) { const g = grabAt(mx, my); cv.style.cursor = g ? CURSORS[g] : (drawMode || e.shiftKey ? "crosshair" : "grab"); } return; }
+  if (drag.mode === "pan") {
+    if (Math.abs(mx - drag.mx) + Math.abs(my - drag.my) > 3) drag.moved = true;
+    view.x = drag.vx + mx - drag.mx; view.y = drag.vy + my - drag.my;
+  }
   else if (drag.mode === "box") drag.end = toImg(mx, my);
   else {
     const [x,y] = toImg(mx, my), dx = x - drag.start[0], dy = y - drag.start[1], o = drag.orig, b = boxes()[sel], k = drag.edges;
@@ -394,6 +414,7 @@ window.addEventListener("mousemove", e => {
   draw();
 });
 window.addEventListener("mouseup", () => {
+  if (drag && drag.mode === "pan" && !drag.moved && drag.click !== null) { sel = drag.click; showSel(); }
   if (drag && drag.mode === "box") {
     const [a,b] = [drag.start, drag.end];
     const x1 = Math.min(a[0],b[0]), x2 = Math.max(a[0],b[0]), y1 = Math.min(a[1],b[1]), y2 = Math.max(a[1],b[1]);
@@ -411,9 +432,12 @@ window.addEventListener("mouseup", () => {
 });
 cv.addEventListener("wheel", e => {
   e.preventDefault();
-  const k = Math.exp(-e.deltaY * 0.0015), [ix,iy] = toImg(e.offsetX, e.offsetY);
-  view.s *= k; view.x = e.offsetX - ix*view.s; view.y = e.offsetY - iy*view.s; draw();
+  // pinch arrives as ctrl+wheel; a mouse wheel moves in whole notches; anything else is a trackpad scroll: pan
+  const wheel = e.deltaMode !== 0 || (e.deltaX === 0 && Math.abs(e.deltaY) >= 40 && Number.isInteger(e.deltaY));
+  if (e.ctrlKey || wheel) zoomAt(e.offsetX, e.offsetY, Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)));
+  else { view.x -= e.deltaX; view.y -= e.deltaY; draw(); }
 }, {passive:false});
+cv.addEventListener("dblclick", e => zoomAt(e.offsetX, e.offsetY, e.shiftKey ? 0.5 : 2));
 window.addEventListener("keyup", e => { if (e.key === " ") space = false; });
 window.addEventListener("keydown", e => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
@@ -427,7 +451,13 @@ window.addEventListener("keydown", e => {
   const names = Object.keys(data), pi = names.indexOf(photo);
   if (e.key === "]") return open(names[(pi+1) % names.length]);
   if (e.key === "[") return open(names[(pi-1+names.length) % names.length]);
-  if (e.key === "f" || e.key === "F") { fit(); draw(); return; }
+  if (e.key === "b" || e.key === "B") { setDraw(!drawMode); return; }
+  if (e.key === "f" || e.key === "F" || e.key === "0" && pass === 1) { fit(); draw(); return; }
+  if (e.key === "+" || e.key === "=" || e.key === "-" || e.key === "_") {
+    zoomAt(cv.width/2, cv.height/2, e.key === "+" || e.key === "=" ? 1.5 : 1/1.5); return;
+  }
+  const arrows = {ArrowLeft:[1,0], ArrowRight:[-1,0], ArrowUp:[0,1], ArrowDown:[0,-1]}[e.key];
+  if (arrows) { e.preventDefault(); const d = e.shiftKey ? 400 : 120; view.x += arrows[0]*d; view.y += arrows[1]*d; draw(); return; }
   if (e.key === "Tab") {
     e.preventDefault();
     const bs = boxes(), step = e.shiftKey ? -1 : 1;
@@ -456,6 +486,8 @@ function zoomTo(b) {
   view.x = r.width/2 - (b.x1+b.x2)/2*view.s; view.y = r.height/2 - (b.y1+b.y2)/2*view.s;
 }
 window.addEventListener("resize", () => { if (img.complete) { fit(); draw(); } });
+document.getElementById("draw").onclick = () => setDraw(!drawMode);
+setDraw(false);
 load();
 </script></body></html>
 """
