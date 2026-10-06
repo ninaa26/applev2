@@ -173,7 +173,8 @@ def _boot(tmp_path: Path, monkeypatch, at: datetime, **state) -> dict:
     monkeypatch.setattr(cycle, "datetime", Clock)
     seen = {}
     monkeypatch.setattr(cycle, "capture_once",
-                        lambda cfg, d, reason, st, new_card=False: seen.update(reason=reason, new_card=new_card) or d / "x.jpg")
+                        lambda cfg, d, reason, st, new_card=False, source=None:
+                        seen.update(reason=reason, new_card=new_card, source=source) or d / "x.jpg")
     cycle.run(cfg, halt=None)
     seen["state"] = json.loads((data / "state.json").read_text())
     return seen
@@ -184,7 +185,7 @@ def test_only_a_button_press_starts_a_new_liner(tmp_path: Path, monkeypatch):
     early, late = datetime(2026, 10, 5, 21, 0, tzinfo=timezone.utc), datetime(2026, 10, 6, 10, 30, tzinfo=timezone.utc)
 
     press = _boot(tmp_path, monkeypatch, early, expected_wake=expected.isoformat(), clean_halt=True)
-    assert (press["reason"], press["new_card"]) == ("manual", True)
+    assert (press["reason"], press["new_card"], press["source"]) == ("manual", True, "button")
     assert press["state"]["clean_halt"] is True  # this cycle powered off by itself too
 
     flat_battery = _boot(tmp_path, monkeypatch, late, expected_wake=expected.isoformat(), clean_halt=True)

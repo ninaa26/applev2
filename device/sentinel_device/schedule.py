@@ -44,7 +44,9 @@ def wake_reason(now: datetime, expected_iso: str | None, clean_halt: bool = True
     'first'           no earlier cycle on record
 
     Only 'manual' may start a new liner. Power that goes and comes back between two scheduled wakes,
-    after a clean power-off, still looks like a button press: nothing on the board tells them apart.
+    after a clean power-off (a battery swap), also comes out as 'manual': nothing on the board tells
+    them apart. The server settles it from the photo: the old insects still in place means the liner
+    was not changed (sentinel_server.pipeline.worker.same_liner_as_before).
     """
     if not expected_iso:
         return "first"

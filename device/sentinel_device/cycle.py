@@ -26,7 +26,8 @@ from .uploader import Queue, drain
 log = logging.getLogger("sentinel")
 
 
-def capture_once(cfg: dict, data_dir: Path, reason: str, state: State, new_card: bool = False) -> Path:
+def capture_once(cfg: dict, data_dir: Path, reason: str, state: State, new_card: bool = False,
+                 new_card_source: str | None = None) -> Path:
     now = datetime.now(timezone.utc)
     stem = f"{now.strftime('%Y%m%dT%H%M%SZ')}_{cfg['trap_id']}"
     tmp = data_dir / f"{stem}.jpg"
@@ -45,6 +46,9 @@ def capture_once(cfg: dict, data_dir: Path, reason: str, state: State, new_card:
         "captured_at": now.isoformat(),
         "wake_reason": reason,
         "new_card": new_card,
+        # "button": worked out from an unscheduled boot, which the server checks against the last photo;
+        # "flag": someone ran --new-card, taken at their word
+        "new_card_source": new_card_source if new_card else None,
         "camera": cam_meta,
         "env": env,
         "power": power,
@@ -94,13 +98,15 @@ def run(cfg_path: Path | None, halt: bool | None, capture: bool = True, new_card
         state.set("clean_halt", False)  # until this cycle reaches its own power-off
         state.save()
         # In the field, pressing the Pi 5 power button to wake the trap means "I just put in a fresh liner".
-        # A boot after a power cut is not that (see wake_reason).
+        # A boot after a power cut is not that (see wake_reason); power pulled and put back between two wakes
+        # looks the same from here, so the server checks the photo before it believes a button press.
+        source = "flag" if new_card else "button"
         new_card = new_card or (reason == "manual" and cfg["schedule"].get("manual_wake_is_new_card", False))
         log.info("wake (%s), trap %s, sw %s%s", reason, cfg["trap_id"], __version__, ", NEW CARD" if new_card else "")
 
         if capture:
             try:
-                path = capture_once(cfg, data_dir, reason, state, new_card)
+                path = capture_once(cfg, data_dir, reason, state, new_card, source)
                 log.info("captured %s", path.name)
             except Exception as e:
                 error = f"capture failed: {e.__class__.__name__}: {e}"
