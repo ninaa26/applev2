@@ -78,6 +78,8 @@ sudo systemctl enable sentinel-cycle
 
 In the config: `halt_after_cycle = true`, `manual_wake_is_new_card = true`. From then on, every boot runs one cycle and powers off until the next scheduled time. **After swapping a liner, press the Pi's power button**: the trap wakes, takes a baseline photo, and the server starts a new liner. The dashboard's "New liner installed" button does the same thing.
 
+A boot counts as a button press only if it comes *before* the next scheduled wake and the last cycle powered the Pi off itself. A boot after a missed wake (flat battery, unplugged) or after a cycle that was cut short uploads its photo as `power_restored` or `interrupted` and keeps the current liner. One case is still read as a new liner: power that is removed and put back between two scheduled wakes, such as a quick battery swap. Swap the battery when you change the liner, or disconnect it across a scheduled wake time.
+
 To stop the cycle and work on the Pi, SSH in during a wake and run `sudo systemctl disable sentinel-cycle`, or set `halt_after_cycle = false` from the server (next section).
 
 ## Changing settings remotely

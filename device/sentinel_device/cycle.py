@@ -89,8 +89,12 @@ def run(cfg_path: Path | None, halt: bool | None, capture: bool = True, new_card
     error = None
     try:
         now = datetime.now(timezone.utc)
-        reason = wake_reason(now, state.get("expected_wake"))
+        # State files from before clean_halt existed have no entry: treat those as a clean power-off.
+        reason = wake_reason(now, state.get("expected_wake"), state.get("clean_halt", True))
+        state.set("clean_halt", False)  # until this cycle reaches its own power-off
+        state.save()
         # In the field, pressing the Pi 5 power button to wake the trap means "I just put in a fresh liner".
+        # A boot after a power cut is not that (see wake_reason).
         new_card = new_card or (reason == "manual" and cfg["schedule"].get("manual_wake_is_new_card", False))
         log.info("wake (%s), trap %s, sw %s%s", reason, cfg["trap_id"], __version__, ", NEW CARD" if new_card else "")
 
@@ -126,6 +130,8 @@ def run(cfg_path: Path | None, halt: bool | None, capture: bool = True, new_card
         if not hardware.set_rtc_wake(int(wake_at.timestamp())):
             log.error("not halting: RTC alarm could not be set, so the trap would never wake")
             return 1
+        state.set("clean_halt", True)
+        state.save()
         log.info("next wake %s; halting", wake_at.isoformat())
         subprocess.run(["sudo", "systemctl", "poweroff"], check=False)
     else:
