@@ -45,9 +45,9 @@ The photo should appear on the dashboard within a few seconds. If the Mac is off
 ## 5. Tune the camera once, in the (mockup) trap
 
 1. Put a liner with a few specimens (or the printed checkerboard) in the tray.
-2. Focus: `sudo -u sentinel /opt/sentinel/venv/bin/sentinel-focus-sweep --config /etc/sentinel/config.toml --out /tmp/focus`. Set `lens_position` to the best value it prints.
-3. Exposure: with the LEDs on, adjust `exposure_us` until the liner is bright but not blown out (grid lines still visible), and keep `analogue_gain` at 1.0 if possible.
-4. White balance: adjust `colour_gains` until a white liner looks neutral. These values stay fixed for good; the model relies on every photo looking the same.
+2. Focus. The wide-angle IMX219 (the current camera) has no focus motor: loosen the lens, turn it by hand until the grid lines and specimens are sharp at the card's distance, and fix it with a dab of glue or nail polish. Cameras with autofocus: `sudo -u sentinel /opt/sentinel/venv/bin/sentinel-focus-sweep --config /etc/sentinel/config.toml --out /tmp/focus`, then set `lens_position` to the best value it prints.
+3. Light. The photo must be lit by the white LEDs, not by daylight through the red roof (that gives an all-red photo with almost no green or blue, and it changes with the weather). Line the inside of the roof with something opaque, and keep `exposure_us` short enough that the LEDs dominate.
+4. Exposure, white balance and even lighting: swap the liner for a blank white card and run `sudo -u sentinel /opt/sentinel/venv/bin/sentinel-flatfield --config /etc/sentinel/config.toml`. It says whether `exposure_us` is too high or low (keep `analogue_gain` at 1.0 if possible) and prints the `colour_gains` to set; change them and run it again until it says both are fine. It also saves a white-card map (`flatfield.npz` in `data_dir`) that evens out every later photo, which removes the wide lens's green centre and pink edges (`lens_shading = false` switches off the stock correction that causes them). These values stay fixed for good; the model relies on every photo looking the same. Redo this step if the LEDs, camera or its height change.
 5. Lens calibration: photograph `hardware/print/checkerboard.png` flat on the tray at ~10 positions/angles and keep the photos for the calibration script.
 
 **USB webcam instead:** webcams have no manual exposure, and their auto-exposure clips the red

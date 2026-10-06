@@ -3,16 +3,28 @@
 The camera looks down from the top middle of the trap, lens about 110 mm above the
 174 × 198 mm card ([TRAP.md](TRAP.md)).
 
-## On hand
+## Current trap camera: Arducam UC-572 (IMX219, wide-angle)
 
-| Camera | Specs (webcam test site) | In this trap |
+8 MP (3280 × 2464, 4:3), Raspberry Pi camera port (`imx219` driver), fisheye M12 lens, no focus
+motor. From the peak of the trap it sees the whole card. Read off a preview of the card's 25 mm
+grid: roughly 15 px/mm in the centre and 10–11 px/mm at the edges (not yet bench-tested).
+
+- Focus by turning the lens by hand; `lens_position` is ignored.
+- `lens_shading = false` and a white-card calibration (`sentinel-flatfield`) remove the green
+  centre and pink edges the Pi's stock IMX219 colour correction gives with this lens.
+- Light the card with the white LEDs and block daylight: through the red roof the photo is all red.
+- Steps: [docs/bring-up.md](../docs/bring-up.md), section 5.
+
+## Also on hand
+
+| Camera | What it is | In this trap |
 |---|---|---|
-| icspring USB camera | 640 × 480 (0.31 MP, VGA, 4:3), 28 fps, UVC, no mic | ~2.6 px/mm across the card if it sees all of it; an oriental fruit moth ≈ 16 px |
-
-Use it to build and test the software (capture, upload, detection, counting, the camera bench) and
-to check lighting and framing. It can't tell the moths apart: 640 × 480 spread over the whole card
-shows a moth as a small blob, with no wing pattern. Its lens field of view isn't recorded; find it
-with `sentinel-camera-bench` (the `FOV mm` column).
+| icspring USB camera | 640 × 480 UVC webcam | ~2.6 px/mm over the whole card (OFM ≈ 16 px). Software development only |
+| Arducam UC-261 Rev D | 5 MP OV5647, Pi camera port, swappable M12 lens | Backup: ~10 px/mm with a ~1.7 mm lens for a 1/4" sensor |
+| Pi camera in a clear acrylic holder | Normal-angle lens; sensor not identified yet (`rpicam-hello --list-cameras`) | Too narrow at the peak; worth identifying in case it is a 16 MP Arducam |
+| Arducam UC-626 Rev B | 8 MP IMX219 USB, two microphones, fixed ~62° × 49° lens (looks scratched) | Too narrow at the peak |
+| ArduCAM Mini UC-474 | 2 or 5 MP, SPI | No: not a camera-port device |
+| OV7670/OV7725 board; OmniVision module on a UC-260 adapter | Parallel-pin microcontroller cameras | No |
 
 ## What a trap camera needs
 
@@ -23,7 +35,7 @@ with `sentinel-camera-bench` (the `FOV mm` column).
 | Sensor | ≥ 12 MP, 4:3, normal IR-cut (not NoIR), Pi 5 CSI/libcamera support |
 | Lens and focus | Low distortion, rated for the sensor; sharp at 10–11 cm and locked |
 
-## Choice: Raspberry Pi HQ Camera (M12) + Arducam LN069 lens
+## Upgrade if the edges or look-alikes need more: Raspberry Pi HQ Camera (M12) + Arducam LN069 lens
 
 - Camera: Raspberry Pi HQ Camera, **M12-mount** version (SC0870, IMX477, 12.3 MP, 4:3), ~$50 at
   [PiShop.us](https://www.pishop.us/product/raspberry-pi-hq-camera-m12/) or
@@ -33,8 +45,8 @@ with `sentinel-camera-bench` (the `FOV mm` column).
   the whole card, at ~15.5 px/mm (OFM ≈ 93 px). Rated minimum focus is 0.3 m: check it focuses at
   11 cm (screw the lens out further, or add a spacer) as soon as it arrives.
 - Also: a Pi 5 camera cable (22-pin to 15-pin) long enough to reach from the peak to the Pi.
-- Software: `camera.py` needs an HQ Camera config (it assumes `imx708_wide` today); manual focus,
-  so set it once and lock the lens.
+- Software: nothing to add; `camera.py` handles fixed-focus cameras. Manual focus, so set it once
+  and lock the lens, then redo `sentinel-flatfield`.
 
 ## Ruled out
 

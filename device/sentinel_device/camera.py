@@ -1,7 +1,8 @@
 """Camera backends.
 
-`Picamera2Camera` runs on the Pi with the Camera Module 3 Wide, with focus,
-exposure and white balance all locked so every photo of the liner looks the same.
+`Picamera2Camera` runs on the Pi with any camera on the CSI port (the wide-angle IMX219
+now, a Camera Module 3 or HQ Camera later), with exposure and white balance locked, and
+focus too where the camera has a focus motor, so every photo of the liner looks the same.
 `FakeCamera` renders a synthetic sticky liner that slowly collects "moths", so
 the whole pipeline (upload, detection, tracking, counting) can be tested on a
 laptop before the hardware is ready.
@@ -24,8 +25,29 @@ class CaptureError(RuntimeError):
 
 
 class Picamera2Camera:
-    def __init__(self, cfg: dict):
+    def __init__(self, cfg: dict, data_dir: Path | None = None):
         self.cfg = cfg
+        self.data_dir = data_dir
+
+    def _tuning(self, Picamera2):
+        """The sensor's tuning with lens shading correction removed, or None for the default.
+
+        The stock correction is made for the stock lens; under a wide-angle lens it turns the
+        centre green and the edges pink. With it off, the flat field does the whole correction.
+        """
+        if self.cfg.get("lens_shading", True):
+            return None
+        try:
+            model = Picamera2.global_camera_info()[0]["Model"]
+            tuning = Picamera2.load_tuning_file(f"{model}.json")
+            if isinstance(tuning.get("algorithms"), list):
+                tuning["algorithms"] = [a for a in tuning["algorithms"] if "rpi.alsc" not in a]
+            else:
+                tuning.pop("rpi.alsc", None)
+            return tuning
+        except Exception as e:  # pragma: no cover - only on the Pi
+            log.warning("could not switch off lens shading (%s); using the default tuning", e)
+            return None
 
     def capture(self, path: Path) -> dict:
         try:
@@ -34,27 +56,35 @@ class Picamera2Camera:
         except ImportError as e:  # pragma: no cover - only on the Pi
             raise CaptureError("picamera2 is not installed; set camera.backend = 'fake' to test") from e
 
-        cam = Picamera2()
+        gain = None
+        if self.cfg.get("flat_field", True) and self.data_dir is not None:
+            from . import flatfield
+            gain = flatfield.load(self.data_dir)
+        tuning = self._tuning(Picamera2)
+        cam = Picamera2(tuning=tuning) if tuning else Picamera2()
         try:
             still = cam.create_still_configuration(main={"size": cam.sensor_resolution})
             cam.configure(still)
             cam.options["quality"] = int(self.cfg["jpeg_quality"])
-            cam.set_controls(
-                {
-                    "AfMode": controls.AfModeEnum.Manual,
-                    "LensPosition": float(self.cfg["lens_position"]),
-                    "AeEnable": False,
-                    "ExposureTime": int(self.cfg["exposure_us"]),
-                    "AnalogueGain": float(self.cfg["analogue_gain"]),
-                    "AwbEnable": False,
-                    "ColourGains": tuple(float(g) for g in self.cfg["colour_gains"]),
-                }
-            )
+            ctrl = {
+                "AeEnable": False,
+                "ExposureTime": int(self.cfg["exposure_us"]),
+                "AnalogueGain": float(self.cfg["analogue_gain"]),
+                "AwbEnable": False,
+                "ColourGains": tuple(float(g) for g in self.cfg["colour_gains"]),
+            }
+            if "AfMode" in cam.camera_controls:  # fixed-focus cameras (IMX219, HQ) have no lens motor
+                ctrl.update(AfMode=controls.AfModeEnum.Manual, LensPosition=float(self.cfg["lens_position"]))
+            cam.set_controls(ctrl)
+            sensor = str(cam.camera_properties.get("Model", "unknown"))
             cam.start()
             time.sleep(float(self.cfg["settle_s"]))
             request = cam.capture_request()
             try:
-                request.save("main", str(path))
+                if gain is None:
+                    request.save("main", str(path))
+                else:
+                    flatfield.apply(request.make_image("main"), gain).save(path, quality=int(self.cfg["jpeg_quality"]))
                 md = request.get_metadata()
             finally:
                 request.release()
@@ -62,7 +92,9 @@ class Picamera2Camera:
         finally:
             cam.close()
         return {
-            "sensor": "imx708_wide",
+            "sensor": sensor,
+            "flat_field": gain is not None,
+            "lens_shading": tuning is None,
             "width": still["main"]["size"][0],
             "height": still["main"]["size"][1],
             "lens_position": md.get("LensPosition"),
@@ -227,7 +259,7 @@ class FakeCamera:
 def make_camera(cfg: dict, data_dir: Path):
     backend = cfg["camera"]["backend"]
     if backend == "picamera2":
-        return Picamera2Camera(cfg["camera"])
+        return Picamera2Camera(cfg["camera"], data_dir)
     if backend == "usb":
         return UsbCamera(cfg["camera"])
     if backend == "fake":

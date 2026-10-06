@@ -16,10 +16,14 @@ manual_wake_is_new_card = true  # field: wake by power button = fresh liner inst
 
 [camera]
 backend = "picamera2"      # "usb" for a webcam, "fake" for testing on a laptop
-lens_position = 6.5        # dioptres (1 / metres); ~15 cm => 6.7. Tune with sentinel-focus-sweep.
-exposure_us = 8000
+# Current camera: Arducam UC-572, IMX219 (8 MP, 3280x2464) with a wide-angle lens. It has no
+# focus motor: turn the lens by hand until the card is sharp, and lens_position is ignored.
+lens_position = 6.5        # autofocus cameras only. Dioptres (1 / metres); ~11 cm => 9. Tune with sentinel-focus-sweep.
+exposure_us = 8000         # sentinel-flatfield says if this is too bright or too dark
 analogue_gain = 1.0
-colour_gains = [1.9, 1.6]  # fixed white balance (red, blue); tune once under the LEDs
+colour_gains = [1.9, 1.6]  # fixed white balance (red, blue); sentinel-flatfield prints the values to use
+lens_shading = false       # wide-angle lens: the sensor's stock correction gives a green centre, pink edges
+flat_field = true          # even out colour and light with the white-card map from sentinel-flatfield
 jpeg_quality = 95
 settle_s = 1.5             # let the LEDs and sensor settle before the still
 # backend = "usb" only (the picamera2 settings above don't apply to webcams):

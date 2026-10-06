@@ -161,3 +161,41 @@ def test_cycle_survives_a_broken_schedule_from_the_server(tmp_path: Path, monkey
                                                                                 "camera": {"backend": "nope"}}}))
     assert cycle.run(cfg, halt=None) == 2
     assert len(calls["rtc"]) == 1 and calls["poweroff"]
+
+
+def test_flat_field_makes_a_tinted_vignetted_card_even(tmp_path: Path):
+    import numpy as np
+    from PIL import Image
+    from sentinel_device import flatfield
+
+    h, w = 480, 640
+    yy, xx = np.mgrid[0:h, 0:w]
+    r2 = ((xx - w / 2) / (w / 2)) ** 2 + ((yy - h / 2) / (h / 2)) ** 2
+    # green centre, pink edges, darker corners: what the wide lens does to a white card
+    card = np.stack([200 * (1 - 0.15 * r2), 210 * (1 - 0.35 * r2), 190 * (1 - 0.2 * r2)], axis=2)
+    card[::40] = 60  # printed grid lines must not dent the map
+    card[:, ::40] = 60
+    white = card.astype(np.uint8)
+
+    gain = flatfield.build(white)
+    flatfield.save(tmp_path, gain, exposure_us=8000)
+    out = np.asarray(flatfield.apply(Image.fromarray(white), flatfield.load(tmp_path)), dtype=np.float32)
+    spots = [out[y - 8 : y + 8, x - 8 : x + 8].reshape(-1, 3).mean(axis=0)
+             for y, x in ((h // 2 + 20, w // 2 + 20), (60, 60), (60, w - 60), (h - 60, 60), (h - 60, w - 60))]
+    spots = np.array(spots)
+    assert spots.max() - spots.min() < 12          # even and neutral, centre to corners
+    assert out[::40].mean() < 120                  # the grid lines are still there
+    assert flatfield.load(tmp_path / "nowhere") is None
+
+
+def test_flatfield_tool_flags_red_roof_light_and_suggests_white_balance():
+    import numpy as np
+    from sentinel_device.tools.flatfield import report
+
+    red = np.zeros((100, 100, 3), np.uint8)
+    red[...] = (200, 30, 40)
+    assert any("coloured roof" in line for line in report(red, (1.9, 1.6)))
+    warm = np.zeros((100, 100, 3), np.uint8)
+    warm[...] = (200, 180, 150)
+    lines = report(warm, (2.0, 1.5))
+    assert "Exposure is fine." in lines and any("colour_gains = [1.80, 1.80]" in line for line in lines)
