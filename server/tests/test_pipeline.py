@@ -79,6 +79,27 @@ def test_upload_auth_and_duplicates():
         assert bad.status_code == 422
 
 
+def test_dashboard_password_guards_pages_but_not_trap_uploads(monkeypatch):
+    from sentinel_server import settings as settings_mod
+
+    key = add_trap()
+    with TestClient(create_app()) as client:
+        assert client.get("/").status_code == 200  # no password set: open, as before
+
+    monkeypatch.setenv("SENTINEL_DASHBOARD_PASSWORD", "orchard")
+    settings_mod.reset_settings()
+    with TestClient(create_app()) as client:
+        for path in ("/", "/review", "/api/v1/traps", "/static/app.css"):
+            r = client.get(path)
+            assert r.status_code == 401 and r.headers["www-authenticate"].startswith("Basic"), path
+        assert client.post("/traps/T1/new-card", follow_redirects=False).status_code == 401
+        assert client.get("/", auth=("anyone", "wrong")).status_code == 401
+        assert client.get("/", headers={"Authorization": "Basic not-base64!"}).status_code == 401
+        assert client.get("/", auth=("anyone", "orchard")).status_code == 200
+        assert client.get("/healthz").status_code == 200
+        assert upload(client, key, datetime.now(timezone.utc), MOTHS, "a").status_code == 201
+
+
 def test_counts_each_insect_once_and_new_card_resets():
     key = add_trap()
     t0 = datetime.now(timezone.utc) - timedelta(hours=6)

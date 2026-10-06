@@ -1,10 +1,13 @@
-"""FastAPI app: device upload API + the team dashboard (no login; reach it over Tailscale)."""
+"""FastAPI app: device upload API + the team dashboard (open unless SENTINEL_DASHBOARD_PASSWORD is set)."""
 
 from __future__ import annotations
 
+import base64
+import binascii
 import io
 import json
 import re
+import secrets
 import threading
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -73,6 +76,25 @@ def create_app(start_worker: bool = False) -> FastAPI:
     settings = get_settings()
     app.mount("/media", StaticFiles(directory=str(settings.media_dir)), name="media")
     app.mount("/static", StaticFiles(directory=str(HERE / "static")), name="static")
+
+    # ---------------------------------------------------------------- dashboard password
+
+    # Traps sign uploads with their own key, and /healthz says nothing worth hiding.
+    no_password = {"/api/v1/captures", "/healthz"}
+
+    @app.middleware("http")
+    async def dashboard_password(request: Request, call_next):
+        expected = get_settings().dashboard_password
+        if expected and request.url.path not in no_password:
+            scheme, _, token = request.headers.get("authorization", "").partition(" ")
+            try:
+                given = base64.b64decode(token, validate=True).decode().partition(":")[2] if scheme.lower() == "basic" else ""
+            except (binascii.Error, UnicodeDecodeError):
+                given = ""
+            if not secrets.compare_digest(given.encode(), expected.encode()):
+                return Response("Password needed.", status_code=401,
+                                headers={"WWW-Authenticate": 'Basic realm="Orchard Sentinel", charset="UTF-8"'})
+        return await call_next(request)
 
     # ---------------------------------------------------------------- device API
 
