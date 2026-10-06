@@ -8,6 +8,7 @@ Do the server steps in [server-on-mac.md](server-on-mac.md) first, so there is s
 2. Boot, then `ssh pi@sentinel-t1.local` (or whatever user you set).
 3. `sudo apt update && sudo apt full-upgrade -y && sudo reboot`
 4. Camera check: `rpicam-still -o test.jpg --width 2304 --height 1296`. Copy `test.jpg` back and look at it.
+   If it says no cameras are available with the wide-angle IMX219 (Arducam UC-572): the Pi doesn't detect that board by itself. Set `camera_auto_detect=0` and add `dtoverlay=imx219` in `/boot/firmware/config.txt`, then reboot.
 
 ## 2. Tailscale (lets the Pi reach the Mac from any network)
 
