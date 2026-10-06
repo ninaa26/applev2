@@ -22,6 +22,8 @@ DEFAULTS: dict[str, Any] = {
         "exposure_us": 8000,
         "analogue_gain": 1.0,
         "colour_gains": [1.9, 1.6],
+        "lens_shading": True,  # False: drop the sensor's stock lens correction (wide-angle lenses)
+        "flat_field": True,  # use data_dir/flatfield.npz when sentinel-flatfield has made one
         "jpeg_quality": 95,
         "settle_s": 1.5,
         "usb_device": "/dev/video0",
