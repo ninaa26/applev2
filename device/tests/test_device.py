@@ -199,3 +199,17 @@ def test_flatfield_tool_flags_red_roof_light_and_suggests_white_balance():
     warm[...] = (200, 180, 150)
     lines = report(warm, (2.0, 1.5))
     assert "Exposure is fine." in lines and any("colour_gains = [1.80, 1.80]" in line for line in lines)
+
+
+def test_flat_field_ignores_the_red_trap_walls_around_the_card():
+    import numpy as np
+    from sentinel_device import flatfield
+
+    white = np.zeros((480, 640, 3), np.uint8)
+    white[...] = (200, 30, 35)                      # red walls all round
+    white[60:420, 100:540] = (180, 185, 175)        # the card
+    gain = flatfield.build(white)
+    assert gain.max() < 1.2 and gain.min() > 0.9    # walls take the card's gains, no 4x green/blue
+    red_only = np.zeros((480, 640, 3), np.uint8)
+    red_only[...] = (200, 30, 35)
+    assert flatfield.build(red_only).max() > 2      # no card in the centre: left as is
