@@ -24,6 +24,12 @@ grid: roughly 15 px/mm in the centre and 10–11 px/mm at the edges (not yet ben
   LED casts long red shadows; diffuse light from two sides would shorten them. The trap had been
   moved since the white-card calibration and the correction no longer lined up (faint green and
   pink patches): recalibrate whenever the camera or trap is moved.
+- With the LED moved to shine down from beside the camera
+  (`ml/data/trap_camera/capture_bugs_light2_2026-10-06/`): shadows are short and stay next to
+  each specimen, which is the lighting to keep. It needs a diffuser (a blown-out hot spot right of
+  centre, and the centre twice as bright as the edges) and a new white-card calibration: the light
+  on the card is brighter and whiter, so start from `exposure_us = 40000`, `analogue_gain = 1.0`,
+  `colour_gains` near `[1.28, 1.79]`. The values recorded above are for the old LED position.
 - Steps: [docs/bring-up.md](../docs/bring-up.md), section 5.
 
 ## Also on hand
