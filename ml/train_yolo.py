@@ -1,6 +1,6 @@
 """Model v2 detector: train YOLO11 on the liner photos whose boxes were all checked by hand.
 
-    python train_yolo.py                          # build data/yolo/, train yolo11s, report on the held-out photos
+    python train_yolo.py                          # build data/yolo/, train yolo11s, report on the test photos
     python train_yolo.py --model yolo11n.pt       # smaller, a candidate for the Pi
     python train_yolo.py --build-only             # just write the tiles and data.yaml
     python train_yolo.py --synth 3000 --out data/yolo-synth   # also paste AMI/iNat insects onto training tiles
@@ -11,20 +11,25 @@ target moth was boxed there, so their bycatch would teach the model that insects
 (not an insect / off the card) are background too. Classes are pass-1 labels: moth, other_insect, debris.
 
 Each photo is shrunk to --ppm px/mm (what the trap camera sees; from the printed grid, the `ppm` column) and cut
-into overlapping --tile px tiles, so moths are the size they'll be in the trap. Held out, split by card/liner:
-data/field/test_cards.txt plus --val-photos (a liner's other days never train either: liners.json).
+into overlapping --tile px tiles, so moths are the size they'll be in the trap. Three splits, by card/liner (a
+liner's other days go with it: liners.json):
+  test   data/field/test_cards.txt plus --test-photos. Scored once, after training; the number to report.
+  val    --val-frac of the remaining photos, the same ones every run. Training stops early on them and keeps the
+         epoch that does best on them, so their score flatters the model and is not reported as accuracy.
+  train  the rest.
 --synth N adds N training tiles with web-photo insects pasted on (AMI and iNaturalist, cut out by segment_moths.py,
 so their species label is right and their box exact): a random training tile, keeping its own boxes, or a blank liner
 from data/liners/, gets 2-12 cutouts at their species' real length (make_trap_style.LENGTH_MM), any angle, tinted by
 the liner's light, with a contact shadow, then blurred and noised. Moths become `moth`, bycatch `other_insect`.
-Cutouts of held-out photos' groups don't matter here (the held-out set is our liners, not web photos), and the
-held-out tiles never get pasted on. Writes data/yolo/ (tiles + data.yaml) and models/yolo11/<run>/ (weights/best.pt, results).
+Cutouts of held-out photos' groups don't matter here (val and test are our liners, not web photos), and val and
+test tiles never get pasted on. Writes data/yolo/ (tiles + data.yaml) and models/yolo11/<run>/ (weights/best.pt, results).
 """
 
 from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import shutil
 import statistics
@@ -36,7 +41,8 @@ from PIL import Image, ImageOps
 HERE = Path(__file__).parent
 CLASSES = ["moth", "other_insect", "debris"]
 SOURCES = [HERE / "data/field", HERE / "data/web_liners/label/ofm-ervins"]
-VAL_PHOTOS = ["om20180514_121032_1", "ap20210804_115441_3"]  # standalone OFM liners, fully labelled
+TEST_PHOTOS = ["om20180514_121032_1", "ap20210804_115441_3"]  # standalone OFM liners, fully labelled
+SPLITS = ["train", "val", "test"]
 
 
 def labelled_photos(data: Path) -> dict[str, list[dict]]:
@@ -48,19 +54,44 @@ def labelled_photos(data: Path) -> dict[str, list[dict]]:
     return {p: rs for p, rs in rows.items() if all(r["label"] for r in rs)}
 
 
-def held_out(data: Path, val_photos: list[str]) -> set[str]:
+def liner_groups(data: Path) -> list[set[str]]:
+    """Photos of the same liner on different days; they always stay on the same side of a split."""
+    liners = data / "liners.json"
+    return [set(g) for g in json.loads(liners.read_text())] if liners.exists() else []
+
+
+def held_out(data: Path, test_photos: list[str]) -> set[str]:
     out = set()
     test = data / "test_cards.txt"
     if test.exists():
         out |= {ln.strip() for ln in test.read_text().splitlines() if ln.strip() and not ln.startswith("#")}
     names = [p.name for p in (data / "inbox").iterdir()]
-    out |= {n for n in names if any(n.startswith(v) for v in val_photos)}
-    liners = data / "liners.json"
-    if liners.exists():  # the same liner on other days stays on the same side
-        for group in json.loads(liners.read_text()):
-            if out & set(group):
-                out |= set(group)
+    out |= {n for n in names if any(n.startswith(v) for v in test_photos)}
+    for group in liner_groups(data):
+        if out & group:
+            out |= group
     return out
+
+
+def pick_val(data: Path, photos: list[str], frac: float) -> set[str]:
+    """About `frac` of `photos` (the ones not in test) for choosing the checkpoint: whole liners, and the same
+    ones on every run, ordered by a hash of the name so adding a photo doesn't reshuffle the rest."""
+    if frac <= 0 or len(photos) < 2:
+        return set()
+    left = set(photos)
+    groups = []
+    for g in liner_groups(data):
+        if g & left:
+            groups.append(sorted(g & left))
+            left -= g
+    groups += [[p] for p in left]
+    groups.sort(key=lambda g: hashlib.sha1(g[0].encode()).hexdigest())
+    val: set[str] = set()
+    for g in groups[:-1]:  # always leave something to train on
+        if len(val) >= frac * len(photos):
+            break
+        val |= set(g)
+    return val
 
 
 def tiles(w: int, h: int, tile: int, overlap: int):
@@ -76,15 +107,21 @@ def tiles(w: int, h: int, tile: int, overlap: int):
             yield x, y
 
 
-def build(out: Path, ppm: float, tile: int, overlap: int, val_photos: list[str], min_visible: float) -> dict:
+def build(out: Path, ppm: float, tile: int, overlap: int, test_photos: list[str], min_visible: float,
+          val_frac: float = 0.15, sources: list[Path] | None = None) -> dict:
     if out.exists():
         shutil.rmtree(out)
-    stats = {"train": {"photos": 0, "tiles": 0, "boxes": 0}, "val": {"photos": 0, "tiles": 0, "boxes": 0}}
+    stats = {s: {"photos": 0, "tiles": 0, "boxes": 0} for s in SPLITS}
     per_class = {s: {c: 0 for c in CLASSES} for s in stats}
-    for data in SOURCES:
-        val = held_out(data, val_photos)
-        for photo, rows in sorted(labelled_photos(data).items()):
-            split = "val" if photo in val else "train"
+    for d in ("images", "labels"):
+        for s in SPLITS:
+            (out / d / s).mkdir(parents=True, exist_ok=True)
+    for data in sources or SOURCES:
+        labelled = labelled_photos(data)
+        test = held_out(data, test_photos)
+        val = pick_val(data, sorted(p for p in labelled if p not in test), val_frac)
+        for photo, rows in sorted(labelled.items()):
+            split = "test" if photo in test else "val" if photo in val else "train"
             boxes = [r for r in rows if r["label"] in CLASSES]
             ppms = [float(r["ppm"]) for r in rows if r.get("ppm")]
             scale = min(1.0, ppm / statistics.median(ppms)) if ppms else 1.0
@@ -93,8 +130,6 @@ def build(out: Path, ppm: float, tile: int, overlap: int, val_photos: list[str],
             if scale < 1:
                 img = img.resize((round(img.width * scale), round(img.height * scale)), Image.LANCZOS)
             stem = f"{data.name}__{Path(photo).stem}"
-            for d in ("images", "labels"):
-                (out / d / split).mkdir(parents=True, exist_ok=True)
             stats[split]["photos"] += 1
             for tx, ty in tiles(img.width, img.height, tile, overlap):
                 tw, th = min(tile, img.width), min(tile, img.height)
@@ -115,7 +150,7 @@ def build(out: Path, ppm: float, tile: int, overlap: int, val_photos: list[str],
                 stats[split]["tiles"] += 1
                 stats[split]["boxes"] += len(lines)
     (out / "data.yaml").write_text(
-        f"path: {out.resolve()}\ntrain: images/train\nval: images/val\nnames:\n"
+        f"path: {out.resolve()}\ntrain: images/train\nval: images/val\ntest: images/test\nnames:\n"
         + "".join(f"  {i}: {c}\n" for i, c in enumerate(CLASSES)))
     return {"splits": stats, "boxes_per_class": per_class, "ppm": ppm, "tile": tile, "overlap": overlap}
 
@@ -213,7 +248,10 @@ def main(argv=None) -> int:
     ap.add_argument("--tile", type=int, default=640)
     ap.add_argument("--overlap", type=int, default=160)
     ap.add_argument("--min-visible", type=float, default=0.4, help="keep a cut box if this much of it is in the tile")
-    ap.add_argument("--val-photos", nargs="*", default=VAL_PHOTOS)
+    ap.add_argument("--test-photos", nargs="*", default=TEST_PHOTOS,
+                    help="name prefixes of photos kept for the final score, on top of data/field/test_cards.txt")
+    ap.add_argument("--val-frac", type=float, default=0.15,
+                    help="share of the other photos used to stop training and pick the best epoch")
     ap.add_argument("--epochs", type=int, default=150)
     ap.add_argument("--batch", type=int, default=16)
     ap.add_argument("--device", default="mps")
@@ -223,7 +261,7 @@ def main(argv=None) -> int:
     ap.add_argument("--build-only", action="store_true")
     args = ap.parse_args(argv)
 
-    info = build(args.out, args.ppm, args.tile, args.overlap, args.val_photos, args.min_visible)
+    info = build(args.out, args.ppm, args.tile, args.overlap, args.test_photos, args.min_visible, args.val_frac)
     if args.synth:
         info["synth"] = synth(args.out, args.synth, args.ppm, args.tile)
     print(json.dumps(info, indent=1))
@@ -239,15 +277,17 @@ def main(argv=None) -> int:
                 patience=40, degrees=180, flipud=0.5, fliplr=0.5, mosaic=1.0, close_mosaic=15,
                 scale=0.3, hsv_h=0.02, hsv_s=0.5, hsv_v=0.4, plots=True, seed=0)
     run = HERE / "models/yolo11" / name
-    metrics = YOLO(run / "weights/best.pt").val(data=str(args.out / "data.yaml"), imgsz=args.tile,
-                                                 device=args.device, project=str(run), name="val", exist_ok=True)
-    summary = {**info, "model": args.model,
-               "val": {"mAP50": metrics.box.map50, "mAP50-95": metrics.box.map, "precision": metrics.box.mp,
-                       "recall": metrics.box.mr,
-                       "per_class_mAP50": dict(zip([CLASSES[i] for i in metrics.box.ap_class_index],
-                                                   map(float, metrics.box.ap50)))}}
+
+    def score(split: str) -> dict:
+        m = YOLO(run / "weights/best.pt").val(data=str(args.out / "data.yaml"), split=split, imgsz=args.tile,
+                                              device=args.device, project=str(run), name=split, exist_ok=True)
+        return {"mAP50": m.box.map50, "mAP50-95": m.box.map, "precision": m.box.mp, "recall": m.box.mr,
+                "per_class_mAP50": dict(zip([CLASSES[i] for i in m.box.ap_class_index], map(float, m.box.ap50)))}
+
+    # "val" picked the checkpoint, so it flatters the model; "test" was never looked at during training.
+    summary = {**info, "model": args.model, "val": score("val"), "test": score("test")}
     (run / "summary.json").write_text(json.dumps(summary, indent=1))
-    print(json.dumps(summary["val"], indent=1))
+    print(json.dumps({"test": summary["test"]}, indent=1))
     return 0
 
 

@@ -44,11 +44,12 @@ def yolo_runs() -> dict[str, dict]:
         run = best.parents[1]
         s = run / "summary.json"
         info = json.loads(s.read_text()) if s.exists() else {}
-        val = info.get("val", {})
+        # Runs from before train_yolo.py had a test split only have "val": the photos that also picked the checkpoint.
+        m, what = (info["test"], "test") if "test" in info else (info.get("val", {}), "checkpoint-selection (optimistic)")
         runs[f"yolo:{run.name}"] = {
             "name": f"YOLO {run.name}",
-            "info": (f"held-out mAP50 {val['mAP50']:.2f} (moth {val['per_class_mAP50'].get('moth', 0):.2f})"
-                     if val else "still training (using its best epoch so far)"),
+            "info": (f"{what} mAP50 {m['mAP50']:.2f} (moth {m['per_class_mAP50'].get('moth', 0):.2f})"
+                     if m else "still training (using its best epoch so far)"),
             "path": best, "ppm": info.get("ppm", 12), "tile": info.get("tile", 640),
             "overlap": info.get("overlap", 160)}
     return runs
