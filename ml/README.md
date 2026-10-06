@@ -98,6 +98,17 @@ export boxes back onto original uploads (already run). Trap-camera sets photogra
 several days: `carry_liner_labels.py` copies labels between them, and train/test splits must keep a
 liner's (or a card's) photos together.
 
+**YOLO11 detector and trying models** (`train_yolo.py`, `model_playground.py`):
+
+```bash
+.venv/bin/python train_yolo.py                                          # hand-checked liner photos only -> models/yolo11/<run>/
+.venv/bin/python train_yolo.py --synth 3000 --out data/yolo-synth --epochs 50   # plus AMI/iNat cutouts pasted on tiles
+.venv/bin/python model_playground.py                                    # http://localhost:8770: any detector/classifier on a photo or a screen capture
+```
+
+Oct 2 2026, yolo11s at 12 px/mm, trained on the 25 fully labelled photos (field cards + 14 OFM liners), held out
+2 field cards + 2 OFM liners: mAP50 moth 0.89, other insect 0.74, debris 0.04 (89 training boxes).
+
 ## Get training photos from AMI (primary external source)
 
 ```bash
