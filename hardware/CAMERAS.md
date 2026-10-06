@@ -17,6 +17,17 @@ grid: roughly 15 px/mm in the centre and 10–11 px/mm at the edges (not yet ben
   `analogue_gain = 2.0`, `colour_gains = [0.89, 1.76]`; after `sentinel-flatfield` the card is
   an even neutral grey edge to edge. The LED leaves a blown-out glare patch on the card; diffuse
   it or aim it off the card. The saved correction (`flatfield.npz`) stays on the Pi it was made on.
+- The Pi does not detect this board by itself (`camera_auto_detect=1` finds nothing). On the
+  bench the driver was loaded by hand (`sudo dtoverlay imx219`), which is lost at reboot. For a
+  trap Pi put `camera_auto_detect=0` and `dtoverlay=imx219` in `/boot/firmware/config.txt`
+  (camera on the CAM/DISP 1 port).
+- Detector on a calibrated photo of an empty liner (2026-10-06): grid 384 px = 15.3 px/mm, lens
+  k −0.35. It reports 7 false insects, all on the trap walls and corner clips at the card's
+  border, so the pipeline needs to ignore everything outside the card. On uncorrected photos it
+  misreads the grid, so the white-card correction matters for detection, not only for colour.
+- Reference photos from that session (calibrated, uncorrected, stock tuning, exposure variants, one
+  raw DNG) are in `ml/data/trap_camera/capture_2026-10-06/` on the Mac (not in git) and in
+  `~/sentinel/capture_2026-10-06/` on the bench Pi.
 - Steps: [docs/bring-up.md](../docs/bring-up.md), section 5.
 
 ## Also on hand
