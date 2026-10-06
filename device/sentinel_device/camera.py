@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import random
 import subprocess
 import time
@@ -35,6 +36,10 @@ class Picamera2Camera:
         The stock correction is made for the stock lens; under a wide-angle lens it turns the
         centre green and the edges pink. With it off, the flat field does the whole correction.
         """
+        # Picamera2 hands a custom tuning to libcamera through this variable and a temporary file,
+        # and leaves the variable set after the file is gone; a second camera in the same process
+        # (sentinel-flatfield, sentinel-focus-sweep) then finds no cameras at all.
+        os.environ.pop("LIBCAMERA_RPI_TUNING_FILE", None)
         if self.cfg.get("lens_shading", True):
             return None
         try:

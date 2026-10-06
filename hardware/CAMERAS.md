@@ -13,6 +13,10 @@ grid: roughly 15 px/mm in the centre and 10–11 px/mm at the edges (not yet ben
 - `lens_shading = false` and a white-card calibration (`sentinel-flatfield`) remove the green
   centre and pink edges the Pi's stock IMX219 colour correction gives with this lens.
 - Light the card with the white LEDs and block daylight: through the red roof the photo is all red.
+- Calibrated on the bench on 2026-10-06 (red trap, bench LED): `exposure_us = 40000`,
+  `analogue_gain = 2.0`, `colour_gains = [0.89, 1.76]`; after `sentinel-flatfield` the card is
+  an even neutral grey edge to edge. The LED leaves a blown-out glare patch on the card; diffuse
+  it or aim it off the card. The saved correction (`flatfield.npz`) stays on the Pi it was made on.
 - Steps: [docs/bring-up.md](../docs/bring-up.md), section 5.
 
 ## Also on hand

@@ -35,7 +35,35 @@ def build(white: np.ndarray, grid: tuple[int, int] = GRID) -> np.ndarray:
         flat[..., c] = np.median(blocks.reshape(rows, cols, bh * bw), axis=2)
     centre = flat[rows // 2 - 2 : rows // 2 + 2, cols // 2 - 2 : cols // 2 + 2]
     target = float(centre.mean())
-    return np.clip(target / np.maximum(flat, 1.0), 1.0 / MAX_GAIN, MAX_GAIN).astype(np.float32)
+    gain = np.clip(target / np.maximum(flat, 1.0), 1.0 / MAX_GAIN, MAX_GAIN).astype(np.float32)
+    return _spread_card(gain, _on_card(flat, target))
+
+
+def _on_card(flat: np.ndarray, target: float) -> np.ndarray:
+    """Cells that show the white card: fairly bright and not strongly coloured (unlike the trap walls)."""
+    hi, lo = flat.max(axis=2), flat.min(axis=2)
+    return (hi > 0.3 * target) & (lo > 0.5 * hi)
+
+
+def _spread_card(gain: np.ndarray, card: np.ndarray) -> np.ndarray:
+    """Carry the card's gains outwards over everything that isn't card.
+
+    Otherwise the map jumps at the card's edge (the red walls want huge green and blue gains),
+    and stretching it to the photo's size smears that jump a block's width into the card.
+    """
+    rows, cols = card.shape
+    if not card[rows // 2, cols // 2]:
+        return gain  # the centre isn't a white card (no white light yet); nothing to anchor on
+    gain, known = gain.copy(), card.copy()
+    while not known.all():
+        g = np.pad(np.where(known[..., None], gain, 0.0), ((1, 1), (1, 1), (0, 0)))
+        k = np.pad(known, 1).astype(np.float32)
+        total = sum(g[dy : dy + rows, dx : dx + cols] for dy in range(3) for dx in range(3))
+        count = sum(k[dy : dy + rows, dx : dx + cols] for dy in range(3) for dx in range(3))
+        grow = ~known & (count > 0)
+        gain[grow] = (total[grow] / count[grow][:, None]).astype(np.float32)
+        known |= grow
+    return gain
 
 
 def apply(img: Image.Image, gain: np.ndarray) -> Image.Image:
