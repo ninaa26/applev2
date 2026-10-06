@@ -17,6 +17,13 @@ grid: roughly 15 px/mm in the centre and 10–11 px/mm at the edges (not yet ben
   `analogue_gain = 2.0`, `colour_gains = [0.89, 1.76]`; after `sentinel-flatfield` the card is
   an even neutral grey edge to edge. The LED leaves a blown-out glare patch on the card; diffuse
   it or aim it off the card. The saved correction (`flatfield.npz`) stays on the Pi it was made on.
+- With seven pinned specimens on the liner (same day, `ml/data/trap_camera/capture_bugs_2026-10-06/`):
+  wing patterns are visible even on a moth in the corner; the detector finds every specimen and
+  ignores their shadows, but splits the large ones into several boxes, still boxes the trap walls
+  outside the card, and estimates a different lens k (−0.10) than on the empty liner. The single
+  LED casts long red shadows; diffuse light from two sides would shorten them. The trap had been
+  moved since the white-card calibration and the correction no longer lined up (faint green and
+  pink patches): recalibrate whenever the camera or trap is moved.
 - Steps: [docs/bring-up.md](../docs/bring-up.md), section 5.
 
 ## Also on hand
