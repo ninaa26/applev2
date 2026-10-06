@@ -1,0 +1,39 @@
+name: tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv run --no-project --python 3.12 --with-editable '.[dev]' pytest -q
+
+  device:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: device
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      # bench adds OpenCV, so the camera-bench tests run instead of being skipped
+      - run: uv run --no-project --python 3.12 --with-editable '.[dev,bench]' pytest -q
+
+  ml:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ml
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      # the tests need numpy + pillow only, not the torch stack in requirements.txt
+      - run: uv run --no-project --python 3.12 --with numpy --with pillow python -m unittest discover tests
