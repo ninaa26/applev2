@@ -5,7 +5,7 @@
     python train_v2.py --final                      # also report on our locked test cards (once, at the end)
 
 Grew out of Patti's MobileNetV3 script (CM vs not-CM on an ImageFolder, repo root "Patti's code"):
-same idea and augmentations (any rotation, flips, colour jitter), but on all five trap classes and
+same idea and augmentations (any rotation, flips, colour jitter), but on all six trap classes and
 the group-aware train/val/test split from build_dataset.py, so photos of the same moth never
 sit on both sides. Classes are balanced by sampling, since there are ~100 OFM photos and ~2,000
 of each of the others. The epoch with the best val balanced accuracy is kept.

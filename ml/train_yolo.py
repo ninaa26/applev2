@@ -40,6 +40,8 @@ from PIL import Image, ImageOps
 
 HERE = Path(__file__).parent
 CLASSES = ["moth", "other_insect", "debris"]
+# pass 2 of label_field_cards.py replaces `moth` with one of these; the detector still calls them moth
+SPECIES = {"CM", "OFM", "OBLR", "lookalike_RBLR", "lookalike_LAW", "other_tortricid", "other_moth"}
 SOURCES = [HERE / "data/field", HERE / "data/web_liners/label/ofm-ervins"]
 TEST_PHOTOS = ["om20180514_121032_1", "ap20210804_115441_3"]  # standalone OFM liners, fully labelled
 SPLITS = ["train", "val", "test"]
@@ -122,7 +124,7 @@ def build(out: Path, ppm: float, tile: int, overlap: int, test_photos: list[str]
         val = pick_val(data, sorted(p for p in labelled if p not in test), val_frac)
         for photo, rows in sorted(labelled.items()):
             split = "test" if photo in test else "val" if photo in val else "train"
-            boxes = [r for r in rows if r["label"] in CLASSES]
+            boxes = [{**r, "label": c} for r in rows if (c := "moth" if r["label"] in SPECIES else r["label"]) in CLASSES]
             ppms = [float(r["ppm"]) for r in rows if r.get("ppm")]
             scale = min(1.0, ppm / statistics.median(ppms)) if ppms else 1.0
             with Image.open(data / "inbox" / photo) as im:

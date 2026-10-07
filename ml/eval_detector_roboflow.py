@@ -18,7 +18,7 @@ whose centres it contains, which is how the tracker counts it.
 "trap" resolution: the photo is shrunk so the card's printed grid (--grid-mm) comes out at
 --trap-ppm px/mm, which is what the trap camera would see. Photos where the grid isn't found are
 left out of that pass. Detections are cached in data/web_liners/detector_eval/cache/, so changing
---iou or --min-conf re-scores without re-running the detectors. Writes
+--iou re-scores without re-running the detectors. Writes
 data/web_liners/detector_eval/report.md, per_image.csv and an overlay of the worst photos per run.
 """
 
