@@ -4,6 +4,8 @@
     python train_yolo.py --model yolo11n.pt       # smaller, a candidate for the Pi
     python train_yolo.py --build-only             # just write the tiles and data.yaml
     python train_yolo.py --synth 3000 --out data/yolo-synth   # also paste AMI/iNat insects onto training tiles
+    python train_yolo.py --blank 'data/trap_camera/capture_2026-10-06/calibrated_*.jpg' --blank-ppm 15.3
+                                                  # also train on blank-liner photos from the trap camera
 
 Only photos where every box was looked at go in: all of data/field/ (crop_field_cards.py + label_field_cards.py)
 and the ofm-ervins liner photos with no box still unlabelled. The other Roboflow sets are left out, since only the
@@ -11,8 +13,10 @@ target moth was boxed there, so their bycatch would teach the model that insects
 (not an insect / off the card) are background too. Classes are pass-1 labels: moth, other_insect, debris.
 
 Each photo is shrunk to --ppm px/mm (what the trap camera sees; from the printed grid, the `ppm` column) and cut
-into overlapping --tile px tiles, so moths are the size they'll be in the trap. Three splits, by card/liner (a
-liner's other days go with it: liners.json):
+into overlapping --tile px tiles, so moths are the size they'll be in the trap. The overlap is at least the longest
+single moth (18 mm), so every insect is whole in some tile; a tile that holds less than --min-visible of an insect
+shows that part unlabelled, which is why the server merges tiles by overlap with the smaller box (merge_tiles in
+server/sentinel_server/pipeline/detect.py). Three splits, by card/liner (a liner's other days go with it: liners.json):
   test   data/field/test_cards.txt plus --test-photos. Scored once, after training; the number to report.
   val    --val-frac of the remaining photos, the same ones every run. Training stops early on them and keeps the
          epoch that does best on them, so their score flatters the model and is not reported as accuracy.
@@ -21,6 +25,14 @@ liner's other days go with it: liners.json):
 so their species label is right and their box exact): a random training tile, keeping its own boxes, or a blank liner
 from data/liners/, gets 2-12 cutouts at their species' real length (make_trap_style.LENGTH_MM), any angle, tinted by
 the liner's light, with a contact shadow, then blurred and noised. Moths become `moth`, bycatch `other_insect`.
+--imgsz trains and runs the tiles enlarged (e.g. 800 for 640 px tiles), which gave modest gains for small insects
+elsewhere. --one-insect-class folds moth and other_insect into `insect` (a generic insect detector found 80% of
+species it had never seen; the classifier names them afterwards); debris stays its own class.
+After training, the box-merging threshold (NMS IoU) and the confidence cut are chosen on the val photos, by best
+F1, and saved in summary.json as `predict`; the server uses them. Settings from other traps don't carry over: on the
+Oct 2 run, IoU 0.9 (tuned for dense whitefly cards in Yolo-pest) scored moth F1 0.74 on val against 0.84 at 0.5.
+--blank adds photos of a liner with nothing on it as training tiles with no boxes (hard negatives): the grid, glare,
+the trap's walls and clips, which is where a detector trained only on other people's cards makes things up.
 Cutouts of held-out photos' groups don't matter here (val and test are our liners, not web photos), and val and
 test tiles never get pasted on. Writes data/yolo/ (tiles + data.yaml) and models/yolo11/<run>/ (weights/best.pt, results).
 """
@@ -29,6 +41,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import glob
 import hashlib
 import json
 import shutil
@@ -45,6 +58,14 @@ SPECIES = {"CM", "OFM", "OBLR", "lookalike_RBLR", "lookalike_LAW", "other_tortri
 SOURCES = [HERE / "data/field", HERE / "data/web_liners/label/ofm-ervins"]
 TEST_PHOTOS = ["om20180514_121032_1", "ap20210804_115441_3"]  # standalone OFM liners, fully labelled
 SPLITS = ["train", "val", "test"]
+MERGE: dict[str, str] = {}  # --one-insect-class: {"moth": "insect", "other_insect": "insect"}
+NMS_IOUS = (0.5, 0.7, 0.9)
+
+
+def one_insect_class() -> None:
+    global CLASSES
+    CLASSES = ["insect", "debris"]
+    MERGE.update(moth="insect", other_insect="insect")
 
 
 def labelled_photos(data: Path) -> dict[str, list[dict]]:
@@ -124,7 +145,8 @@ def build(out: Path, ppm: float, tile: int, overlap: int, test_photos: list[str]
         val = pick_val(data, sorted(p for p in labelled if p not in test), val_frac)
         for photo, rows in sorted(labelled.items()):
             split = "test" if photo in test else "val" if photo in val else "train"
-            boxes = [{**r, "label": c} for r in rows if (c := "moth" if r["label"] in SPECIES else r["label"]) in CLASSES]
+            pass1 = ((r, "moth" if r["label"] in SPECIES else r["label"]) for r in rows)
+            boxes = [{**r, "label": c} for r, c0 in pass1 if (c := MERGE.get(c0, c0)) in CLASSES]
             ppms = [float(r["ppm"]) for r in rows if r.get("ppm")]
             scale = min(1.0, ppm / statistics.median(ppms)) if ppms else 1.0
             with Image.open(data / "inbox" / photo) as im:
@@ -155,6 +177,45 @@ def build(out: Path, ppm: float, tile: int, overlap: int, test_photos: list[str]
         f"path: {out.resolve()}\ntrain: images/train\nval: images/val\ntest: images/test\nnames:\n"
         + "".join(f"  {i}: {c}\n" for i, c in enumerate(CLASSES)))
     return {"splits": stats, "boxes_per_class": per_class, "ppm": ppm, "tile": tile, "overlap": overlap}
+
+
+def default_overlap(ppm: float, longest_mm: float = 18.0) -> int:
+    """Tile overlap in px that fits the longest single moth, rounded up to a multiple of 32."""
+    return max(160, -(-int(longest_mm * ppm + 0.999) // 32) * 32)
+
+
+def add_blanks(out: Path, patterns: list[str], blank_ppm: float, ppm: float, tile: int, overlap: int) -> dict:
+    """Blank-liner photos (taken at `blank_ppm` px/mm) as training tiles with empty label files."""
+    n_photos = n_tiles = 0
+    for pattern in patterns:
+        for path in sorted(map(Path, glob.glob(pattern))):
+            with Image.open(path) as im:
+                img = ImageOps.exif_transpose(im).convert("RGB")
+            scale = min(1.0, ppm / blank_ppm)
+            if scale < 1:
+                img = img.resize((round(img.width * scale), round(img.height * scale)), Image.LANCZOS)
+            n_photos += 1
+            for tx, ty in tiles(img.width, img.height, tile, overlap):
+                name = f"blank__{path.parent.name}__{path.stem}_{tx}_{ty}"
+                img.crop((tx, ty, tx + min(tile, img.width), ty + min(tile, img.height))).save(
+                    out / "images/train" / f"{name}.jpg", quality=95)
+                (out / "labels/train" / f"{name}.txt").write_text("")
+                n_tiles += 1
+    return {"photos": n_photos, "tiles": n_tiles}
+
+
+def best_conf(box) -> tuple[float, float]:
+    """(confidence, F1) where F1 averaged over classes peaks, from an ultralytics val result's curves."""
+    f1 = [sum(col) / len(col) for col in zip(*[list(c) for c in box.f1_curve])]
+    k = max(range(len(f1)), key=f1.__getitem__)
+    return round(float(box.px[k]), 3), round(float(f1[k]), 4)
+
+
+def at_conf(box, conf: float) -> dict:
+    """Precision, recall and F1 per class at one confidence cut: what the server will actually do."""
+    k = min(range(len(box.px)), key=lambda i: abs(float(box.px[i]) - conf))
+    return {CLASSES[c]: {"precision": round(float(box.p_curve[i][k]), 3), "recall": round(float(box.r_curve[i][k]), 3),
+                         "f1": round(float(box.f1_curve[i][k]), 3)} for i, c in enumerate(box.ap_class_index)}
 
 
 def web_class(label: str) -> str:
@@ -202,6 +263,7 @@ def synth(out: Path, n: int, ppm: float, tile: int, seed: int = 0) -> dict:
         for _ in range(rng.randint(2, 12)):
             cls = "moth" if rng.random() < 0.6 else "other_insect"
             r = rng.choice(by_cls[cls])
+            cls = MERGE.get(cls, cls)
             long_px = max(8, round(rng.uniform(*LENGTH_MM[r["label"]]) * ppm * rng.uniform(0.85, 1.15)))
             with Image.open(HERE / r["cutout"]) as c:
                 c = c.convert("RGBA")
@@ -248,7 +310,11 @@ def main(argv=None) -> int:
     ap.add_argument("--model", default="yolo11s.pt", help="yolo11n/s/m.pt (COCO-pretrained, downloaded once)")
     ap.add_argument("--ppm", type=float, default=12, help="shrink photos to this px/mm (webcam ~7, Camera Module 3 ~15)")
     ap.add_argument("--tile", type=int, default=640)
-    ap.add_argument("--overlap", type=int, default=160)
+    ap.add_argument("--imgsz", type=int, default=None, help="network input size; default: --tile (800 enlarges 640 px tiles)")
+    ap.add_argument("--one-insect-class", action="store_true", help="classes insect + debris instead of moth, other_insect, debris")
+    ap.add_argument("--overlap", type=int, default=None, help="default: the longest single moth at --ppm (224 at 12 px/mm)")
+    ap.add_argument("--blank", nargs="*", default=[], help="glob(s) of blank-liner photos to add as tiles with no boxes")
+    ap.add_argument("--blank-ppm", type=float, default=15.3, help="px/mm of the --blank photos (IMX219 in the trap: 15.3)")
     ap.add_argument("--min-visible", type=float, default=0.4, help="keep a cut box if this much of it is in the tile")
     ap.add_argument("--test-photos", nargs="*", default=TEST_PHOTOS,
                     help="name prefixes of photos kept for the final score, on top of data/field/test_cards.txt")
@@ -263,7 +329,14 @@ def main(argv=None) -> int:
     ap.add_argument("--build-only", action="store_true")
     args = ap.parse_args(argv)
 
+    if args.overlap is None:
+        args.overlap = default_overlap(args.ppm)
+    if args.one_insect_class:
+        one_insect_class()
+    imgsz = args.imgsz or args.tile
     info = build(args.out, args.ppm, args.tile, args.overlap, args.test_photos, args.min_visible, args.val_frac)
+    if args.blank:
+        info["blank"] = add_blanks(args.out, args.blank, args.blank_ppm, args.ppm, args.tile, args.overlap)
     if args.synth:
         info["synth"] = synth(args.out, args.synth, args.ppm, args.tile)
     print(json.dumps(info, indent=1))
@@ -274,20 +347,33 @@ def main(argv=None) -> int:
 
     name = args.name or f"{Path(args.model).stem}-ppm{args.ppm:g}" + (f"-synth{args.synth}" if args.synth else "")
     model = YOLO(args.model)
-    model.train(data=str(args.out / "data.yaml"), imgsz=args.tile, epochs=args.epochs, batch=args.batch,
+    model.train(data=str(args.out / "data.yaml"), imgsz=imgsz, epochs=args.epochs, batch=args.batch,
                 device=args.device, project=str(HERE / "models/yolo11"), name=name, exist_ok=True,
                 patience=40, degrees=180, flipud=0.5, fliplr=0.5, mosaic=1.0, close_mosaic=15,
                 scale=0.3, hsv_h=0.02, hsv_s=0.5, hsv_v=0.4, plots=True, seed=0)
     run = HERE / "models/yolo11" / name
 
-    def score(split: str) -> dict:
-        m = YOLO(run / "weights/best.pt").val(data=str(args.out / "data.yaml"), split=split, imgsz=args.tile,
-                                              device=args.device, project=str(run), name=split, exist_ok=True)
-        return {"mAP50": m.box.map50, "mAP50-95": m.box.map, "precision": m.box.mp, "recall": m.box.mr,
-                "per_class_mAP50": dict(zip([CLASSES[i] for i in m.box.ap_class_index], map(float, m.box.ap50)))}
+    def val(split: str, iou: float, name: str):
+        return YOLO(run / "weights/best.pt").val(data=str(args.out / "data.yaml"), split=split, imgsz=imgsz,
+                                                 device=args.device, project=str(run), name=name, exist_ok=True,
+                                                 iou=iou, max_det=1000)  # a full liner tile can pass the default cap of 300
 
-    # "val" picked the checkpoint, so it flatters the model; "test" was never looked at during training.
-    summary = {**info, "model": args.model, "val": score("val"), "test": score("test")}
+    # Box merging (NMS IoU) and the confidence cut, chosen on val: the pair with the best F1 averaged over classes.
+    predict = {"f1": -1.0}
+    for iou in NMS_IOUS:
+        conf, f1 = best_conf(val("val", iou, f"val-iou{iou:g}").box)
+        if f1 > predict["f1"]:
+            predict = {"iou": iou, "conf": conf, "f1": f1}
+
+    def score(split: str) -> dict:
+        m = val(split, predict["iou"], split)
+        return {"mAP50": m.box.map50, "mAP50-95": m.box.map, "precision": m.box.mp, "recall": m.box.mr,
+                "per_class_mAP50": dict(zip([CLASSES[i] for i in m.box.ap_class_index], map(float, m.box.ap50))),
+                "at_predict_conf": at_conf(m.box, predict["conf"])}
+
+    # "val" picked the checkpoint and the predict settings, so it flatters the model; "test" was never looked at.
+    summary = {**info, "model": args.model, "imgsz": imgsz, "classes": CLASSES, "predict": predict,
+               "val": score("val"), "test": score("test")}
     (run / "summary.json").write_text(json.dumps(summary, indent=1))
     print(json.dumps({"test": summary["test"]}, indent=1))
     return 0

@@ -130,7 +130,7 @@ def main(argv=None) -> int:
                  for k, (r, c) in enumerate(zip(rows, crops))]
         for name, paths in (("phone", crops), ("trap", small)):
             X = emb.images(paths, 16)
-            logits = X @ head["W"].T + head["b"]
+            logits = (X @ head["W"].T + head["b"]) / (float(head["T"]) if "T" in head else 1.0)  # as the server does
             p = np.exp(logits - logits.max(1, keepdims=True))
             p /= p.sum(1, keepdims=True)
             preds[name] = [(classes[i], float(p[k, i])) for k, i in enumerate(p.argmax(1))]

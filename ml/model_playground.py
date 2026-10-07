@@ -33,7 +33,8 @@ import numpy as np
 from PIL import Image, ImageOps
 
 HERE = Path(__file__).parent
-from eval_detector_roboflow import Baseline, Flatbug, grid_px_per_mm  # noqa: E402
+from eval_detector_roboflow import Baseline, Flatbug, grid_px_per_mm  # noqa: E402  (puts server/ on sys.path)
+from sentinel_server.pipeline.detect import merge_tiles  # noqa: E402
 
 GRID_MM = 25.0
 
@@ -96,7 +97,6 @@ class Models:
 
     def yolo(self, key: str, run: dict, img: Image.Image, ppm: float | None) -> list[dict]:
         import torch
-        from torchvision.ops import nms
         from ultralytics import YOLO
 
         model = self.get(key, lambda: YOLO(str(run["path"])))
@@ -111,24 +111,27 @@ class Models:
             ys.append(small.height - tile)
         origins = [(x, y) for y in ys for x in xs]
         tiles = [small.crop((x, y, x + tile, y + tile)) for x, y in origins]
-        boxes, confs, cls = [], [], []
+        boxes, confs, cls, tile_of = [], [], [], []
         device = "mps" if torch.backends.mps.is_available() else "cpu"
         for i in range(0, len(tiles), 16):
-            for (ox, oy), r in zip(origins[i:i + 16], model.predict(tiles[i:i + 16], imgsz=tile, conf=0.05,
-                                                                     device=device, verbose=False)):
+            for n, ((ox, oy), r) in enumerate(zip(origins[i:i + 16], model.predict(
+                    tiles[i:i + 16], imgsz=tile, conf=0.05, max_det=1000, device=device, verbose=False))):
                 b = r.boxes
                 if len(b):
                     boxes.append(b.xyxy.cpu() + torch.tensor([ox, oy, ox, oy]))
                     confs.append(b.conf.cpu())
                     cls.append(b.cls.cpu())
+                    tile_of += [i + n] * len(b)
         if not boxes:
             return []
         boxes, confs, cls = torch.cat(boxes), torch.cat(confs), torch.cat(cls)
-        keep = nms(boxes, confs, 0.5)  # one insect seen by two overlapping tiles: keep the surer box
+        # One insect seen by two overlapping tiles, whole in one and cut by the other's edge: the server's rule
+        # (overlap against the smaller box, only between tiles), so the playground counts what the server would.
+        keep = merge_tiles([(*b, float(c)) for b, c in zip(boxes.tolist(), confs)], tile_of)
         names = model.names
         return [{"x1": float(b[0]) / scale, "y1": float(b[1]) / scale, "x2": float(b[2]) / scale,
                  "y2": float(b[3]) / scale, "conf": float(confs[k]), "cls": names[int(cls[k])]}
-                for k in keep.tolist() for b in [boxes[k]]]
+                for k in keep for b in [boxes[k]]]
 
     def classify(self, key: str, img: Image.Image, boxes: list[dict]) -> None:
         clf = self.get(key, lambda: Head(classifiers()[key]["path"]))
@@ -153,13 +156,14 @@ class Head:
 
         z = np.load(path)
         self.W, self.b, self.classes = z["W"], z["b"], [str(c) for c in z["classes"]]
+        self.T = float(z["T"]) if "T" in z else 1.0  # as the server applies it
         self.emb = Embedder(str(z["model"]))
 
     def __call__(self, crops: list[Image.Image]) -> np.ndarray:
         torch = self.emb.torch
         with torch.no_grad():
             f = self.emb.model.encode_image(torch.stack([self.emb.preprocess(c) for c in crops]).to(self.emb.device))
-        logits = torch.nn.functional.normalize(f, dim=-1).float().cpu().numpy() @ self.W.T + self.b
+        logits = (torch.nn.functional.normalize(f, dim=-1).float().cpu().numpy() @ self.W.T + self.b) / self.T
         p = np.exp(logits - logits.max(axis=1, keepdims=True))
         return p / p.sum(axis=1, keepdims=True)
 

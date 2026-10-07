@@ -12,10 +12,19 @@ Sources, all optional:
                             (or any fine label below).
   data/own/locked_test.txt  card folder names set aside for the final evaluation (one per line).
                             These get split "locked" and train_v1.py never touches them unless --final.
+  data/web_liners/species/manifest.csv
+                            from liner_crops.py: real insects on other people's liners, at trap
+                            resolution (source "liner"). Grouped by liner or card; the held-out ones
+                            listed there get split "test"; of the rest, liners holding about a fifth of
+                            each set's crops (the same ones every run) are val, for tuning the head.
+                            Not de-duplicated (one insect is there once per resolution, on purpose).
   data/synth/manifest.csv   from make_trap_style.py: web moths pasted onto liner photos. Each one
                             takes its source photo's group, so it lands in the same split, and is
                             dropped if its source photo was dropped. Not de-duplicated (they are
                             all different by construction).
+
+  data/exclude.csv          from clean_dataset.py --write: web photos that are not an adult moth
+                            (caterpillars, pupae, damage, drawings). Left out, with their trap-style copies.
 
 Duplicates: AMI photos that came from iNaturalist are matched by photo id and the iNat copy
 is kept. Then every image gets a 256-bit difference hash (16x16); near-identical images
@@ -60,7 +69,7 @@ CLASS_OF = {
     "bycatch_spider": "other_insect",
     "debris": "debris",
 }
-SOURCE_RANK = {"own": 0, "inat": 1, "ami": 2, "synth": 3}
+SOURCE_RANK = {"own": 0, "inat": 1, "ami": 2, "liner": 3, "synth": 4}
 INAT_PHOTO = re.compile(r"(?:inaturalist-open-data[^/]*/photos|static\.inaturalist\.org/photos)/(\d+)/")
 MIN_SIDE = 100
 
@@ -108,6 +117,17 @@ def read_own(data: Path) -> tuple[list[dict], set[str]]:
             rows.append({"path": str(img), "label": label, "source": "own", "group": f"card:{card}",
                          "inat_photo": "", "license": "own", "credit": "Orchard Sentinel team"})
     return rows, locked
+
+
+def read_liner(data: Path) -> list[dict]:
+    path = data / "web_liners" / "species" / "manifest.csv"
+    if not path.exists():
+        return []
+    with open(path, newline="") as f:
+        return [{"path": r["path"], "label": r["label"], "source": "liner", "group": f"liner:{r['group']}",
+                 "held_out": r["split"] == "test", "set": r["set"], "license": "see data/web_liners/README.md",
+                 "credit": f"{r['set']}: {r['photo']}"}
+                for r in csv.DictReader(f) if r["label"] in CLASS_OF]
 
 
 def read_synth(data: Path) -> list[dict]:
@@ -175,13 +195,23 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
 
     ami, inat, synth = read_ami(args.data), read_inat(args.data), read_synth(args.data)
+    liner = read_liner(args.data)
     own, locked = read_own(args.data)
     inat_ids = {r["inat_photo"] for r in inat}
     ami_kept = [r for r in ami if not (r["inat_photo"] and r["inat_photo"] in inat_ids)]
     print(f"Sources: own {len(own)}, iNat {len(inat)}, AMI {len(ami)} "
-          f"({len(ami) - len(ami_kept)} AMI photos already in the iNat download), trap-style synthetic {len(synth)}")
+          f"({len(ami) - len(ami_kept)} AMI photos already in the iNat download), "
+          f"real-liner crops {len(liner)}, trap-style synthetic {len(synth)}")
 
+    exclude = set()
+    if (args.data / "exclude.csv").exists():
+        with open(args.data / "exclude.csv", newline="") as f:
+            exclude = {r["path"] for r in csv.DictReader(f)}
     rows = sorted(own + inat + ami_kept, key=lambda r: SOURCE_RANK[r["source"]])
+    if exclude:
+        n = len(rows)
+        rows = [r for r in rows if r["path"] not in exclude]
+        print(f"Left out {n - len(rows)} photos listed in exclude.csv")
     for r in rows:
         r["dhash"] = dhash(r["path"])
     bad = [r for r in rows if r["dhash"] is None]
@@ -222,6 +252,19 @@ def main(argv=None) -> int:
     if n_synth:
         print(f"Kept {len(synth)}/{n_synth} synthetic photos (the rest came from dropped photos)")
     rows += synth
+    liner_val = set()
+    for name in {r["set"] for r in liner}:  # a hash split of ~10 liners could leave val with next to nothing
+        groups = sorted({r["group"] for r in liner if r["set"] == name and not r["held_out"]},
+                        key=lambda g: hashlib.sha1(f"{args.seed}:{g}".encode()).hexdigest())
+        size = Counter(r["group"] for r in liner if r["set"] == name and not r["held_out"])
+        for g in groups[:-1]:  # liners differ a lot in how many insects they hold: go by crops, not liners
+            if sum(size[v] for v in liner_val if v in size) >= 0.2 * sum(size.values()):
+                break
+            liner_val.add(g)
+    for r in liner:
+        r["class"] = CLASS_OF[r["label"]]
+        r["split"] = "test" if r["held_out"] else "val" if r["group"] in liner_val else "train"
+    rows += liner
 
     out = args.data / "dataset.csv"
     fields = ["path", "label", "class", "source", "group", "split", "license", "credit", "dhash"]
@@ -235,7 +278,7 @@ def main(argv=None) -> int:
     table: dict[tuple[str, str], Counter] = defaultdict(Counter)
     groups: dict[tuple[str, str], set] = defaultdict(set)
     for r in rows:
-        key = (r["label"], "trap-style" if r["source"] == "synth" else "photos")
+        key = (r["label"], {"synth": "trap-style", "liner": "real liner"}.get(r["source"], "photos"))
         table[key][r["split"]] += 1
         groups[key].add(r["group"])
     print(f"\n{'label':16} {'class':11} {'kind':10} {'train':>6} {'val':>5} {'test':>5} {'locked':>6}  groups")
