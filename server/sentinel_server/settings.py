@@ -23,7 +23,7 @@ def _load_dotenv(path: Path = Path(".env")) -> None:
             if value[:1] in ('"', "'"):
                 value = value[1:].partition(value[0])[0]
             else:
-                value = re.split(r"\s+#", value, maxsplit=1)[0].strip()  # inline comment
+                value = re.split(r"(?:^|\s+)#", value, maxsplit=1)[0].strip()  # inline comment
             os.environ.setdefault(key.strip(), value)
 
 

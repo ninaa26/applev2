@@ -205,7 +205,7 @@ def create_app(start_worker: bool = False) -> FastAPI:
         else:
             raise HTTPException(422, f"unknown label {label!r}")
         db.add(Review(track_id=t.id, label=label, reviewer=reviewer[:60]))
-        return RedirectResponse(next if next.startswith("/") else "/review", status_code=303)
+        return RedirectResponse(next if next.startswith("/") and next[1:2] not in ("/", "\\") else "/review", status_code=303)
 
     @app.get("/crops/{detection_id}.jpg")
     def crop_image(detection_id: int, db: Session = Depends(get_session)):
