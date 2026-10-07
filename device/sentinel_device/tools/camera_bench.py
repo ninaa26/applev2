@@ -103,10 +103,11 @@ def shoot_picamera2(out: Path, lens_position: float | None) -> dict:
             cam.set_controls({"AfMode": controls.AfModeEnum.Manual, "LensPosition": lens_position})
         time.sleep(2)
         md = cam.capture_file(str(out))
+        model = cam.camera_properties.get("Model")
         cam.stop()
     finally:
         cam.close()
-    return {"backend": "picamera2", "model": cam.camera_properties.get("Model"),
+    return {"backend": "picamera2", "model": model,
             "lens_position": md.get("LensPosition"), "exposure_us": md.get("ExposureTime"),
             "analogue_gain": md.get("AnalogueGain")}
 
