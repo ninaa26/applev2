@@ -23,6 +23,12 @@ caffeinate -s .venv/bin/sentinel-server serve     # caffeinate keeps the Mac awa
 
 Dashboard: http://localhost:8000 on the Mac, or `http://<mac's tailscale name>:8000` from teammates' laptops and the Pi.
 
+**Who can open it.** The server listens on every network the Mac is on, not only Tailscale, so without a password
+anyone on the same Wi-Fi can open the dashboard, submit reviews and press "New liner installed". Set
+`SENTINEL_DASHBOARD_PASSWORD=<something>` in `.env` and restart: browsers then ask for it once (any user name).
+Traps keep uploading with their own keys. The password travels unencrypted outside Tailscale, so it keeps
+passers-by out; it is not a substitute for HTTPS on a real server.
+
 ### Keep it running (start at login, restart on crash)
 
 `server/launchd/org.orchardsentinel.server.plist` runs the same command as a macOS LaunchAgent.

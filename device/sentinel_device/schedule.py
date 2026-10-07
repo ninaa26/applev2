@@ -32,13 +32,27 @@ def next_wake(now: datetime, times: list[str], tz: str, min_gap: timedelta = tim
     raise ValueError("schedule has no times")
 
 
-def wake_reason(now: datetime, expected_iso: str | None) -> str:
-    """'scheduled' if we are close to the wake we asked for, otherwise 'manual'.
+def wake_reason(now: datetime, expected_iso: str | None, clean_halt: bool = True) -> str:
+    """Why the board booted, from what the last cycle left in the state file.
 
-    A manual wake on the Pi 5 means someone pressed the power button, which we
-    use as the "new liner installed" signal in the field.
+    'scheduled'       close to the wake we asked for
+    'manual'          earlier than that, after a cycle that powered the board off itself: someone
+                      pressed the Pi 5 power button, the "new liner installed" signal in the field
+    'power_restored'  later than that: with power the RTC alarm would have woken the board on time,
+                      so it had none (flat battery, unplugged)
+    'interrupted'     the last cycle never reached its power-off (power cut or killed mid-cycle)
+    'first'           no earlier cycle on record
+
+    Only 'manual' may start a new liner. Power that goes and comes back between two scheduled wakes,
+    after a clean power-off (a battery swap), also comes out as 'manual': nothing on the board tells
+    them apart. The server settles it from the photo: the old insects still in place means the liner
+    was not changed (sentinel_server.pipeline.worker.same_liner_as_before).
     """
     if not expected_iso:
-        return "manual"
+        return "first"
     expected = datetime.fromisoformat(expected_iso)
-    return "scheduled" if abs(now - expected) <= WAKE_TOLERANCE else "manual"
+    if abs(now - expected) <= WAKE_TOLERANCE:
+        return "scheduled"
+    if not clean_halt:
+        return "interrupted"
+    return "power_restored" if now > expected else "manual"

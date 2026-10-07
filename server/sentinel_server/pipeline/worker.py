@@ -10,8 +10,9 @@ from PIL import Image
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .. import services
 from ..db import session_scope
-from ..models import Capture, Detection, Event, Track, Trap, utcnow
+from ..models import Capture, Card, Detection, Event, Track, Trap, utcnow
 from ..settings import get_settings
 from . import track as trk
 from .classify import crop, make_classifier
@@ -30,7 +31,7 @@ class Pipeline:
     def version(self) -> str:
         return f"{self.detector.version}+{self.classifier.version}"
 
-    def process(self, db: Session, cap: Capture) -> None:
+    def process(self, db: Session, cap: Capture, check_liner: bool = True) -> None:
         trap = db.get(Trap, cap.trap_id)
         path = get_settings().media_dir / cap.image_path
         boxes = self.detector.detect(path, key=(cap.trap_id, cap.card_id))
@@ -39,6 +40,8 @@ class Pipeline:
             boxes = [b for b in boxes if not in_mask(b, trap.mask, w, h)]
             probs = self.classifier.classify([crop(img, b) for b in boxes])
         cap.width, cap.height = w, h
+        if check_liner:
+            _keep_liner_if_unchanged(db, cap, [trk.Rect(b.x1, b.y1, b.x2, b.y2) for b in boxes])
 
         # Tracks on this card that are still alive.
         live = list(
@@ -109,9 +112,46 @@ class Pipeline:
                 db.delete(t)
         db.flush()
         for c in caps:
-            self.process(db, c)
+            self.process(db, c, check_liner=False)  # which liner each photo is on was settled the first time
             db.flush()
         return len(caps)
+
+
+SAME_LINER_MIN_MATCHED = 0.5  # share of the old liner's insects that must still be in place
+
+
+def same_liner_as_before(old: list[trk.Rect], now: list[trk.Rect]) -> bool | None:
+    """Is this photo still the previous liner? None when that liner had no insects to go by.
+
+    A fresh liner is nearly empty and nothing on it sits where the old insects were. If at least half
+    of the insects counted on the old liner, and seen in its last photo, are still in the same places,
+    the liner was not changed. Erring this way is the cheap mistake: a missed new liner keeps every count
+    (the dashboard button starts it for real), a false one counts every insect on the old liner again.
+    """
+    if not old:
+        return None
+    return len(trk.match(old, now)) >= SAME_LINER_MIN_MATCHED * len(old)
+
+
+def _keep_liner_if_unchanged(db: Session, cap: Capture, boxes: list[trk.Rect]) -> None:
+    """The trap reads any press of its power button as "new liner", and cannot tell a press from its battery
+    being swapped. If this photo opened a liner that way, check the claim against the liner before it."""
+    card = db.get(Card, cap.card_id)
+    meta = cap.meta or {}
+    if not meta.get("new_card") or meta.get("new_card_source", "button") != "button":
+        return  # an ordinary photo, or someone asked for the new liner outright
+    if card.installed_at != cap.captured_at or db.scalar(select(Track.id).where(Track.card_id == card.id)) is not None:
+        return  # not the photo that opened this liner, or the liner is already in use
+    before = services.previous_card(db, card)
+    if before is None:
+        return
+    old = [trk.Rect(t.x1, t.y1, t.x2, t.y2) for t in db.scalars(select(Track).where(
+        Track.card_id == before.id, Track.status == "confirmed", Track.review_status != "rejected", Track.misses == 0))]
+    if same_liner_as_before(old, boxes):
+        n = len(trk.match(old, boxes))
+        log.info("capture %s: %d of %d insects from liner %s still in place, not a new liner", cap.id, n, len(old), before.id)
+        services.undo_new_card(db, card, f"{n} of {len(old)} insects from the last photo are still in place "
+                                         "(battery swap or accidental button press?)")
 
 
 CARD_FULL_DETECTIONS = 60  # beyond this, accuracy drops and the liner should be swapped

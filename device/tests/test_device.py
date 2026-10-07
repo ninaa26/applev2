@@ -28,7 +28,11 @@ def test_wake_reason():
     expected = datetime(2026, 10, 5, 23, 30, tzinfo=timezone.utc)
     assert schedule.wake_reason(datetime(2026, 10, 5, 23, 31, tzinfo=timezone.utc), expected.isoformat()) == "scheduled"
     assert schedule.wake_reason(datetime(2026, 10, 5, 20, 0, tzinfo=timezone.utc), expected.isoformat()) == "manual"
-    assert schedule.wake_reason(datetime(2026, 10, 5, 20, 0, tzinfo=timezone.utc), None) == "manual"
+    assert schedule.wake_reason(datetime(2026, 10, 5, 20, 0, tzinfo=timezone.utc), None) == "first"
+    # the alarm time passed with the board off: it had no power, nobody pressed the button
+    assert schedule.wake_reason(datetime(2026, 10, 6, 6, 30, tzinfo=timezone.utc), expected.isoformat()) == "power_restored"
+    # the last cycle never powered off by itself
+    assert schedule.wake_reason(datetime(2026, 10, 5, 20, 0, tzinfo=timezone.utc), expected.isoformat(), clean_halt=False) == "interrupted"
 
 
 def test_sht4x_crc_and_decode():
@@ -150,6 +154,48 @@ def test_cycle_still_sets_alarm_and_halts_when_capture_crashes(tmp_path: Path, m
     monkeypatch.setattr(cycle, "capture_once", boom)
     assert cycle.run(_field_config(tmp_path), halt=None) == 2
     assert len(calls["rtc"]) == 1 and calls["poweroff"]
+
+
+def _boot(tmp_path: Path, monkeypatch, at: datetime, **state) -> dict:
+    """Run one field cycle as if the board booted at `at` with `state` on disk; returns the photo's metadata."""
+    import json
+    cycle, calls = _halt_spies(monkeypatch)
+    cfg = _field_config(tmp_path)
+    cfg.write_text(cfg.read_text().replace("halt_after_cycle = true", "halt_after_cycle = true\nmanual_wake_is_new_card = true"))
+    data = tmp_path / "data"
+    data.mkdir(exist_ok=True)
+    (data / "state.json").write_text(json.dumps(state))
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return at
+    monkeypatch.setattr(cycle, "datetime", Clock)
+    seen = {}
+    monkeypatch.setattr(cycle, "capture_once",
+                        lambda cfg, d, reason, st, new_card=False, source=None:
+                        seen.update(reason=reason, new_card=new_card, source=source) or d / "x.jpg")
+    cycle.run(cfg, halt=None)
+    seen["state"] = json.loads((data / "state.json").read_text())
+    return seen
+
+
+def test_only_a_button_press_starts_a_new_liner(tmp_path: Path, monkeypatch):
+    expected = datetime(2026, 10, 5, 23, 30, tzinfo=timezone.utc)  # 19:30 in New York
+    early, late = datetime(2026, 10, 5, 21, 0, tzinfo=timezone.utc), datetime(2026, 10, 6, 10, 30, tzinfo=timezone.utc)
+
+    press = _boot(tmp_path, monkeypatch, early, expected_wake=expected.isoformat(), clean_halt=True)
+    assert (press["reason"], press["new_card"], press["source"]) == ("manual", True, "button")
+    assert press["state"]["clean_halt"] is True  # this cycle powered off by itself too
+
+    flat_battery = _boot(tmp_path, monkeypatch, late, expected_wake=expected.isoformat(), clean_halt=True)
+    assert (flat_battery["reason"], flat_battery["new_card"]) == ("power_restored", False)
+
+    cut_mid_cycle = _boot(tmp_path, monkeypatch, early, expected_wake=expected.isoformat(), clean_halt=False)
+    assert (cut_mid_cycle["reason"], cut_mid_cycle["new_card"]) == ("interrupted", False)
+
+    old_state_file = _boot(tmp_path, monkeypatch, early, expected_wake=expected.isoformat())
+    assert (old_state_file["reason"], old_state_file["new_card"]) == ("manual", True)
 
 
 def test_cycle_survives_a_broken_schedule_from_the_server(tmp_path: Path, monkeypatch):

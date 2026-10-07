@@ -12,7 +12,7 @@ timezone = "America/New_York"
 # Local times to wake and photograph. Dusk shot matters most: moths fly at dusk.
 times = ["07:00", "10:00", "13:00", "16:00", "19:30", "22:00"]
 halt_after_cycle = true    # false on the bench: stay on after capturing
-manual_wake_is_new_card = true  # field: wake by power button = fresh liner installed
+manual_wake_is_new_card = true  # field: wake by power button = fresh liner installed (a boot after a flat battery is not)
 
 [camera]
 backend = "picamera2"      # "usb" for a webcam, "fake" for testing on a laptop

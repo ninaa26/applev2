@@ -46,6 +46,29 @@ def start_new_card(db: Session, trap_id: str, at: datetime | None = None, note: 
     return card
 
 
+def previous_card(db: Session, card: Card) -> Card | None:
+    return db.scalar(
+        select(Card).where(Card.trap_id == card.trap_id, Card.id != card.id, Card.installed_at <= card.installed_at)
+        .order_by(Card.installed_at.desc(), Card.id.desc())
+    )
+
+
+def undo_new_card(db: Session, card: Card, why: str) -> Card | None:
+    """Fold a card that turned out not to be a new liner back into the one before it. Returns that card."""
+    before = previous_card(db, card)
+    if before is None:
+        return None
+    for row in list(db.scalars(select(Capture).where(Capture.card_id == card.id))) + \
+            list(db.scalars(select(Track).where(Track.card_id == card.id))):
+        row.card_id = before.id
+    before.removed_at = None
+    db.add(Event(trap_id=card.trap_id, kind="new_card_ignored", payload={"note": why}, at=card.installed_at))
+    db.flush()
+    db.delete(card)
+    db.flush()
+    return before
+
+
 def counted_tracks(db: Session, trap_id: str, since: datetime | None = None) -> list[Track]:
     """Confirmed moths that count as catches (not rejected, not bycatch or debris)."""
     q = (

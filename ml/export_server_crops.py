@@ -30,7 +30,7 @@ from pathlib import Path
 
 from PIL import Image
 
-LABELS = {"CM", "OFM", "OBLR", "other_moth", "debris"}
+LABELS = {"CM", "OFM", "OBLR", "other_moth", "other_insect", "debris"}
 PAD = 0.35  # same as the server's crop()
 
 

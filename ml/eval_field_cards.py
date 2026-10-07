@@ -29,7 +29,7 @@ from collections import Counter
 from pathlib import Path
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageOps
 
 from build_dataset import CLASS_OF
 from crop_field_cards import PAD
@@ -121,7 +121,7 @@ def main(argv=None) -> int:
         if args.mask_neighbours:  # every box flatbug or a person drew is a detection the server would mask
             for photo in sorted({r["photo"] for r in rows}):
                 with Image.open(args.data / "inbox" / photo) as im:
-                    img = im.convert("RGB")
+                    img = ImageOps.exif_transpose(im).convert("RGB")
                 boxes = [(r, box(r)) for r in everything if r["photo"] == photo]
                 for k, r in enumerate(rows):
                     if r["photo"] == photo:

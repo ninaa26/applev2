@@ -79,6 +79,27 @@ def test_upload_auth_and_duplicates():
         assert bad.status_code == 422
 
 
+def test_dashboard_password_guards_pages_but_not_trap_uploads(monkeypatch):
+    from sentinel_server import settings as settings_mod
+
+    key = add_trap()
+    with TestClient(create_app()) as client:
+        assert client.get("/").status_code == 200  # no password set: open, as before
+
+    monkeypatch.setenv("SENTINEL_DASHBOARD_PASSWORD", "orchard")
+    settings_mod.reset_settings()
+    with TestClient(create_app()) as client:
+        for path in ("/", "/review", "/api/v1/traps", "/static/app.css"):
+            r = client.get(path)
+            assert r.status_code == 401 and r.headers["www-authenticate"].startswith("Basic"), path
+        assert client.post("/traps/T1/new-card", follow_redirects=False).status_code == 401
+        assert client.get("/", auth=("anyone", "wrong")).status_code == 401
+        assert client.get("/", headers={"Authorization": "Basic not-base64!"}).status_code == 401
+        assert client.get("/", auth=("anyone", "orchard")).status_code == 200
+        assert client.get("/healthz").status_code == 200
+        assert upload(client, key, datetime.now(timezone.utc), MOTHS, "a").status_code == 201
+
+
 def test_counts_each_insect_once_and_new_card_resets():
     key = add_trap()
     t0 = datetime.now(timezone.utc) - timedelta(hours=6)
@@ -113,6 +134,55 @@ def test_counts_each_insect_once_and_new_card_resets():
         with session_scope() as db:
             card = services.open_card(db, "T1")
             assert db.query(Track).filter(Track.card_id == card.id, Track.status == "confirmed").count() == 1
+
+
+def _liners_after(third_photo_moths, **meta):
+    """Two photos of a liner with three moths, then a third photo that claims a new liner."""
+    from sentinel_server.models import Card, Event
+
+    key = add_trap()
+    t0 = datetime.now(timezone.utc) - timedelta(hours=6)
+    with TestClient(create_app()) as client:
+        upload(client, key, t0, MOTHS, "c1")
+        upload(client, key, t0 + timedelta(hours=3), MOTHS, "c2")
+        upload(client, key, t0 + timedelta(hours=4), third_photo_moths, "c3", new_card=True, wake_reason="manual", **meta)
+        upload(client, key, t0 + timedelta(hours=5), third_photo_moths, "c4")
+        assert process_pending(Pipeline(), limit=10) == 4
+    with session_scope() as db:
+        return {"cards": db.query(Card).count(), "open": services.open_card(db, "T1") is not None,
+                "counted": sum(services.week_counts(db, "T1").values()),
+                "on_open_card": db.query(Capture).filter(Capture.card_id == services.open_card(db, "T1").id).count(),
+                "ignored": db.query(Event).filter(Event.kind == "new_card_ignored").count()}
+
+
+def test_battery_swap_is_not_a_new_liner():
+    # the trap woke off schedule and called it a new liner, but the same three moths are still there
+    got = _liners_after(MOTHS)
+    assert got == {"cards": 1, "open": True, "counted": 3, "on_open_card": 4, "ignored": 1}, got
+
+
+def test_battery_swap_with_a_new_catch_is_still_the_old_liner():
+    got = _liners_after(MOTHS + [(600, 700)])
+    assert (got["cards"], got["counted"], got["ignored"]) == (1, 4, 1), got
+
+
+def test_button_press_with_a_clean_liner_starts_a_new_one():
+    got = _liners_after([(600, 700)])  # one moth, somewhere new
+    assert got == {"cards": 2, "open": True, "counted": 4, "on_open_card": 2, "ignored": 0}, got
+
+
+def test_new_liner_asked_for_outright_is_not_second_guessed():
+    got = _liners_after(MOTHS, new_card_source="flag")  # sentinel-cycle --new-card
+    assert (got["cards"], got["ignored"]) == (2, 0), got
+
+
+def test_same_liner_needs_old_insects_to_go_by():
+    from sentinel_server.pipeline.worker import same_liner_as_before
+
+    a, b, far = trk.Rect(0, 0, 10, 10), trk.Rect(50, 50, 60, 60), trk.Rect(200, 200, 210, 210)
+    assert same_liner_as_before([], [a]) is None
+    assert same_liner_as_before([a, b], [a, far]) is True       # half still there
+    assert same_liner_as_before([a, b, far], [a]) is False      # most are gone
 
 
 def test_review_overrides_model_and_reject_removes_count():

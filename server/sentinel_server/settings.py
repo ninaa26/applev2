@@ -23,7 +23,7 @@ def _load_dotenv(path: Path = Path(".env")) -> None:
             if value[:1] in ('"', "'"):
                 value = value[1:].partition(value[0])[0]
             else:
-                value = re.split(r"\s+#", value, maxsplit=1)[0].strip()  # inline comment
+                value = re.split(r"(?:^|\s+)#", value, maxsplit=1)[0].strip()  # inline comment
             os.environ.setdefault(key.strip(), value)
 
 
@@ -44,6 +44,8 @@ class Settings:
     lens_k: str | float = field(default_factory=lambda: _lens(os.environ.get("SENTINEL_LENS_K", "auto")))
     worker_poll_s: float = field(default_factory=lambda: float(os.environ.get("SENTINEL_WORKER_POLL_S", "3")))
     offline_after_h: float = field(default_factory=lambda: float(os.environ.get("SENTINEL_OFFLINE_AFTER_H", "12")))
+    # Empty = the dashboard is open to anyone who can reach the port. Set it to ask for a password (any user name).
+    dashboard_password: str = field(default_factory=lambda: os.environ.get("SENTINEL_DASHBOARD_PASSWORD", ""))
 
     def __post_init__(self):
         self.data_dir = self.data_dir.resolve()

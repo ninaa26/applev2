@@ -75,6 +75,9 @@ def cmd_serve(args) -> int:
     init_db()
     app = create_app(start_worker=not args.no_worker)
     print(f"Dashboard: http://{'localhost' if args.host in ('0.0.0.0', '127.0.0.1') else args.host}:{args.port}")
+    if not get_settings().dashboard_password and args.host not in ("127.0.0.1", "localhost", "::1"):
+        print("No dashboard password: anyone who can reach this machine on its network (same Wi-Fi included) can open "
+              "the dashboard and submit reviews. Set SENTINEL_DASHBOARD_PASSWORD in .env, or serve with --host 127.0.0.1.")
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
     return 0
 

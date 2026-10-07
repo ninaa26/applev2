@@ -4,14 +4,29 @@
     {
       "name": "field-labeler",
       "runtimeExecutable": "/bin/sh",
-      "runtimeArgs": ["-c", "cd ml && exec .venv/bin/python label_field_cards.py --port 8765"],
+      "runtimeArgs": [
+        "-c",
+        "cd ml && exec .venv/bin/python label_field_cards.py --port 8765"
+      ],
       "port": 8765
     },
     {
       "name": "ofm-labeler",
       "runtimeExecutable": "/bin/sh",
-      "runtimeArgs": ["-c", "cd ml && exec .venv/bin/python label_field_cards.py --data data/web_liners/label/ofm-ervins --port 8766"],
+      "runtimeArgs": [
+        "-c",
+        "cd ml && exec .venv/bin/python label_field_cards.py --data data/web_liners/label/ofm-ervins --port 8766"
+      ],
       "port": 8766
+    },
+    {
+      "name": "model-playground",
+      "runtimeExecutable": "/bin/sh",
+      "runtimeArgs": [
+        "-c",
+        "cd ml && exec .venv/bin/python model_playground.py --port 8770"
+      ],
+      "port": 8770
     }
   ]
 }
