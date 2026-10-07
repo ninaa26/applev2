@@ -47,8 +47,9 @@ def tray_markers(size_mm: float) -> np.ndarray:
         y, x = r * cell + pad, c * cell + pad
         sheet[y : y + px, x : x + px] = m
         cv2.putText(sheet, f"id {mid}", (x, y + px + round(5 * MM)), cv2.FONT_HERSHEY_SIMPLEX, 1.0, 0, 2)
-    cv2.putText(sheet, f"ArUco 4x4_50, {size_mm:g} mm. Glue to tray corners: 0 TL, 1 TR, 2 BR, 3 BL",
-                (pad, sheet.shape[0] - round(4 * MM)), cv2.FONT_HERSHEY_SIMPLEX, 1.0, 0, 2)
+    for k, line in enumerate((f"ArUco 4x4_50, {size_mm:g} mm", "Glue to tray corners: 0 TL, 1 TR, 2 BR, 3 BL")):
+        cv2.putText(sheet, line, (pad, sheet.shape[0] - round(8 * MM) + k * round(4 * MM)),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.0, 0, 2)
     return sheet
 
 
