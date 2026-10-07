@@ -82,6 +82,24 @@ A boot counts as a button press only if it comes *before* the next scheduled wak
 
 To stop the cycle and work on the Pi, SSH in during a wake and run `sudo systemctl disable sentinel-cycle`, or set `halt_after_cycle = false` from the server (next section).
 
+## Before a trap goes out
+
+The failures other groups report from the field are mundane, so check them on the bench first:
+
+- [ ] Battery charged the day before, not taken from storage: run two full days of scheduled cycles on it and
+      note the voltage drop per cycle (the dashboard shows `battery_v` for every photo).
+- [ ] Every cable gland and the lid seal closed with no cable trapped in it; leave the closed box under a
+      running tap or out in rain once and open it dry.
+- [ ] The lure hangs where the camera does not see it, or inside the trap's mask (`sentinel-server set-mask`),
+      and its shadow does not fall on the card under the LED.
+- [ ] A fresh liner, white card calibration done for this camera, LED position and trap
+      (`sentinel-flatfield`), and no `glare` event on the first photos.
+- [ ] `sentinel-server detect` on a photo of the empty liner in the closed trap: the green card outline sits
+      on the card's edge and nothing is boxed.
+- [ ] An OFM-sized mark (6 mm) in a corner of the card measures at least 50 px in the photo.
+- [ ] The Pi has uploaded with the lid closed from where the trap will hang (Wi-Fi or hotspot reach).
+- [ ] Liner changes are in the calendar: at the latest every 28 days, sooner at `card_full` or `card_old`.
+
 ## Changing settings remotely
 
 The server sends `device_config` for the trap in every upload reply (schedule, camera, LED). For now, edit it in the database or a Python shell. A settings page on the dashboard is a later task.
