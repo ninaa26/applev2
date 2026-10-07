@@ -5,7 +5,9 @@
 each crop with text prompts for our classes.
 `bioclip-v1` puts the linear head trained by ml/train_v1.py on the same features
 (SENTINEL_CLASSIFIER_HEAD points at its head.npz). Classes the head wasn't trained
-on (e.g. debris, before we have debris crops) get probability 0.
+on (e.g. debris, before we have debris crops) get probability 0. A head that carries a
+temperature T (picked on real-liner crops by train_v1.py) has its logits divided by it, so
+that a confidence of 0.80 is right about 80% of the time and track.py's thresholds hold.
 `cnn-v2` is the fine-tuned CNN from ml/train_v2.py (SENTINEL_CLASSIFIER_MODEL points at
 its models/v2/<arch>.pt).
 """
@@ -81,8 +83,9 @@ class BioClipZeroShot(_BioClip):  # pragma: no cover
         return [dict(zip(SPECIES, p)) for p in probs]
 
 
-def linear_head_probs(feats: np.ndarray, W: np.ndarray, b: np.ndarray, classes: list[str]) -> list[dict[str, float]]:
-    logits = feats @ W.T + b
+def linear_head_probs(feats: np.ndarray, W: np.ndarray, b: np.ndarray, classes: list[str],
+                      T: float = 1.0) -> list[dict[str, float]]:
+    logits = (feats @ W.T + b) / T
     logits -= logits.max(axis=1, keepdims=True)
     p = np.exp(logits)
     p /= p.sum(axis=1, keepdims=True)
@@ -94,6 +97,7 @@ class BioClipLinear(_BioClip):  # pragma: no cover
         z = np.load(head_path, allow_pickle=False)
         self.W, self.b = z["W"], z["b"]
         self.classes = z["classes"].tolist()
+        self.T = float(z["T"]) if "T" in z else 1.0
         super().__init__(str(z["model"]))
         self.version = f"bioclip2-v1:{os.path.basename(os.path.dirname(os.path.abspath(head_path)))}"
 
@@ -101,7 +105,7 @@ class BioClipLinear(_BioClip):  # pragma: no cover
         if not crops:
             return []
         feats = self.features(crops).float().cpu().numpy()
-        return linear_head_probs(feats, self.W, self.b, self.classes)
+        return linear_head_probs(feats, self.W, self.b, self.classes, self.T)
 
 
 class FineTunedCNN:  # pragma: no cover - needs torch + torchvision

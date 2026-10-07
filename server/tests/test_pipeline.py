@@ -228,6 +228,9 @@ def test_linear_head_maps_to_species_and_zero_fills_missing_classes():
     assert set(out[0]) == {"CM", "OFM", "OBLR", "other_moth", "other_insect", "debris"}
     assert out[0]["CM"] > 0.99 and out[0]["debris"] == 0.0
     assert abs(sum(out[0].values()) - 1.0) < 1e-6
+    # a head's temperature softens the same logits: same answer, less sure of it
+    cool = linear_head_probs(np.array([[5.0, 0.0]], dtype=np.float32), W, np.zeros(2, np.float32), ["CM", "OFM"], T=5.0)
+    assert 0.7 < cool[0]["CM"] < 0.75 and cool[0]["CM"] > cool[0]["OFM"]
 
 
 def test_touching_pair_counts_two_and_reviewer_can_fix_the_count():
@@ -302,3 +305,41 @@ def test_capture_uid_cannot_leave_the_media_folder():
                 assert r.status_code == 422, uid
     from sentinel_server.settings import get_settings
     assert not list(get_settings().data_dir.parent.rglob("escaped.jpg"))
+
+
+def test_species_vote_uses_only_fresh_photos():
+    from datetime import datetime, timedelta
+
+    first = datetime(2026, 6, 1, 12)
+    assert trk.fresh(first, first + timedelta(hours=48), n_classified=2)
+    assert not trk.fresh(first, first + timedelta(hours=96), n_classified=2)  # scales gone: no say on species
+    assert trk.fresh(first, first + timedelta(days=9), n_classified=0)        # but a first look always counts
+
+
+def test_photo_with_a_different_scale_is_left_out():
+    from sentinel_server.pipeline.worker import scale_problem
+
+    assert scale_problem([7.0], 30.0) is None            # nothing to compare with yet
+    assert scale_problem([7.0, 7.1, 7.2], 7.4) is None
+    assert "scale reads 30.0" in scale_problem([7.0, 7.1, 7.2], 30.0)
+    assert "no liner grid" in scale_problem([7.0, 7.1], None)
+
+
+def test_blurred_photo_is_left_out_and_context_is_logged():
+    from datetime import datetime
+
+    from sentinel_server.pipeline.worker import blur_problem, moon_illumination
+
+    assert blur_problem([95.0], 10.0) is None                 # nothing to compare with yet
+    assert blur_problem([95.0, 97.0, 94.0], 70.0) is None     # repeat shots vary this much
+    assert "blurred" in blur_problem([95.0, 97.0, 94.0], 18.0)
+    assert moon_illumination(datetime(2026, 10, 26, 4)) > 0.95  # full moon 26 Oct 2026
+    assert moon_illumination(datetime(2026, 10, 10, 16)) < 0.05  # new moon 10 Oct 2026
+
+    key = add_trap()
+    with TestClient(create_app(start_worker=False)) as client:
+        upload(client, key, datetime(2026, 6, 1, 12, tzinfo=timezone.utc), [(200, 200)], "a")
+        process_pending(Pipeline())
+    with session_scope() as db:
+        meta = db.get(Capture, 1).meta
+    assert {"sharpness", "glare", "card_rgb", "liner_days", "moon", "px_per_mm"} <= set(meta)

@@ -115,6 +115,8 @@ def cmd_detect(args) -> int:
         boxes = det.detect(path)
         img = cv2.imread(str(path))
         info = getattr(det, "last", {})
+        if info.get("card") is not None:
+            cv2.polylines(img, [info["card"].astype("int32")], True, (0, 255, 0), 2)
         for b in boxes:
             cv2.rectangle(img, (int(b.x1), int(b.y1)), (int(b.x2), int(b.y2)), (255, 255, 0), 2)
             cv2.putText(img, f"{b.conf:.2f}", (int(b.x1), max(12, int(b.y1) - 4)), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 0), 1)
@@ -122,8 +124,10 @@ def cmd_detect(args) -> int:
         if info.get("grid") is not None:
             g = info["grid"]
             grid = f"grid {g.pitch_px / info['work_scale']:.0f}px at {', '.join(f'{a:.1f}°' for a in g.angles)}" if g.score else "no grid found"
-            line += f"  ({grid}; {info['px_per_mm']:.1f} px/mm; lens k {info.get('lens_k', 0):+.3f})"
-            cv2.putText(img, f"{len(boxes)} found | {info['px_per_mm']:.1f} px/mm", (8, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 0), 1)
+            ppm = info["px_per_mm"] or 0.0
+            line += f"  ({grid}; {ppm:.1f} px/mm; lens k {info.get('lens_k', 0):+.3f}"
+            line += f"; {info['off_card']} off the card ignored)" if info.get("off_card") else ")"
+            cv2.putText(img, f"{len(boxes)} found | {ppm:.1f} px/mm", (8, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 0), 1)
         cv2.imwrite(str(args.out / path.name), img)
         print(line)
     print(f"overlays in {args.out}/")
@@ -213,7 +217,7 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("detect", help="run the detector on photos and save annotated copies")
     p.add_argument("images", type=Path, nargs="+")
     p.add_argument("--out", type=Path, default=Path("overlays"))
-    p.add_argument("--detector", choices=["baseline", "flatbug"])
+    p.add_argument("--detector", choices=["baseline", "flatbug", "yolo"])
     p.add_argument("--lens", help="baseline: lens distortion k, or 'auto' (default: SENTINEL_LENS_K)")
     p.set_defaults(fn=cmd_detect)
 

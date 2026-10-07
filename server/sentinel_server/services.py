@@ -8,11 +8,12 @@ from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from . import phenology
 from .models import NOT_CATCHES, Capture, Card, Event, Track, Trap, WeatherDay, utcnow
+from .pipeline.track import AUTO_THRESHOLD
 from .settings import get_settings
 
 
@@ -102,13 +103,30 @@ def week_counts(db: Session, trap_id: str) -> Counter:
     return out
 
 
+AUDIT_EVERY = 10  # one in this many automatic labels is also shown to a person
+
+
 def pending_reviews(db: Session, trap_id: str | None = None) -> list[Track]:
+    """Insects for a person to look at: everything the model wasn't sure of, plus a spot check of what it was
+    sure of. Without the spot check a confident mistake is never seen, so it is never corrected, never becomes
+    training data, and nobody knows how often the automatic count is wrong."""
     q = select(Track).join(Card, Track.card_id == Card.id).where(
-        Track.status == "confirmed", Track.reviewed_label.is_(None), Track.review_status.in_(["review", "unknown"])
+        Track.status == "confirmed", Track.reviewed_label.is_(None),
+        or_(Track.review_status.in_(["review", "unknown"]),
+            and_(Track.review_status == "auto", Track.id % AUDIT_EVERY == 0)),
     )
     if trap_id:
         q = q.where(Card.trap_id == trap_id)
     return list(db.scalars(q.order_by(Track.first_seen_at)))
+
+
+def spot_checks(db: Session, trap_id: str) -> dict:
+    """How the spot-checked automatic labels held up: {"checked": n, "agreed": k}. The share that agreed is
+    the best estimate there is of how right the unchecked automatic counts are."""
+    done = [t for t in db.scalars(select(Track).join(Card, Track.card_id == Card.id).where(
+        Card.trap_id == trap_id, Track.id % AUDIT_EVERY == 0, Track.species_conf >= AUTO_THRESHOLD,
+        or_(Track.reviewed_label.is_not(None), Track.review_status == "rejected")))]
+    return {"checked": len(done), "agreed": sum(t.reviewed_label == t.species for t in done)}
 
 
 def last_capture(db: Session, trap_id: str) -> Capture | None:
@@ -142,10 +160,12 @@ def weather_days(db: Session, trap_id: str) -> tuple[dict[date, tuple[float, flo
     return phenology.daily_extremes_f(readings), f"trap:{trap_id}"
 
 
-def lure_catch_dates(db: Session, trap: Trap, card_ids: set[int] | None = None) -> list[date]:
-    """Local date of each catch of the trap's lure species, one entry per insect."""
+def lure_catch_dates(db: Session, trap: Trap, card_ids: set[int] | None = None, sure_only: bool = False) -> list[date]:
+    """Local date of each catch of the trap's lure species, one entry per insect. `sure_only` leaves out
+    catches whose species is still the model's unsure guess (waiting in the review queue)."""
     return sorted(local_date(t.first_seen_at) for t in counted_tracks(db, trap.id)
                   if t.label == trap.lure and (card_ids is None or t.card_id in card_ids)
+                  and (not sure_only or t.reviewed or t.review_status == "auto")
                   for _ in range(t.n_insects))
 
 
@@ -158,6 +178,10 @@ def phenology_status(db: Session, trap: Trap) -> dict | None:
     days, source = weather_days(db, trap.id)
     today = local_date(utcnow())
     out = {"model": model, "biofix": biofix, "catches": len(catch_dates), "weather_source": source}
+    # The biofix starts the season's clock, so say when it rests on catches nobody has confirmed.
+    sure = lure_catch_dates(db, trap, sure_only=True)
+    out["unsure_catches"] = len(catch_dates) - len(sure)
+    out["biofix_sure"] = phenology.sustained_biofix(sure)
     if biofix:
         dd, missing = phenology.cumulative_dd(days, biofix, today, model.base_f)
         out.update(dd=dd, missing_days=missing, next=phenology.next_milestone(model, dd))

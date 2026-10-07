@@ -38,6 +38,9 @@
         <dt>Base temp</dt><dd class="mono">{{ '%.0f'|format(pheno.model.base_f) }} °F (BE method)</dd>
         <dt>Clock starts</dt><dd>{{ pheno.model.start }}</dd>
         <dt>Biofix</dt><dd>{{ pheno.biofix.strftime('%b %d, %Y') if pheno.biofix else 'Not yet: needs more than 1 moth two weeks in a row' }}</dd>
+        {% if pheno.biofix and pheno.biofix != pheno.biofix_sure %}
+        <dt></dt><dd class="muted">Provisional: it rests on {{ pheno.unsure_catches }} catch{{ 'es' if pheno.unsure_catches != 1 }} the model was unsure of. <a href="/review">Confirm them</a>{% if pheno.biofix_sure %}; from confirmed catches alone it is {{ pheno.biofix_sure.strftime('%b %d') }}{% endif %}.</dd>
+        {% endif %}
         {% if pheno.biofix %}
         <dt>DD since biofix</dt><dd class="mono">{{ '%.0f'|format(pheno.dd) }}{% if pheno.missing_days %} <span class="muted">({{ pheno.missing_days }} days without weather data)</span>{% endif %}</dd>
         <dt>Next</dt><dd>{{ '%.0f DD: %s'|format(pheno.next.dd, pheno.next.label) if pheno.next else 'All milestones passed' }}</dd>
@@ -50,6 +53,7 @@
     <div class="card">
       <h2>Review</h2>
       <p>{% if pending %}<a href="/review">{{ pending }} insect{{ 's' if pending != 1 }}</a> waiting for a person to confirm.{% else %}Nothing waiting.{% endif %}</p>
+      {% if checks.checked %}<p class="muted">Spot checks of labels the model was sure of: {{ checks.agreed }} of {{ checks.checked }} agreed with a person.</p>{% endif %}
     </div>
   </div>
 </div>
