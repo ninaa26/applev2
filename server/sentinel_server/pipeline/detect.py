@@ -4,7 +4,12 @@
 needs no model download, so the whole pipeline runs today on staged cards and
 fake-camera photos. `flatbug` is the pretrained arthropod detector from the
 architecture plan; it is used automatically when installed and selected with
-SENTINEL_DETECTOR=flatbug.
+SENTINEL_DETECTOR=flatbug. `yolo` is our own YOLO11 from ml/train_yolo.py
+(SENTINEL_DETECTOR_MODEL points at its weights/best.pt), run on overlapping tiles
+at the px/mm it was trained at.
+
+Every detector drops boxes that are off the card (`card_outline`): a wide lens at the
+peak of the trap also sees the trap's walls and the clips that hold the liner.
 """
 
 from __future__ import annotations
@@ -49,6 +54,132 @@ def in_mask(box: Box, mask: list[list[float]], width: int, height: int) -> bool:
     return False
 
 
+def card_outline(img: np.ndarray, wall_sat: float = 0.5, max_side: int = 800) -> np.ndarray | None:
+    """The liner's outline in the photo (N×2 points, a convex polygon), or None when the photo is all liner.
+
+    Under the trap's white LED the card is pale and the trap around it strongly coloured (red walls), so the
+    card is the largest region that is not strongly coloured; its convex hull also takes in shadows and
+    insects at its edge, and suits a wide lens, which bulges the card's sides outwards. None, so nothing
+    is thrown away, when no coloured surround is found: a close-up, a webcam under the roof's coloured
+    light (the whole photo is one colour), or a card on a pale table.
+    """
+    f = min(1.0, max_side / max(img.shape[:2]))
+    small = cv2.resize(img, None, fx=f, fy=f, interpolation=cv2.INTER_AREA) if f < 1 else img
+    small = cv2.GaussianBlur(small, (9, 9), 0).astype(np.float32)
+    hi, lo = small.max(axis=2), small.min(axis=2)
+    sat = (hi - lo) / np.maximum(hi, 1)
+    pale = ((sat < wall_sat) & (hi > 50)).astype(np.uint8)
+    pale = cv2.morphologyEx(pale, cv2.MORPH_OPEN, np.ones((15, 15), np.uint8))  # cut thin bridges to pale things outside
+    n, lab, stats, _ = cv2.connectedComponentsWithStats(pale)
+    if n < 2:
+        return None
+    biggest = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
+    hull = cv2.convexHull(cv2.findNonZero((lab == biggest).astype(np.uint8)))
+    inside = np.zeros(sat.shape, np.uint8)
+    cv2.fillConvexPoly(inside, hull, 1)
+    share = float(inside.mean())
+    if share > 0.92 or share < 0.25 or float(sat[inside == 0].mean()) < 0.5:
+        return None
+    return hull.reshape(-1, 2).astype(np.float32) / f
+
+
+CARD_EDGE_MM = 4.0  # the liner's rim: clips, the fold and the walls' shadow, not catch
+
+
+def on_card(boxes: list[Box], outline: np.ndarray | None, margin_px: float = 0.0) -> list[Box]:
+    """The boxes whose centre is on the card, at least `margin_px` in from its edge."""
+    if outline is None:
+        return boxes
+    return [b for b in boxes if cv2.pointPolygonTest(outline, (float(b.cx), float(b.cy)), True) >= margin_px]
+
+
+def photo_quality(img: np.ndarray, outline: np.ndarray | None = None, max_side: int = 800) -> dict:
+    """Numbers that say whether a photo of the liner can be trusted, measured on the card only.
+
+    sharpness  variance of the Laplacian: drops when the photo is blurred (focus knocked, condensation on
+               the lens). Compared with the same liner's other photos, never against a fixed number.
+    glare      share of the card that is blown out to white, where an insect cannot be seen.
+    card_rgb   the card's median colour (R, G, B): drifts as the liner gets dirty or the light changes.
+    """
+    f = min(1.0, max_side / max(img.shape[:2]))
+    small = cv2.resize(img, None, fx=f, fy=f, interpolation=cv2.INTER_AREA) if f < 1 else img
+    on = np.ones(small.shape[:2], bool)
+    if outline is not None:
+        m = np.zeros(small.shape[:2], np.uint8)
+        cv2.fillConvexPoly(m, np.round(outline * f).astype(np.int32), 1)
+        on = cv2.erode(m, np.ones((9, 9), np.uint8)) > 0  # the card's own edge is not detail
+    if not on.any():
+        on[:] = True
+    lap = cv2.Laplacian(cv2.cvtColor(small, cv2.COLOR_BGR2GRAY), cv2.CV_32F)
+    b, g, r = (float(np.median(small[..., c][on])) for c in range(3))
+    return {"sharpness": round(float(lap[on].var()), 2),
+            "glare": round(float((small.min(axis=2)[on] >= 250).mean()), 4),
+            "card_rgb": [round(r), round(g), round(b)]}
+
+
+def merge_fragments(boxes: list[Box], thr: float = 0.6) -> list[Box]:
+    """One box per insect where a detector boxed its parts as well.
+
+    A moth with pale wings and a dark body, or with its wings spread, comes out as a box around the whole
+    insect plus boxes around the body or a wing inside it, and each would be counted (spread-wing moths were
+    double counted in a codling moth smart trap; large moths got double detections in the AMI pipeline). A box
+    that lies mostly inside a bigger one (overlap / its own area > thr) is a part of it and is folded in. Two
+    insects side by side overlap far less, so both stay.
+    """
+    order = sorted(boxes, key=lambda b: -(b.w * b.h))
+    kept: list[Box] = []
+    for b in order:
+        for i, big in enumerate(kept):
+            ix = max(0.0, min(b.x2, big.x2) - max(b.x1, big.x1))
+            iy = max(0.0, min(b.y2, big.y2) - max(b.y1, big.y1))
+            if b.w * b.h > 0 and ix * iy / (b.w * b.h) > thr:
+                kept[i] = Box(min(b.x1, big.x1), min(b.y1, big.y1), max(b.x2, big.x2), max(b.y2, big.y2),
+                              max(b.conf, big.conf), max(b.n, big.n))
+                break
+        else:
+            kept.append(b)
+    return kept
+
+
+def tile_origins(w: int, h: int, tile: int, overlap: int) -> list[tuple[int, int]]:
+    """Top-left corners of overlapping tiles that cover a w×h photo (the same layout ml/train_yolo.py cuts)."""
+    step = tile - overlap
+    xs = list(range(0, max(w - tile, 0) + 1, step)) or [0]
+    ys = list(range(0, max(h - tile, 0) + 1, step)) or [0]
+    if xs[-1] + tile < w:
+        xs.append(w - tile)
+    if ys[-1] + tile < h:
+        ys.append(h - tile)
+    return [(x, y) for y in ys for x in xs]
+
+
+def merge_tiles(boxes: list[tuple[float, float, float, float, float]], tiles: list[int], thr: float = 0.5) -> list[int]:
+    """Indices of the boxes to keep after tiled detection: one per insect.
+
+    An insect in the overlap of two tiles is found twice, and where a tile's edge cuts it one of the two
+    boxes is only part of it. IoU between a part and the whole is low, so NMS would keep both and count the
+    insect twice. Overlap is measured against the smaller box instead (as sliced-inference tools do), the
+    surer box wins, and only boxes from different tiles are compared, so two touching insects found in one
+    tile both stay.
+    """
+    order = sorted(range(len(boxes)), key=lambda i: -boxes[i][4])
+    kept: list[int] = []
+    for i in order:
+        a = boxes[i]
+        for j in kept:
+            if tiles[i] == tiles[j]:
+                continue
+            b = boxes[j]
+            ix = max(0.0, min(a[2], b[2]) - max(a[0], b[0]))
+            iy = max(0.0, min(a[3], b[3]) - max(a[1], b[1]))
+            smaller = min((a[2] - a[0]) * (a[3] - a[1]), (b[2] - b[0]) * (b[3] - b[1]))
+            if smaller > 0 and ix * iy / smaller > thr:
+                break
+        else:
+            kept.append(i)
+    return sorted(kept)
+
+
 @dataclass
 class Grid:
     """The liner's printed grid as seen in one photo."""
@@ -74,7 +205,7 @@ class BaselineDetector:
       its size in moths, which the tracker counts as n and sends to review.
     """
 
-    version = "baseline-cv-0.3"
+    version = "baseline-cv-0.4"
     WORK_MAX_SIDE = 1600
 
     def __init__(self, grid_mm: float = 25.0, min_len_mm: float = 3.0, max_len_mm: float = 30.0,
@@ -96,6 +227,7 @@ class BaselineDetector:
         self.clump_factor = clump_factor  # blobs this many moths big are treated as touching insects
         self.max_single_len_mm = 18.0   # longest single moth at rest (OBLR females ~14 mm)
         self.max_single_width_mm = 7.0  # widest single moth at rest
+        self.merge = True  # fold a box that lies inside a bigger one into it (merge_fragments)
         self.last: dict = {}
 
     def detect(self, image_path: Path, key=None) -> list[Box]:
@@ -138,8 +270,10 @@ class BaselineDetector:
             boxes = self._detect(img)
         else:
             boxes = [distort_box(b, k, img.shape[1], img.shape[0]) for b in self._detect(undistort(img, k))]
-        self.last["lens_k"] = k
-        return boxes
+        outline = card_outline(img)
+        kept = on_card(boxes, outline, CARD_EDGE_MM * self.last["px_per_mm"])
+        self.last.update(lens_k=k, card=outline, off_card=len(boxes) - len(kept))
+        return merge_fragments(kept) if self.merge else kept
 
     def _detect(self, img: np.ndarray) -> list[Box]:
         h0, w0 = img.shape[:2]
@@ -479,12 +613,76 @@ class FlatbugDetector:  # pragma: no cover - needs the flatbug package + weights
         # flat-bug compares device strings exactly: tensors report "mps:0", not "mps"
         self.model = Predictor(model=str(weights), device="mps:0" if _has_mps() else "cpu", dtype="float32")
         self.version = f"flatbug-{Path(weights).stem}"
+        self.last: dict = {}
 
     def detect(self, image_path: Path, key=None) -> list[Box]:
         pred = self.model(str(image_path))
         boxes = pred.boxes.cpu().tolist() if hasattr(pred.boxes, "cpu") else list(pred.boxes)
         confs = pred.confs.cpu().tolist() if hasattr(pred.confs, "cpu") else list(pred.confs)
-        return [Box(float(b[0]), float(b[1]), float(b[2]), float(b[3]), float(c)) for b, c in zip(boxes, confs)]
+        found = [Box(float(b[0]), float(b[1]), float(b[2]), float(b[3]), float(c)) for b, c in zip(boxes, confs)]
+        outline = card_outline(cv2.imread(str(image_path)))
+        self.last = {"card": outline}
+        return on_card(found, outline)
+
+
+def photo_scale(img: np.ndarray, grid_mm: float, lens: str | float = "auto") -> tuple[float | None, Grid]:
+    """(px/mm of the full-size photo from the liner's printed grid, or None if no grid was found; the grid)."""
+    k = estimate_lens_k(img) if lens == "auto" else float(lens)
+    flat = undistort(img, k) if k else img
+    f = min(1.0, BaselineDetector.WORK_MAX_SIDE / max(flat.shape[:2]))
+    grid = find_grid(cv2.resize(flat, None, fx=f, fy=f, interpolation=cv2.INTER_AREA) if f < 1 else flat)
+    return (grid.pitch_px / f / grid_mm if grid.score > 0 else None), grid
+
+
+class YoloDetector:  # pragma: no cover - needs ultralytics + trained weights
+    """Our YOLO11 from ml/train_yolo.py, run the way it was trained.
+
+    The photo is shrunk so the liner's grid comes out at the run's px/mm, cut into overlapping tiles
+    (a whole 8 MP photo squeezed into one 640 px input would leave an OFM a few pixels long), and the
+    tiles' boxes are merged with `merge_tiles`. px/mm, tile size, overlap, input size and the confidence
+    and NMS settings chosen on the run's val photos come from its summary.json. Its classes (moth / other insect / debris) are not passed on: every box goes to the
+    classifier, which has the last word.
+    """
+
+    def __init__(self, weights: str | Path, grid_mm: float = 25.0, lens: str | float = "auto"):
+        import json
+
+        from ultralytics import YOLO  # type: ignore
+
+        weights = Path(weights)
+        self.model = YOLO(str(weights))
+        run = weights.parent.parent
+        info = json.loads((run / "summary.json").read_text()) if (run / "summary.json").exists() else {}
+        self.ppm, self.tile, self.overlap = info.get("ppm", 12), info.get("tile", 640), info.get("overlap", 160)
+        self.imgsz = info.get("imgsz", self.tile)
+        self.conf, self.iou = info.get("predict", {}).get("conf", 0.25), info.get("predict", {}).get("iou", 0.7)
+        self.grid_mm, self.lens = grid_mm, lens
+        self.device = "mps" if _has_mps() else "cpu"
+        self.version = f"yolo-{run.name}"
+        self.last: dict = {}
+
+    def detect(self, image_path: Path, key=None) -> list[Box]:
+        img = cv2.imread(str(image_path))
+        if img is None:
+            raise ValueError(f"cannot read image {image_path}")
+        ppm, grid = photo_scale(img, self.grid_mm, self.lens)
+        s = min(1.0, self.ppm / ppm) if ppm else 1.0
+        small = cv2.resize(img, None, fx=s, fy=s, interpolation=cv2.INTER_AREA) if s < 1 else img
+        h, w = small.shape[:2]
+        origins = tile_origins(w, h, self.tile, self.overlap)
+        found, tiles = [], []
+        for i in range(0, len(origins), 16):
+            crops = [small[y:y + self.tile, x:x + self.tile] for x, y in origins[i:i + 16]]
+            # max_det: a full liner tile can hold more insects than the default cap of 300 allows for
+            results = self.model.predict(crops, imgsz=self.imgsz, conf=self.conf, iou=self.iou, max_det=1000,
+                                         device=self.device, verbose=False)
+            for n, ((ox, oy), r) in enumerate(zip(origins[i:i + 16], results)):
+                for (x1, y1, x2, y2), c in zip(r.boxes.xyxy.cpu().tolist(), r.boxes.conf.cpu().tolist()):
+                    found.append(((x1 + ox) / s, (y1 + oy) / s, (x2 + ox) / s, (y2 + oy) / s, float(c)))
+                    tiles.append(i + n)
+        outline = card_outline(img)
+        self.last = {"px_per_mm": ppm, "grid": grid, "work_scale": 1.0, "card": outline, "tiles": len(origins)}
+        return merge_fragments(on_card([Box(*found[i]) for i in merge_tiles(found, tiles)], outline, CARD_EDGE_MM * (ppm or 0)))
 
 
 def _has_mps() -> bool:
@@ -506,4 +704,8 @@ def make_detector(name: str):
         models = s.data_dir / "models"
         models.mkdir(parents=True, exist_ok=True)
         return FlatbugDetector(models / "flat_bug_M.pt")  # downloaded there on first use
+    if name == "yolo":
+        if not s.detector_model:
+            raise ValueError("SENTINEL_DETECTOR=yolo needs SENTINEL_DETECTOR_MODEL=<path to ml/models/yolo11/<run>/weights/best.pt>")
+        return YoloDetector(s.detector_model, grid_mm=s.grid_mm, lens=s.lens_k)
     raise ValueError(f"unknown detector {name!r}")

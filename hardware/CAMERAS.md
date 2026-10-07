@@ -10,6 +10,13 @@ motor. From the peak of the trap it sees the whole card. Read off a preview of t
 grid: roughly 15 px/mm in the centre and 10–11 px/mm at the edges (not yet bench-tested).
 
 - Focus by turning the lens by hand; `lens_position` is ignored.
+- Optics, as far as they are known (2026-10-07). Measured: 15.3 px/mm at the card's centre with the
+  lens ~110 mm above it, which with 1.12 µm pixels means an effective focal length of about 1.9 mm.
+  A reseller's listing for Arducam's IMX219 wide-angle M12 module gives 2.5 mm, f/2.8, 155° × 115°;
+  that would be 20 px/mm at 110 mm, so either the lens-to-card distance is nearer 145 mm or this board
+  carries a different lens. Not settled: measure the distance and read the lens barrel. Depth of
+  field, if it is f/2.8 and 1.9 mm, focused at 110 mm, allowing 2 px of blur: about 92–136 mm, so a
+  flat card is inside it and a specimen standing 2 cm up on a pin still is.
 - `lens_shading = false` and a white-card calibration (`sentinel-flatfield`) remove the green
   centre and pink edges the Pi's stock IMX219 colour correction gives with this lens.
 - Light the card with the white LEDs and block daylight: through the red roof the photo is all red.
@@ -22,16 +29,20 @@ grid: roughly 15 px/mm in the centre and 10–11 px/mm at the edges (not yet ben
   trap Pi put `camera_auto_detect=0` and `dtoverlay=imx219` in `/boot/firmware/config.txt`
   (camera on the CAM/DISP 1 port).
 - Detector on a calibrated photo of an empty liner (2026-10-06): grid 384 px = 15.3 px/mm, lens
-  k −0.35. It reports 7 false insects, all on the trap walls and corner clips at the card's
-  border, so the pipeline needs to ignore everything outside the card. On uncorrected photos it
-  misreads the grid, so the white-card correction matters for detection, not only for colour.
+  k −0.35. It reported 7 false insects, all on the trap walls and corner clips at the card's
+  border. Since 2026-10-07 the detector ignores everything off the card and its outer 4 mm
+  (baseline 0.4): 1 false box is left, on the card near its top-left corner. On uncorrected photos
+  it misreads the grid, so the white-card correction matters for detection, not only for colour.
 - Reference photos from that session (calibrated, uncorrected, stock tuning, exposure variants, one
   raw DNG) are in `ml/data/trap_camera/capture_2026-10-06/` on the Mac (not in git) and in
   `~/sentinel/capture_2026-10-06/` on the bench Pi.
 - With seven pinned specimens on the liner (same day, `ml/data/trap_camera/capture_bugs_2026-10-06/`):
   wing patterns are visible even on a moth in the corner; the detector finds every specimen and
-  ignores their shadows, but splits the large ones into several boxes, still boxes the trap walls
-  outside the card, and estimates a different lens k (−0.10) than on the empty liner. The single
+  ignores their shadows, but splits the large ones into several boxes, boxed the trap walls
+  outside the card (gone with baseline 0.4: 31 boxes became 21), and estimates a different lens k
+  (−0.10) than on the empty liner. Repeat photos of the same scene do not always read the same
+  grid: `calibrated_3.jpg` of this set and of the next reads 40 and 34 px/mm instead of 14–16. The
+  server now leaves out a photo whose scale is more than 20% from its liner's other photos. The single
   LED casts long red shadows; diffuse light from two sides would shorten them. The trap had been
   moved since the white-card calibration and the correction no longer lined up (faint green and
   pink patches): recalibrate whenever the camera or trap is moved.

@@ -249,6 +249,7 @@ def create_app(start_worker: bool = False) -> FastAPI:
             "trap": trap, "caps": caps, "latest": latest, "tracks": tracks, "daily": daily, "peak": peak,
             "health": services.trap_health(db, trap), "card": services.open_card(db, trap_id),
             "pheno": services.phenology_status(db, trap), "pending": len(services.pending_reviews(db, trap_id)),
+            "checks": services.spot_checks(db, trap_id),
         })
 
     @app.get("/captures/{capture_id}", response_class=HTMLResponse)

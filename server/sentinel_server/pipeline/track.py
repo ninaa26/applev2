@@ -5,16 +5,28 @@ A new detection that matches no existing track starts a *candidate*; it becomes
 a *confirmed* catch once it appears in a second photo. Candidates that never
 reappear (raindrops, a fly walking across, detector noise) are dropped.
 Confirmed tracks are kept even if the detector misses them later.
+
+A moth on glue loses scales and its wing pattern within days (fall armyworm patterns were badly
+degraded after ~72 h on adhesive), so the species comes from the photos taken while it is fresh:
+`fresh` says which photos still add to a track's species vote.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 
 AUTO_THRESHOLD = 0.80   # at or above: counted automatically
 REVIEW_THRESHOLD = 0.50  # between: goes to the review queue; below: "unknown"
 CONFIRM_AFTER = 2        # photos an insect must appear in to count
 DROP_CANDIDATE_AFTER = 2  # consecutive misses before a candidate is discarded
+FRESH_FOR = timedelta(hours=72)  # how long after it is first seen an insect's photos count towards its species
+
+
+def fresh(first_seen_at: datetime, captured_at: datetime, n_classified: int) -> bool:
+    """Does a photo taken at `captured_at` still count towards the species of an insect first seen at
+    `first_seen_at`? Always for its first classified photo, then only while it is fresh."""
+    return n_classified == 0 or captured_at - first_seen_at <= FRESH_FOR
 
 
 @dataclass

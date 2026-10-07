@@ -5,10 +5,18 @@
     python train_v2.py --final                      # also report on our locked test cards (once, at the end)
 
 Grew out of Patti's MobileNetV3 script (CM vs not-CM on an ImageFolder, repo root "Patti's code"):
-same idea and augmentations (any rotation, flips, colour jitter), but on all six trap classes and
-the group-aware train/val/test split from build_dataset.py, so photos of the same moth never
-sit on both sides. Classes are balanced by sampling, since there are ~100 OFM photos and ~2,000
-of each of the others. The epoch with the best val balanced accuracy is kept.
+same idea (any rotation, flips), but on all six trap classes and the group-aware train/val/test
+split from build_dataset.py, so photos of the same moth never sit on both sides. Classes are
+balanced by sampling, since there are ~100 OFM photos and ~2,000 of each of the others. The epoch
+with the best val balanced accuracy is kept.
+
+Augmentation follows what closed the web-photo -> trap gap on the AMI benchmark (Jain et al. 2024:
+trap accuracy 51.5% -> 71.9%): RandAugment plus mixed resolution (MixRes: half the training photos
+are shrunk to a trap-sized crop and blown back up, so the net sees the blur of a small moth and not
+only sharp web photos). AdamW, one warm-up epoch then cosine decay, label smoothing 0.1, as in the
+AMI classifiers. --size stays 224: a trap crop is 110-260 px here (10-15 px/mm, padded), and on AMI
+going from 128 to 224 helped web photos but cost 3.5 points on trap crops, so compare --size 128 on
+real-liner crops (eval_liner_species.py) before trusting the web-photo score.
 
 Reports use the same format as train_v1.py, with web photos and trap-style photos
 (make_trap_style.py) scored separately. Writes models/v2/<arch>.pt (weights, classes, arch,
@@ -69,6 +77,27 @@ class Photos:
         return self.transform(im), y
 
 
+class MixRes:
+    """Mixed resolution: with probability p, shrink the photo so its long side is a random `sides` px (what a
+    small or far-off moth's crop holds) and enlarge it back, keeping its size."""
+
+    def __init__(self, sides: tuple[int, int] = (48, 160), p: float = 0.5, seed: int | None = None):
+        import random
+
+        self.sides, self.p, self.rng = sides, p, random.Random(seed)
+
+    def __call__(self, im):
+        from PIL import Image
+
+        if self.rng.random() >= self.p:
+            return im
+        s = self.rng.randint(*self.sides) / max(im.size)
+        if s >= 1:
+            return im
+        small = im.resize((max(1, round(im.width * s)), max(1, round(im.height * s))), Image.BILINEAR)
+        return small.resize(im.size, Image.BILINEAR)
+
+
 def transforms_for(size: int):
     from torchvision import transforms as T
 
@@ -77,8 +106,8 @@ def transforms_for(size: int):
         T.RandomRotation(180),  # moths land on the liner at any angle
         T.RandomHorizontalFlip(),
         T.RandomVerticalFlip(),
-        T.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.05),
-        T.RandomApply([T.GaussianBlur(5, sigma=(0.1, 1.5))], p=0.3),
+        T.RandAugment(num_ops=2, magnitude=9),
+        MixRes(),
         T.ToTensor(),
         T.Normalize(MEAN, STD),
     ])
@@ -130,8 +159,9 @@ def main(argv=None) -> int:
 
     train_items = items(lambda r: r["split"] == "train")
     evals = {"val": items(lambda r: r["split"] == "val"),
-             "test · web photos": items(lambda r: r["split"] == "test" and r["source"] != "synth"),
-             "test · trap-style": items(lambda r: r["split"] == "test" and r["source"] == "synth")}
+             "test · web photos": items(lambda r: r["split"] == "test" and r["source"] in ("inat", "ami")),
+             "test · trap-style": items(lambda r: r["split"] == "test" and r["source"] == "synth"),
+             "test · real liners (held out)": items(lambda r: r["split"] == "test" and r["source"] == "liner")}
     if args.final:
         evals["LOCKED own cards"] = items(lambda r: r["split"] == "locked")
     evals = {k: v for k, v in evals.items() if v}
@@ -150,8 +180,11 @@ def main(argv=None) -> int:
     model = build_model(args.arch, len(classes)).to(device)
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
     steps = args.epochs * len(train_loader)
-    sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=steps)
-    loss_fn = torch.nn.CrossEntropyLoss(label_smoothing=0.05)
+    warm = min(len(train_loader), steps // 2)
+    sched = torch.optim.lr_scheduler.SequentialLR(opt, milestones=[warm], schedulers=[
+        torch.optim.lr_scheduler.LinearLR(opt, start_factor=0.05, total_iters=warm),
+        torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=max(1, steps - warm))])
+    loss_fn = torch.nn.CrossEntropyLoss(label_smoothing=0.1)
 
     best, best_state = -1.0, None
     for epoch in range(1, args.epochs + 1):

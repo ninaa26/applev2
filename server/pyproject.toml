@@ -20,6 +20,7 @@ postgres = ["psycopg[binary]>=3.1"]
 # Heavy ML extras: install only on the machine that runs the worker.
 bioclip = ["open_clip_torch>=2.24", "torch>=2.2"]
 flatbug = ["flat-bug @ git+https://github.com/darsa-group/flat-bug.git"]
+yolo = ["ultralytics>=8.3"]
 
 [project.scripts]
 sentinel-server = "sentinel_server.cli:main"

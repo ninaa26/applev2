@@ -6,7 +6,8 @@ import cv2
 import numpy as np
 import pytest
 
-from sentinel_server.pipeline.detect import BaselineDetector, distort_points, estimate_lens_k, find_grid
+from sentinel_server.pipeline.detect import (BaselineDetector, Box, card_outline, distort_points, estimate_lens_k,
+                                             find_grid, merge_tiles, on_card, tile_origins)
 
 W, H = 640, 480
 PX_PER_MM = 7.0
@@ -197,3 +198,32 @@ def test_lens_estimate_is_cached_per_liner(monkeypatch):
     det.detect_array(img, key=("T1", 1))
     det.detect_array(img, key=("T1", 2))
     assert len(calls) == 2
+
+
+def test_boxes_off_the_card_are_ignored():
+    """White card in a red trap, as the wide lens sees it from the peak: the walls are not catch."""
+    img = np.zeros((480, 640, 3), np.uint8)
+    img[:] = (20, 20, 220)  # red walls (BGR)
+    cv2.rectangle(img, (120, 80), (520, 400), (235, 235, 235), -1)
+    cv2.ellipse(img, (300, 240), (20, 8), 30, 0, 360, (60, 60, 60), -1)  # a moth on the card
+    outline = card_outline(img)
+    assert outline is not None
+    boxes = [Box(280, 225, 320, 255, 0.9), Box(40, 200, 80, 230, 0.9), Box(121, 200, 141, 220, 0.9)]
+    assert on_card(boxes, outline) == [boxes[0], boxes[2]]
+    assert on_card(boxes, outline, margin_px=20) == [boxes[0]]  # the rim under the clips is not catch either
+
+
+@pytest.mark.parametrize("name", ["empty_liner_webcam.jpg", "empty_liner_wide.jpg"])
+def test_a_photo_that_is_all_liner_has_no_outline(name):
+    """Under the roof's coloured light the whole photo is one colour: nothing may be thrown away."""
+    assert card_outline(cv2.imread(str(Path(__file__).parent / "fixtures" / name))) is None
+    assert card_outline(liner(MOTHS)) is None
+
+
+def test_tiles_cover_the_photo_and_an_insect_cut_by_a_tile_edge_counts_once():
+    origins = tile_origins(1500, 700, 640, 224)
+    assert origins[0] == (0, 0) and max(x for x, _ in origins) == 1500 - 640 and max(y for _, y in origins) == 60
+    whole, part = (600, 100, 680, 130, 0.9), (600, 100, 640, 130, 0.6)  # the next tile sees only half of it
+    neighbour = (660, 110, 720, 140, 0.8)                               # a second moth touching the first
+    assert merge_tiles([whole, part, neighbour], tiles=[1, 0, 1]) == [0, 2]
+    assert merge_tiles([whole, part], tiles=[0, 0]) == [0, 1]  # within one tile the detector already chose

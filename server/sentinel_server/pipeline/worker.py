@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import logging
+import math
 import time
 from pathlib import Path
 
+import cv2
 from PIL import Image
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -16,9 +18,47 @@ from ..models import Capture, Card, Detection, Event, Track, Trap, utcnow
 from ..settings import get_settings
 from . import track as trk
 from .classify import crop, make_classifier
-from .detect import in_mask, make_detector
+from .detect import card_outline, in_mask, make_detector, photo_quality
 
 log = logging.getLogger(__name__)
+
+SCALE_TOLERANCE = 0.20  # a photo whose px/mm is further than this from the liner's other photos is not trusted
+BLURRED_BELOW = 0.4     # ... or whose sharpness is under this share of theirs (repeat shots vary by ~30%)
+GLARE_WARN = 0.02       # share of the card blown out to white that raises a "glare" event
+
+
+def moon_illumination(when) -> float:
+    """Fraction of the moon's disc lit (0 new, 1 full), to a few percent: context logged with each photo,
+    since moonlight changes how many moths fly."""
+    days = (when - type(when)(2000, 1, 6, 18, 14)).total_seconds() / 86400
+    return round((1 - math.cos(2 * math.pi * (days % 29.530588853) / 29.530588853)) / 2, 2)
+
+
+def blur_problem(earlier: list[float], now: float) -> str | None:
+    """Why this photo is too blurred to use, or None: judged against the same liner's other photos, since
+    sharpness depends on the camera, the light and what is on the card."""
+    if len(earlier) < 2:
+        return None
+    usual = sorted(earlier)[len(earlier) // 2]
+    if now < BLURRED_BELOW * usual:
+        return f"blurred: sharpness {now:.0f}, this liner's other photos {usual:.0f}"
+    return None
+
+
+def scale_problem(earlier: list[float], now: float | None) -> str | None:
+    """Why this photo's scale can't be right, or None. The camera and liner don't move, so every photo of
+    a liner has the same px/mm; one that reads differently (or shows no grid at all, when the others did)
+    is blurred, mis-exposed, knocked, or had its grid misread, and its boxes would be sized wrongly. Such a
+    photo is left out rather than allowed to drop real insects and add false ones. A new liner starts afresh,
+    so a camera that really was changed is believed from the next liner on."""
+    if len(earlier) < 2:  # one photo is not enough to say which of two is the odd one
+        return None
+    usual = sorted(earlier)[len(earlier) // 2]
+    if now is None:
+        return f"no liner grid found (this liner's other photos: {usual:.1f} px/mm)"
+    if abs(now / usual - 1) > SCALE_TOLERANCE:
+        return f"scale reads {now:.1f} px/mm, this liner's other photos {usual:.1f}"
+    return None
 
 
 class Pipeline:
@@ -35,6 +75,29 @@ class Pipeline:
         trap = db.get(Trap, cap.trap_id)
         path = get_settings().media_dir / cap.image_path
         boxes = self.detector.detect(path, key=(cap.trap_id, cap.card_id))
+        info = getattr(self.detector, "last", {})
+        before = [c.meta or {} for c in db.scalars(select(Capture).where(
+            Capture.card_id == cap.card_id, Capture.status == "processed", Capture.id != cap.id))]
+        bgr = cv2.imread(str(path))
+        quality = photo_quality(bgr, info["card"] if "card" in info else card_outline(bgr))
+        problem = blur_problem([m["sharpness"] for m in before if m.get("sharpness")], quality["sharpness"])
+        ppm = None
+        if info.get("grid") is not None:  # detectors that measure the liner's grid
+            ppm = float(info["px_per_mm"]) if info["grid"].score > 0 and info.get("px_per_mm") else None
+            problem = scale_problem([m["px_per_mm"] for m in before if m.get("px_per_mm")], ppm) or problem
+        if problem:
+            log.warning("capture %s left out: %s", cap.id, problem)
+            cap.status, cap.processed_at, cap.model_version = "failed", utcnow(), self.version
+            cap.error = f"photo not used: {problem}"
+            return
+        card = db.get(Card, cap.card_id)
+        liner_days = round((cap.captured_at - card.installed_at).total_seconds() / 86400, 1)
+        cap.meta = {**(cap.meta or {}), **quality, **({"px_per_mm": round(ppm, 2)} if ppm else {}),
+                    "liner_days": liner_days, "moon": moon_illumination(cap.captured_at)}
+        if quality["glare"] > GLARE_WARN:
+            _event_once(db, cap, "glare", {"share_of_card": quality["glare"]})
+        if liner_days > get_settings().liner_max_days:
+            _event_once(db, cap, "card_old", {"days": liner_days})
         with Image.open(path) as img:
             w, h = img.size
             boxes = [b for b in boxes if not in_mask(b, trap.mask, w, h)]
@@ -72,7 +135,7 @@ class Pipeline:
                 db.add(t)
                 db.flush()
             seen_tracks.add(t.id)
-            if p:
+            if p and trk.fresh(t.first_seen_at, cap.captured_at, t.n_classified):
                 summed = dict(t.prob_sum or {})
                 for k, v in p.items():
                     summed[k] = summed.get(k, 0.0) + v
@@ -157,14 +220,18 @@ def _keep_liner_if_unchanged(db: Session, cap: Capture, boxes: list[trk.Rect]) -
 CARD_FULL_DETECTIONS = 60  # beyond this, accuracy drops and the liner should be swapped
 
 
-def _card_full_check(db: Session, cap: Capture, n: int) -> None:
-    if n < CARD_FULL_DETECTIONS:
-        return
+def _event_once(db: Session, cap: Capture, kind: str, payload: dict) -> None:
+    """One event of a kind per liner: the first photo that shows it."""
     already = db.scalar(
-        select(Event).where(Event.trap_id == cap.trap_id, Event.kind == "card_full", Event.payload["card_id"].as_integer() == cap.card_id)
+        select(Event).where(Event.trap_id == cap.trap_id, Event.kind == kind, Event.payload["card_id"].as_integer() == cap.card_id)
     )
     if already is None:
-        db.add(Event(trap_id=cap.trap_id, kind="card_full", payload={"card_id": cap.card_id, "detections": n}))
+        db.add(Event(trap_id=cap.trap_id, kind=kind, payload={"card_id": cap.card_id, **payload}))
+
+
+def _card_full_check(db: Session, cap: Capture, n: int) -> None:
+    if n >= CARD_FULL_DETECTIONS:
+        _event_once(db, cap, "card_full", {"detections": n})
 
 
 def process_pending(pipeline: Pipeline, limit: int = 10) -> int:

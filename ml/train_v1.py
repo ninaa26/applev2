@@ -8,9 +8,16 @@ re-running after adding photos only embeds the new ones and then takes seconds.
 
 v1 is a logistic regression on the (normalised) BioCLIP 2 image embedding, with class weights
 balanced so the few OFM photos count as much as the many OBLR ones. The regularisation
-strength is picked on the val split, then the head is refit on train + val.
+strength C and a temperature T are picked on the val split, then the head is refit on train + val.
 
-Writes models/v1/head.npz (classes, weights, bias, model name), which the server's
+When the dataset has real-liner crops (source "liner" from liner_crops.py, later "own"), C and T
+are picked on those val rows only. Picked on web photos and paste-ups, C comes out high and the
+head is sure of itself on real liners when it is wrong (Oct 7 2026: 22% of real OFM counted
+automatically as something else); val photos from the trap's own domain are what the thresholds
+have to be right for. T divides the logits (plain temperature scaling, the open-set baseline to
+beat in Open-Insect) so the server's 0.80 / 0.50 confidence thresholds mean what they say.
+
+Writes models/v1/head.npz (classes, weights, bias, temperature, model name), which the server's
 `bioclip-v1` classifier loads, plus metrics.json and report.md.
 """
 
@@ -131,6 +138,23 @@ def format_report(name: str, r: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def softmax(logits: np.ndarray) -> np.ndarray:
+    p = np.exp(logits - logits.max(axis=1, keepdims=True))
+    return p / p.sum(axis=1, keepdims=True)
+
+
+def fit_temperature(logits: np.ndarray, y: np.ndarray) -> float:
+    """The T that makes softmax(logits / T) fit the labels best (lowest negative log-likelihood)."""
+    if not len(y):
+        return 1.0
+    grid = np.exp(np.linspace(np.log(0.25), np.log(20.0), 80))
+    nll = [-np.log(softmax(logits / T)[np.arange(len(y)), y] + 1e-12).mean() for T in grid]
+    return float(grid[int(np.argmin(nll))])
+
+
+REAL = ("liner", "own")  # sources photographed on a liner: what C and T are tuned on, when there are any
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--data", type=Path, default=Path("data"))
@@ -156,7 +180,9 @@ def main(argv=None) -> int:
     split = np.array([r["split"] for r in rows])
     tr, va, te, lk = (split == s for s in ("train", "val", "test", "locked"))
     synth = np.array([r["source"] == "synth" for r in rows])
-    tests = {"test · web photos": te & ~synth, "test · trap-style": te & synth}
+    real = np.array([r["source"] in REAL for r in rows])
+    tests = {"test · web photos": te & ~synth & ~real, "test · trap-style": te & synth,
+             "test · real liners (held out)": te & real}
     tests = {k: m for k, m in tests.items() if m.any()}
     print(f"Classes {classes}; train {tr.sum()}, val {va.sum()}, test {te.sum()} "
           f"({(te & synth).sum()} trap-style), locked {lk.sum()}")
@@ -168,15 +194,19 @@ def main(argv=None) -> int:
     for name, m in tests.items():
         results[f"v0 zero-shot · {name}"] = report(y[m], (X[m] @ T.T).argmax(1), classes)
 
-    # v1: pick C on val, then refit on train + val.
+    # v1: pick C and T on val (its real-liner rows, when there are any), then refit on train + val.
+    tune = va & real if (va & real).sum() >= 50 else va
+    tuned_on = "real-liner val crops" if tune is not va else "val"
     best = None
     for C in (0.3, 1, 3, 10, 30, 100):
         clf = LogisticRegression(C=C, class_weight="balanced", max_iter=3000).fit(X[tr], y[tr])
-        score = report(y[va], clf.predict(X[va]), classes)["balanced_accuracy"]
-        print(f"  C={C:<5} val balanced accuracy {score:.3f}")
+        score = report(y[tune], clf.predict(X[tune]), classes)["balanced_accuracy"]
+        print(f"  C={C:<5} balanced accuracy on {tuned_on} {score:.3f}"
+              f"  (all val {report(y[va], clf.predict(X[va]), classes)['balanced_accuracy']:.3f})", flush=True)
         if best is None or score > best[1]:
-            best = (C, score)
-    C = best[0]
+            best = (C, score, fit_temperature(clf.decision_function(X[tune]), y[tune]))
+    C, _, T = best
+    print(f"Picked C={C}, temperature {T:.2f} on {int(tune.sum())} {tuned_on}")
     trva = tr | va
     clf = LogisticRegression(C=C, class_weight="balanced", max_iter=3000).fit(X[trva], y[trva])
     for name, m in tests.items():
@@ -187,16 +217,19 @@ def main(argv=None) -> int:
 
     args.out.mkdir(parents=True, exist_ok=True)
     np.savez(args.out / "head.npz", classes=np.array(classes), W=clf.coef_.astype(np.float32),
-             b=clf.intercept_.astype(np.float32), model=np.array(args.model))
+             b=clf.intercept_.astype(np.float32), T=np.float32(T), model=np.array(args.model))
     (args.out / "metrics.json").write_text(json.dumps(results, indent=2))
     by_source = {s: int(sum(1 for r in rows if r["source"] == s and r["split"] == "train"))
-                 for s in ("inat", "ami", "own", "synth")}
+                 for s in ("inat", "ami", "own", "liner", "synth")}
     md = ["# Species ID v0 / v1", "",
           f"BioCLIP 2 image features. Training photos by source: {by_source}.",
+          f"C={C} and temperature {T:.2f} were picked on {int(tune.sum())} {tuned_on}.",
           "Test = held-out **web photos** (grouped by observation), and their **trap-style** copies (the same",
           "moths cut out and pasted onto our liner photos at trap resolution, make_trap_style.py). Neither is",
-          "a real moth on a real liner, so treat both as sanity checks; the report's numbers come from `--final`",
-          "on our own locked cards.",
+          "a real moth on a real liner, so treat both as sanity checks. **Real liners** are other people's liner",
+          "photos (liner_crops.py; held-out liners, species as the uploader named it, not our camera): the",
+          "closest check there is until `--final` on our own locked cards, which is where the report's numbers",
+          "come from. eval_liner_species.py breaks that test down by resolution and by what the server would do.",
           "BioCLIP 2 was itself trained on iNaturalist/GBIF photos (TreeOfLife-200M), so it has likely seen",
           "many of these test photos with their species names. Web-photo scores are optimistic for that reason too.", ""]
     md += [format_report(k, v) for k, v in results.items()]
