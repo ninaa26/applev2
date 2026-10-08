@@ -1,0 +1,8 @@
+# What a training machine needs (RUN_ON_CUDA.md). Install torch and torchvision first, from the wheel that
+# matches the machine's CUDA: https://pytorch.org/get-started/locally/
+numpy>=2.0
+pillow>=10.0
+scikit-learn>=1.4
+open_clip_torch>=2.24          # train_v1.py, eval_liner_species.py: BioCLIP 2
+opencv-python>=4.9             # train_yolo.py reads the liner grid
+ultralytics>=8.4               # train_yolo.py: YOLO11

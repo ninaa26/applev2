@@ -1,7 +1,7 @@
 # Insect-CV research: what we did with each finding
 
 Status of every item in "Moth Monitoring: Computer Vision (Imaging, Detection, Counting)" (Oct 6 2026)
-against this repo, as of Oct 7 2026. Start with what could **not** be done; the full item-by-item list follows.
+against this repo, as of Oct 8 2026. Start with what could **not** be done; the full item-by-item list follows.
 
 Words used: **Done** = changed in code or docs on Oct 6–7 2026 and tested. **Had** = already how the repo
 worked. **Not ours** = about light traps, other hardware or other pests. **Open** = see the first two sections.
@@ -11,7 +11,7 @@ worked. **Not ours** = about light traps, other hardware or other pests. **Open*
 | # | Item | Why not | What would settle it |
 |---|---|---|---|
 | 1 | A detector score on our own trap | No moth of target size has been photographed by the trap camera; `ml/data/own/` does not exist | Stage cards in the trap, lock test cards, run `sentinel-server evaluate` ([evaluation.md](evaluation.md)) |
-| 2 | Retrained YOLO with the new options scored on its test photos | Partly done: one run finished on Oct 7 (three-way split, overlap 224, blank liners): test mAP50 0.52, moth 0.82, moth precision 0.77 and recall 0.80 at the chosen settings, debris not found (`ml/README.md`). `--imgsz 800`, `--one-insect-class` and `--synth` have not been compared, at about two hours a run | One run per option, same test photos |
+| 2 | Retrained YOLO with the new options scored on its test photos | Partly done: two runs with the three-way split, overlap 224 and blank liners, same 4 test photos (`ml/README.md`). Oct 7, 16 training photos: test mAP50 0.52, moth precision 0.77 and recall 0.80 at the chosen settings. Oct 8, 31 training photos (OFM liners fully labelled, CUDA PC): test mAP50 0.51, moth 0.79 and 0.74. Twice the labels, no visible gain; debris found in neither. `--imgsz 800`, `--one-insect-class` and `--synth` have not been compared | One run per option, same test photos; more test photos to tell runs apart |
 | 3 | Trap-style training photos on trap-camera liners | The only blank IMX219 liner photos predate the LED move; the camera needs its white-card calibration redone first | Recalibrate, photograph a blank liner, put it in `ml/data/liners/`, re-run `make_trap_style.py` |
 | 4 | Glare removed at the source | Hardware: the LED needs a diffuser or re-aiming. Measured Oct 6 photos with the LED beside the camera: 10–13% of the card blown out to white. Software now measures it and raises a `glare` event, nothing more | Diffuser, then recalibrate |
 | 5 | Lens focal length and aperture confirmed | Our measurement (15.3 px/mm at ~110 mm) implies ~1.9 mm; a reseller's listing says 2.5 mm f/2.8. Unresolved ([CAMERAS.md](../hardware/CAMERAS.md)) | Measure lens-to-card distance, read the lens barrel |

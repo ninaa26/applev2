@@ -13,7 +13,7 @@ python3 fetch_inat.py --out data/inat                    # ~10,300 photos (iNatu
 .venv/bin/python build_dataset.py                        # again, to add the trap-style photos and the real-liner crops
 .venv/bin/python train_v1.py                             # BioCLIP 2 features -> v0 zero-shot + v1 head -> models/v1/
 .venv/bin/python eval_liner_species.py                   # the head on held-out real liners, as the server would treat each crop
-.venv/bin/python train_v2.py                             # fine-tuned EfficientNet-B0 -> models/v2/ (not yet run)
+.venv/bin/python train_v2.py                             # fine-tuned EfficientNet-B0 -> models/v2/ (ConvNeXt-T, MobileNetV3-L: RUN_ON_CUDA.md)
 ```
 
 **Classes** (what the server stores): `CM`, `OFM`, `OBLR`, `other_moth` (other tortricids, lesser
@@ -51,61 +51,117 @@ photos get embedded. Run `train_v1.py --final` once, at the end, for the report'
 **Don't quote the web-photo test scores as trap accuracy.** BioCLIP 2 was trained on iNaturalist/GBIF
 photos (TreeOfLife-200M), so it has likely seen these exact test photos with their names, and they
 show whole moths in natural poses rather than moths flattened on a glue liner. Oct 7 2026,
-`models/v1` (trained on 6,846 iNat + 2,684 AMI + 16,976 trap-style photos + 1,611 real-liner crops,
-C=100, T=1.65), balanced accuracy on the test split: web photos v0 zero-shot 0.67, v1 0.98; their trap-style
+`models/v1` (trained on 6,846 iNat + 2,684 AMI + 16,976 trap-style photos + 2,099 real-liner crops,
+C=10, T=1.18), balanced accuracy on the test split: web photos v0 zero-shot 0.67, v1 0.98; their trap-style
 copies (webcam liners, 5–16 px/mm) v0 0.54, v1 0.89. A sign the pipeline works, not how well the trap
 will do. Earlier heads are kept for comparison: `models/v1-no-liner/` (Oct 2, no real-liner crops: 0.99 and
-0.90) and `models/v1-2026-10-07a/` (the first Oct 7 head, real OFM and CM crops but no real non-target moths).
+0.90), `models/v1-2026-10-07a/` (the first Oct 7 head, real OFM and CM crops but no real non-target moths)
+and `models/v1-2026-10-07b/` (with the non-target moths, before the field cards and the finished OFM-liner labels).
 
 **Real insects on real liners** (`liner_crops.py`, `eval_liner_species.py`). The web-photo → trap gap is
 the main problem in the insect-ML literature (8–16 points on AMI traps), and ours was worse: Oct 7 2026,
 the Oct 2 head on other people's liner photos at 15 px/mm found 43% of 162 OFM (19% were counted
-automatically as something else) and no debris. `liner_crops.py` turns those photos into crops at trap
-resolution (15 and 10 px/mm), 1,850 insects from 115 liners and cards:
+automatically as something else) and no debris. `liner_crops.py` turns real-liner photos into crops at trap
+resolution (15 and 10 px/mm), 2,309 insects from 123 liners and cards:
 
-- **OFM liners** (trap camera): 478 OFM (the uploader's boxes), 311 other insects and 49 debris (pass-1 labels).
+- **OFM liners** (trap camera): 478 OFM (the uploader's boxes), 664 other insects and 87 debris (pass-1 labels).
 - **CM cards** (phone, full-size photos, 10 px/mm only): 131 CM.
 - **PTM liners** (Insect Science delta liners, phone, ~7 px/mm, kept as photographed): 881 potato tuber moths
-  and *Tuta*, as `other_moth`. The only real moths on glue we have that are none of our three.
+  and *Tuta*, as `other_moth`. The only real non-target moths on glue in any number.
+- **Field cards** (our orchard's Trécé cards, phone): 35 OBLR, 20 OFM, 13 CM, 1 lesser appleworm, 1 other moth.
+  The only real-liner OBLR, and a second source of OFM and CM.
 
-They join `dataset.csv` as source `liner`, grouped by liner or card. Held-out liners (`liner_crops.TEST_GROUPS`
-for the first two sets, a third of their moths and including `train_yolo.py`'s test liners; a hash-picked quarter
-of the PTM photos, which hold 97 of its 881 moths) are test and never trained on; liners with a fifth of the remaining crops are val, and when
-such val rows exist `train_v1.py` picks C and the temperature T on them instead of on web photos.
+**Who labelled what (Oct 7 2026), and what still needs a person's eye.** Pass 1 on the OFM liners is finished:
+454 of its 1,361 boxes were labelled by Claude from contact sheets (`labelled_by_claude.csv` beside
+`labels.csv` lists each one, 65 marked unsure; the sheets are in `claude_sheets/`; the labels before that are
+in `labels.backup-before-claude.csv`). Species on the field-card moths is Claude's reading of the full-size
+crops, in `data/field/species.csv` with the sheets in `data/field/claude_sheets/`: 70 of 94 named, 24 left
+blank as unsure, `labels.csv` untouched. Neither has been checked by someone who knows the moths. Tan
+leafrollers with oblique bands were called OBLR, grey moths with wavy lines and a dark wing tip CM, small plain
+dark-grey moths on the April card OFM; a threelined leafroller or a lesser appleworm among them would look
+much the same in these photos.
 
-Held-out liners, Oct 7 2026, found / auto & wrong ("auto & wrong" is a wrong label at confidence ≥ 0.80,
-which the server counts with no one looking):
+They join `dataset.csv` as source `liner`, grouped by liner or card. Held out and never trained on:
+`liner_crops.TEST_GROUPS` for the OFM liners and CM cards (a third of their moths, including `train_yolo.py`'s
+test liners), a hash-picked quarter of the PTM photos (97 of 881 moths), and for the field cards those in
+`data/field/test_cards.txt` (CM) plus the April 2025 OFM card and the June 2024 OBLR photos, so every target
+has field moths no head trained on. Liners with a fifth of the remaining crops are val, and `train_v1.py`
+picks C and the temperature T on them instead of on web photos.
 
-| true class (crops) | px/mm | Oct 2 head (web + trap-style) | first Oct 7 head (+ OFM, CM liners) | `models/v1` (+ PTM liners) |
+Held-out liners and cards, Oct 7 2026, found / auto & wrong ("auto & wrong" is a wrong label at confidence
+≥ 0.80, which the server counts with no one looking):
+
+| true class (crops), set | px/mm | Oct 2 head (web + trap-style) | `v1-2026-10-07b` (+ OFM, CM, PTM liners) | `models/v1` (+ field cards, finished pass 1) |
 |---|---|---|---|---|
-| OFM (162) | 15 | 0.43 / 0.19 | 0.96 / 0.00 | 0.94 / 0.00 |
-| OFM (162) | 10 | 0.40 / 0.30 | 0.94 / 0.01 | 0.92 / 0.01 |
-| CM (37) | 10 | 0.89 / 0.00 | 0.89 / 0.00 | 0.89 / 0.00 |
-| other moth (97) | ~7 | 0.07 / 0.53 | 0.03 / 0.23 | 0.96 / 0.00 |
-| other insect (87) | 15 | 0.97 / 0.00 | 0.80 / 0.01 | 0.84 / 0.01 |
-| other insect (87) | 10 | 0.98 / 0.01 | 0.74 / 0.01 | 0.72 / 0.07 |
-| debris (4) | 15 | 0 of 4 | 2 of 4 | 2 of 4 |
+| OFM (162), OFM liners | 15 | 0.43 / 0.19 | 0.94 / 0.00 | 0.94 / 0.00 |
+| OFM (162), OFM liners | 10 | 0.40 / 0.30 | 0.92 / 0.01 | 0.90 / 0.01 |
+| OFM (19), field card | 10 | | 18 of 19 / 0 | 18 of 19 / 0 |
+| CM (37), CM cards | 10 | 0.89 / 0.00 | 0.89 / 0.00 | 0.92 / 0.00 |
+| CM (10), field cards | 10 | | 10 of 10 / 0 | 10 of 10 / 0 |
+| OBLR (14), field cards | 10 | | 14 of 14 / 0 | 14 of 14 / 0 |
+| other moth (97), PTM liners | ~7 | 0.07 / 0.53 | 0.96 / 0.00 | 0.92 / 0.01 |
+| other insect (127), OFM liners | 15 | | 0.80 / 0.02 | 0.85 / 0.02 |
+| other insect (127), OFM liners | 10 | | 0.72 / 0.07 | 0.81 / 0.03 |
+| debris (12), OFM liners | 15 | | 6 of 12 | 7 of 12 |
 
-The other-moth row is why the PTM liners matter: the first Oct 7 head had learnt that a moth on a real liner
-is OFM and called 71 of 97 unseen non-target moths OFM. The price of real-liner training is bycatch: 8–17 of
-87 other insects on those liners are called OFM, mostly below 0.80, so they go to review.
+Two things in that table carry the weight. The other-moth row: before the PTM liners a head trained on real
+OFM had learnt that a moth on a real liner is OFM (71 of 97 unseen non-target moths called OFM). And the
+field-card rows in the middle column: that head had never seen a field-card moth or a real-liner OBLR, and
+it agrees with the species read off the photos on 42 of 43. Two readings that could share a mistake, but
+they were made separately.
 
-A check on photos from neither set (Oct 7 2026): 24 codling moths boxed by hand on two liner photos from
+A check on photos from no set at all (Oct 7 2026): 24 codling moths boxed by hand on two liner photos from
 Wikimedia Commons and iNaturalist (`data/web_liners/species/independent/`, oblique views, ~85 px moths).
-`models/v1` called 18 CM, 4 other moth, 2 OFM, none wrong at ≥ 0.80; the first Oct 7 head 16 CM and 7 OFM;
-the Oct 2 head 18 CM. There is no such check for OFM: every public OFM-on-liner photo we found is in the
-one trap-camera set, and iNaturalist holds 58 research-grade OFM observations in the world, all already
-downloaded.
+`v1-2026-10-07b` called 18 CM, 4 other moth, 2 OFM, none wrong at ≥ 0.80.
 
-Read all of this for what it is: the species is the uploader's claim, the cameras and liners are not ours,
-each class comes from one source (so a head can still be learning the photo rather than the moth: the PTM
-liners have a green grid, the OFM liners a black one), there is no real-liner OBLR at all, and the same
-held-out liners are looked at each time a head is compared. A development check; the report's numbers
-still come from our own locked cards.
+Read all of this for what it is: the species is an uploader's claim or a reading from a photo, the cameras
+are not ours, most classes lean on one source (the PTM liners have a green grid, the OFM liners a black one),
+the field-card numbers are 10–19 moths each, and the same held-out crops are looked at each time a head is
+compared. A development check; the report's numbers still come from our own locked cards.
+
+**Training somewhere else.** `data/` is not in git, so `make_bundle.py` packs the scripts, `dataset.csv`,
+every image it lists (web photos shrunk to 512 px), the cached features, the current head and what
+`train_yolo.py` reads into `data/bundle/orchard-train.zip` (about 1.8 GB). [RUN_ON_CUDA.md](RUN_ON_CUDA.md) has
+the commands for a machine with a CUDA GPU: three v2 runs (`efficientnet_b0`, `convnext_tiny`,
+`mobilenet_v3_large`), v1, and the detector, which now has all 31 OFM liner photos. `train_v2.py` keeps the
+epoch that does best on real-liner val crops and saves a temperature with the weights; the server applies it.
+
+**The CUDA runs (Oct 8 2026, RTX 3060 Ti under WSL).** Three fine-tuned CNNs, 20 epochs each, scored on the
+same 785 held-out real-liner crops as `models/v1` (15 and 10 px/mm together), each with its own temperature:
+
+| | `models/v1` linear head | `v2/` EfficientNet-B0 | `v2-convnext/` ConvNeXt-T | `v2-mobilenet/` MobileNetV3-L |
+|---|---|---|---|---|
+| all crops right | 0.89 | 0.90 | 0.87 | 0.90 |
+| wrong at ≥ 0.80 (counted with no one looking) | 1.3% | 4.5% | 6.6% | 4.2% |
+| OFM, OFM liners (324) | 299 | 292 | 291 | 301 |
+| **OFM, held-out field card (19)** | **18** | **3** | **6** | **4** |
+| CM, CM cards (37) | 34 | 37 | 37 | 37 |
+| CM, field cards (12) | 12 | 12 | 12 | 12 |
+| OBLR, field cards (17) | 17 | 17 | 17 | 17 |
+| other moth, PTM liners (97) | 89 | 97 | 97 | 97 |
+| other insect, OFM liners (254) | 211 | 238 | 206 | 218 |
+| debris, OFM liners (24) | 17 | 10 | 17 | 16 |
+
+**v1 stays.** The CNNs match it on average and are better on bycatch and on sets they trained a part of, but
+on the one OFM card from a different camera they call the moths other moth or CM, a third of them at ≥ 0.80.
+Every OFM they trained on came from one trap camera, and fine-tuning the whole network learnt that camera;
+the frozen BioCLIP features did not. That is the single-source warning above coming true, and it would not
+show in any of the three tables `train_v2.py` prints, where the field card is 19 crops among 343 OFM. Their
+wrong-at-0.80 rate is also 3–5 times v1's. Averaging all four models gets 0.93 of crops right and 0.6% wrong
+at ≥ 0.80, but only 10 of the 19 field-card OFM. The field-card species are Claude's reading of the photos, so
+a wrong reading of that card would change this; v1 and that reading were made separately and agree.
+v1 retrained on the CUDA machine (`models/v1-cuda/`) gives the same tables as the Mac's to within a crop or two.
+
+**Detector on the same machine** (`models/yolo11/yolo11s-ppm12-cuda/`, 31 training photos with the finished
+OFM-liner labels, 7 val, the same 4 test photos, stopped at epoch 106). At its saved confidence (0.49) on the
+test photos: moth precision 0.79, recall 0.74; other insect 0.82, 0.54; debris 0 of 13. The Oct 7 run with
+half the labelled photos (`yolo11s-ppm12-blank`) had moth 0.77, 0.80 and other insect 0.86, 0.47. Four test
+photos cannot separate those: twice the labels did not visibly improve moth detection, and debris is still
+not found (225 training boxes).
 
 **OFM is the weak class on web photos.** There are 117 OFM web photos from 71 observations; the test
 split has 12 photos from 8 observations (96 trap-style copies). On those trap-style copies the Oct 7 head
-found 86% of OFM at precision 0.35 (0.32 for the Oct 2 head): most crops it calls OFM there are CM or
+found 89% of OFM at precision 0.32 (the same as the Oct 2 head): most crops it calls OFM there are CM or
 other moths.
 
 **Using the model in the server:** in `server/.env` set `SENTINEL_CLASSIFIER=bioclip-v1` and
@@ -209,6 +265,16 @@ learned, not that a new empty liner would be clean. It finds only 1 and 2 of the
 15–45 mm, far larger than anything it trained on, and say nothing about 6–14 mm moths. Still no target-size moth
 from the trap camera to test on.
 
+**Oct 8 2026, twice the labelled photos** (`models/yolo11/yolo11s-ppm12-cuda/`, data in `data/yolo-cuda/`, on an RTX
+3060 Ti): the same settings and the same 4 test photos (498 boxes), but 31 photos trained (2,888 boxes: 1,036 moth,
+1,627 other insect, 225 debris) + the same 150 blank tiles, 7 val; stopped at epoch 106 (patience 40). On the test
+photos: mAP50 0.51 over the three classes; moth 0.77, other insect 0.73, debris 0.03. At the settings chosen on val
+(confidence 0.49, NMS IoU 0.5): moth precision 0.79, recall 0.74 (Oct 7: 0.77, 0.80); other insect 0.82 and 0.54
+(0.86, 0.47); debris 0 of 13. On its own val photos moth scores 0.90, so the val-to-test drop is the same as before.
+Four test photos cannot tell the two runs apart; what they do show is that doubling the OFM-liner labels did not
+lift moth detection on the field cards and liners held out, and that 225 debris boxes are still not enough to
+find debris. Not yet run through the server on IMX219 photos.
+
 Other options, none used in a scored run yet: `--imgsz 800` enlarges the tiles for the network (modest gains
 for small insects elsewhere); `--one-insect-class` trains `insect` + `debris` instead of three classes (a generic
 insect detector found 80% of species it had never seen, and the classifier names them anyway; our `debris` class
@@ -220,7 +286,7 @@ Yolo-pest) would have cost us.
 
 Tiles overlap by at least the longest single moth (18 mm: 224 px at 12 px/mm; it was 160 px for the Oct 2 run),
 so every insect is whole in some tile. `--blank` adds blank-liner photos from the trap camera as tiles with no
-boxes: the grid, glare, walls and clips the detector must learn to leave alone. No run has used either yet.
+boxes: the grid, glare, walls and clips the detector must learn to leave alone. The Oct 7 and Oct 8 runs use both.
 
 The server can run a YOLO run: `SENTINEL_DETECTOR=yolo` with `SENTINEL_DETECTOR_MODEL=<run>/weights/best.pt`
 (`docs/server-on-mac.md`); the playground merges tiles the same way the server does. Oct 7 2026, the Oct 2 weights
@@ -246,7 +312,7 @@ done: [docs/ml-research-status.md](../docs/ml-research-status.md). What it chang
   `build_dataset.py` leaves out along with its trap-style copies. Oct 7 2026: 220 odd photos and 21 possible
   label errors of 13,564; leaving all 220 out did not change the real-liner score.
 - **`train_v2.py`** has RandAugment, mixed resolution, a warm-up epoch and label smoothing 0.1, and reports
-  the held-out real-liner test. Still not run.
+  the held-out real-liner test. Run Oct 8 2026 on three architectures (the CUDA runs, above): none replaces v1.
 
 Tried on the held-out liners and dropped (Oct 7 2026, numbers in the status page): a moth / non-moth gate
 before the species head, a head on the 15 fine labels, capping labels at 1,000 photos, leaving out spiders,
@@ -274,4 +340,4 @@ never to report accuracy. Accuracy numbers come from our own staged-card photos,
 |---|---|---|---|
 | v0 | baseline OpenCV → flatbug | none → BioCLIP 2 zero-shot | `server/sentinel_server/pipeline/` (`SENTINEL_DETECTOR`, `SENTINEL_CLASSIFIER`) |
 | v1 | flatbug | BioCLIP 2 features + logistic regression (`train_v1.py`); InsectNet / DINOv2 comparison still to do | `ml/train_v1.py` → `models/v1/head.npz`, server `SENTINEL_CLASSIFIER=bioclip-v1` |
-| v2 | fine-tuned flatbug or YOLO11 (YOLO11 trained once, playground only) | fine-tuned EfficientNet-B0 / MobileNetV3 (`train_v2.py`, from Patti's MobileNet script) vs v1; not yet trained | `models/yolo11/<run>/`, `models/v2/<arch>.pt` (server `SENTINEL_CLASSIFIER=cnn-v2`) |
+| v2 | fine-tuned flatbug or YOLO11 (YOLO11: three scored runs, the latest Oct 8 2026; playground and `SENTINEL_DETECTOR=yolo`) | fine-tuned EfficientNet-B0 / ConvNeXt-T / MobileNetV3-L (`train_v2.py`, from Patti's MobileNet script); trained Oct 8 2026, none beats v1 on OFM from a second camera | `models/yolo11/<run>/`, `models/v2/<arch>.pt` (server `SENTINEL_CLASSIFIER=cnn-v2`) |
