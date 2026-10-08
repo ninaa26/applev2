@@ -42,6 +42,11 @@ class Trap(Base):
     # Areas to ignore, as [x1, y1, x2, y2] fractions of the image (the lure spot).
     mask: Mapped[list] = mapped_column(JSON, default=lambda: [[0.45, 0.46, 0.55, 0.54]])
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    # "pi" uploads by itself; "esp32" is an ESP32 camera that uploads through hub_id's gateway
+    kind: Mapped[str] = mapped_column(String(16), default="pi", server_default="pi")
+    hub_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Taken out of the orchard from the dashboard: hidden, and its key stops working. Photos are kept.
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     cards: Mapped[list["Card"]] = relationship(back_populates="trap", order_by="Card.installed_at")
 
 

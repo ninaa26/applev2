@@ -49,7 +49,7 @@ def init_db() -> None:
 
 def _add_missing_columns() -> None:
     """create_all doesn't alter existing tables: add columns that newer code expects.
-    Only for columns with a server default, so old rows get a sensible value."""
+    Only for columns with a server default, so old rows get a sensible value, or nullable ones."""
     from sqlalchemy import inspect, text
 
     eng = engine()
@@ -60,10 +60,14 @@ def _add_missing_columns() -> None:
                 continue
             have = {c["name"] for c in insp.get_columns(table.name)}
             for col in table.columns:
-                if col.name not in have and col.server_default is not None:
-                    ddl = col.type.compile(eng.dialect)
+                if col.name in have:
+                    continue
+                ddl = col.type.compile(eng.dialect)
+                if col.server_default is not None:
                     conn.execute(text(f'ALTER TABLE {table.name} ADD COLUMN {col.name} {ddl} '
-                                      f"NOT NULL DEFAULT {col.server_default.arg}"))
+                                      f"NOT NULL DEFAULT '{col.server_default.arg}'"))
+                elif col.nullable:
+                    conn.execute(text(f"ALTER TABLE {table.name} ADD COLUMN {col.name} {ddl}"))
 
 
 @contextmanager

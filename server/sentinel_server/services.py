@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import secrets
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from . import phenology
@@ -23,6 +24,82 @@ def hash_key(key: str) -> str:
 
 def new_api_key() -> str:
     return secrets.token_urlsafe(24)
+
+
+TRAP_KINDS = {"pi": "Raspberry Pi", "esp32": "ESP32 camera"}
+
+
+def active_traps(db: Session) -> list[Trap]:
+    return list(db.scalars(select(Trap).where(Trap.retired_at.is_(None)).order_by(Trap.id)))
+
+
+def next_trap_id(db: Session) -> str:
+    """T1, T2, ...: one past the highest number in use, retired traps included (their ids stay taken)."""
+    nums = [int(t[1:]) for t in db.scalars(select(Trap.id)) if t[:1] == "T" and t[1:].isdigit()]
+    return f"T{max(nums, default=0) + 1}"
+
+
+def create_trap(db: Session, trap_id: str, name: str = "", block: str = "", lure: str = "CM",
+                kind: str = "pi", hub_id: str | None = None) -> str:
+    """Register a trap and return its API key (only its hash is stored, so this is the one chance to see it)."""
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,31}", trap_id):
+        raise ValueError("trap id: letters, digits, _ and - only (max 32)")
+    if db.get(Trap, trap_id) is not None:
+        raise ValueError(f"trap {trap_id} already exists")
+    if lure not in phenology.MODELS:
+        raise ValueError(f"unknown lure {lure!r}")
+    if kind not in TRAP_KINDS:
+        raise ValueError(f"unknown kind {kind!r}")
+    if kind == "esp32":
+        hub = db.get(Trap, hub_id or "")
+        if hub is None or hub.kind != "pi" or hub.retired_at is not None:
+            raise ValueError("an ESP32 camera needs a Raspberry Pi trap in the orchard as its hub")
+    key = new_api_key()
+    db.add(Trap(id=trap_id, name=name, block=block, lure=lure, kind=kind,
+                hub_id=hub_id if kind == "esp32" else None, api_key_hash=hash_key(key)))
+    db.flush()  # the trap row before the event that points at it
+    db.add(Event(trap_id=trap_id, kind="trap_added", payload={"note": f"{TRAP_KINDS[kind]}{f' via {hub_id}' if kind == 'esp32' else ''}"}))
+    db.flush()
+    return key
+
+
+def retire_trap(db: Session, trap: Trap) -> None:
+    trap.retired_at = utcnow()
+    db.add(Event(trap_id=trap.id, kind="trap_removed", payload={"note": trap.name}))
+
+
+def restore_trap(db: Session, trap: Trap) -> None:
+    trap.retired_at = None
+    db.add(Event(trap_id=trap.id, kind="trap_restored", payload={"note": trap.name}))
+
+
+def hub_nodes(db: Session, hub_id: str) -> dict[str, str]:
+    """ESP32 traps that upload through this hub: {trap_id: api_key_hash}."""
+    return {t.id: t.api_key_hash for t in db.scalars(select(Trap).where(
+        Trap.hub_id == hub_id, Trap.kind == "esp32", Trap.retired_at.is_(None)))}
+
+
+def orchard_summary(db: Session, traps: list[Trap]) -> dict:
+    """Totals over every trap in the orchard, for the top of the overview."""
+    week: Counter = Counter()
+    for t in traps:
+        week.update(week_counts(db, t.id))
+    daily: list[dict] = []
+    for t in traps:
+        for i, d in enumerate(daily_counts(db, t.id)):
+            if i == len(daily):
+                daily.append({"date": d["date"], "counts": Counter()})
+            daily[i]["counts"].update(d["counts"])
+    health = [trap_health(db, t)["state"] for t in traps]
+    day_ago = utcnow() - timedelta(days=1)
+    photos_24h = db.scalar(select(func.count(Capture.id)).where(
+        Capture.trap_id.in_([t.id for t in traps]), Capture.received_at >= day_ago)) if traps else 0
+    return {
+        "week": week, "daily": daily, "peak": max([sum(r["counts"].values()) for r in daily] + [1]),
+        "reporting": sum(s in ("online", "error") for s in health), "n_traps": len(traps),
+        "problems": sum(s in ("offline", "error") for s in health), "photos_24h": photos_24h,
+        "pending": len(pending_reviews(db)),
+    }
 
 
 def local_date(dt_utc: datetime) -> date:

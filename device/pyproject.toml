@@ -21,6 +21,7 @@ sentinel-focus-sweep = "sentinel_device.tools.focus_sweep:main"
 sentinel-flatfield = "sentinel_device.tools.flatfield:main"
 sentinel-camera-bench = "sentinel_device.tools.camera_bench:main"
 sentinel-camfeed = "sentinel_device.tools.camfeed:main"
+sentinel-gateway = "sentinel_device.gateway:main"
 
 [build-system]
 requires = ["setuptools>=68"]
