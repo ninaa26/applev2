@@ -289,6 +289,8 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     cfg = config_mod.load(args.config)
+    if not cfg["api_key"]:  # an empty or unreadable config would otherwise run as trap T0 against localhost
+        ap.error(f"{args.config or config_mod.DEFAULT_CONFIG_PATH} has no api_key: it needs the hub trap's trap_id, api_key and server_url")
     gw = Gateway(cfg, Path(cfg["data_dir"]))
     gw.refresh_nodes()
     server = make_server(gw, cfg["hub"]["listen"], cfg["hub"]["port"])

@@ -5,6 +5,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
 import requests
 
 from sentinel_device import config as config_mod, gateway, uploader
@@ -163,3 +164,12 @@ def test_cameras_added_and_removed_on_the_dashboard_reach_the_hub(tmp_path: Path
     sent = []
     monkeypatch.setattr(uploader, "upload_one", lambda url, key, image, t: sent.append(key) or {"config": {}})
     assert gw.forward() is None and sent == ["key4"]
+
+
+def test_standalone_gateway_refuses_a_config_without_a_key(tmp_path: Path, capsys):
+    empty = tmp_path / "config.toml"
+    empty.write_text("")
+    with pytest.raises(SystemExit) as e:
+        gateway.main(["--config", str(empty)])
+    assert e.value.code == 2
+    assert "has no api_key" in capsys.readouterr().err

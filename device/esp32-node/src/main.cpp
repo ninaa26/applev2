@@ -134,13 +134,19 @@ static bool connectWifi(int max_s) {
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);
   uint32_t until = millis() + max_s * 1000UL;
+  wl_status_t st = WL_IDLE_STATUS;
   while (millis() < until) {
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    for (int i = 0; i < 100 && WiFi.status() != WL_CONNECTED; i++) delay(100);
-    if (WiFi.status() == WL_CONNECTED) return true;
+    for (int i = 0; i < 100 && (st = WiFi.status()) != WL_CONNECTED; i++) delay(100);
+    if (st == WL_CONNECTED) {
+      Serial.printf("wifi %s ip %s rssi %d\n", WIFI_SSID, WiFi.localIP().toString().c_str(), WiFi.RSSI());
+      return true;
+    }
     WiFi.disconnect();
     delay(3000);  // the hub may still be booting
   }
+  // 1: SSID not seen, 4: refused (password, or a network that wants this MAC registered), 6: lost
+  Serial.printf("wifi %s failed status %d mac %s\n", WIFI_SSID, st, WiFi.macAddress().c_str());
   return false;
 }
 
@@ -179,8 +185,9 @@ static int post(const String &path, const char *method, File *body, const String
   return code;
 }
 
-// Upload the queue oldest first. Returns false if the hub stopped answering.
-static bool uploadQueue() {
+// Upload the queue oldest first. Returns 0 when it is empty, or the reply that stopped it
+// (401: the hub does not know this key; anything else: the hub is not answering yet).
+static int uploadQueue() {
   std::vector<String> names;
   File dir = LittleFS.open("/q");
   for (File f = dir.openNextFile(); f; f = dir.openNextFile()) if (String(f.name()).endsWith(".jpg")) names.push_back(f.name());
@@ -221,10 +228,10 @@ static bool uploadQueue() {
       if (code < 400) last_error[0] = 0;
     } else {
       if (code == 401) setError("hub does not know this trap's key");
-      return false;
+      return code == 0 ? -1 : code;
     }
   }
-  return true;
+  return 0;
 }
 
 // ------------------------------------------------------------------ sleep
@@ -266,8 +273,16 @@ void setup() {
 
   double real_margin = n_wakes ? 15 + 0.003 * 43200 : 0;  // as early as we might have woken
   int connect_s = std::min(CONNECT_MAX_S, CONNECT_MIN_S + (int)(2 * real_margin));
+  uint32_t until = millis() + connect_s * 1000UL;
   if (connectWifi(connect_s)) {
-    if (uploadQueue()) {
+    // The hub's Wi-Fi can be up before its gateway opens (it is still booting or photographing its
+    // own liner), so keep trying it for the rest of this wake's window.
+    int code = -1;
+    while ((code = uploadQueue()) != 0 && code != 401 && (int32_t)(until - millis()) > 5000) {
+      delay(5000);
+      if (WiFi.status() != WL_CONNECTED) connectWifi(std::max(10, (int)((int32_t)(until - millis()) / 1000)));
+    }
+    if (code == 0) {
       JsonDocument reply;
       String status;
       JsonDocument st;
@@ -275,6 +290,8 @@ void setup() {
       st["rssi"] = WiFi.RSSI();
       serializeJson(st, status);
       post("/node/v1/schedule", "GET", nullptr, status, reply);  // tells the hub this node is done
+    } else if (code != 401) {
+      setError("hub not answering");
     }
   } else {
     setError("hub not reachable");
