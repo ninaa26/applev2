@@ -7,7 +7,7 @@ and `hardware/CAMERAS.md`.
 
 ## Layout
 
-- `device/`: Raspberry Pi 5 package `sentinel_device` (capture, queue, upload, wake scheduling, bench tools)
+- `device/`: Raspberry Pi 5 package `sentinel_device` (capture, queue, upload, wake scheduling, bench tools, hub gateway for ESP32 traps); `device/esp32-node/` is the ESP32-S3 camera firmware (PlatformIO)
 - `server/`: FastAPI + SQLite package `sentinel_server` (upload API, detect/track/classify pipeline, dashboard, `evaluate`)
 - `ml/`: standalone scripts run from inside `ml/` (fetch, build dataset, label, train, score); no package
 - `hardware/`: trap dimensions, camera notes, printable parts
