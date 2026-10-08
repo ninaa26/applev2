@@ -33,9 +33,15 @@ What a normal wake looks like (format, not a recorded run):
 ```
 sentinel node T2 fw 0.1.0 wake=scheduled boots=14 synced=1
 captured /q/00000014-3f9a0c2e71b4d580 1600x1200 142311 bytes
+wifi sentinel-hub ip 10.42.0.23 rssi -64
 upload /q/00000014-3f9a0c2e71b4d580 -> 201
 sleeping 12480 s
 ```
+
+If the hub's Wi-Fi is up but its gateway is not open yet (`upload ... -> -1`), the node tries again every
+5 s until the end of its connect window (2–5 min), then sleeps. `wifi ... failed status N mac ...`:
+1 means the network was not seen, 4 that it refused the node (the password, or a network that wants
+the MAC registered).
 
 `ERROR camera not found`: the ribbon cable is loose or upside down, or the camera's pins differ from
 `node_config.h`. `ERROR hub not reachable`: out of range, the wrong Wi-Fi password, or the hub was not

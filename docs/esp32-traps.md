@@ -97,19 +97,33 @@ bench hub that has no server to ask.
 
 ## Bench test without the orchard
 
-The gateway runs on a Mac too. Put the Mac and the ESP32 on the same Wi-Fi, set `HUB_URL` to
+**Hub Pi and ESP32 on the same Wi-Fi (done Oct 8 2026 on RedRover).** No access point is needed if the
+Pi and the ESP32 join one network that lets devices reach each other. Cornell's RedRover does: it took
+the ESP32 without registering its MAC, and routes between its /16s (the Pi was on 10.49.x, the Mac on
+10.50.x). In `node_config.h` set `WIFI_SSID "RedRover"`, `WIFI_PASSWORD ""` and `HUB_URL` to the
+Pi's address on that network (`ip -4 -br addr` on the Pi). That address comes from DHCP and can change,
+so check it before a test. On the Pi, run the gateway from its own folder with a bench config
+(`trap_id`, `api_key`, `server_url`, a writable `data_dir`, `[hub] enabled = true`):
+`sentinel-gateway --config bench-hub.toml --forward-every 20`. The server can be a Mac on Tailscale.
+
+**Hub on a Mac.** The gateway runs on a Mac too. Put the Mac and the ESP32 on the same Wi-Fi, set `HUB_URL` to
 `http://<mac's address>:8080`, and give the Mac a config with `data_dir` somewhere writable,
 `server_url = "http://localhost:8000"`, the hub trap's `trap_id` and `api_key`, and `[hub] enabled = true`,
 then run `sentinel-gateway --config that.toml --forward-every 30` beside `sentinel-server serve`.
 
 ## Status (Oct 8 2026)
 
+- Bench run on real Wi-Fi (Oct 8 2026): the ESP32-S3 (OV3660) on RedRover at -52 dBm, the gateway on
+  the bench Pi (sentinel-t1), and a scratch `sentinel-server` on the Mac over Tailscale. Five photos
+  queued on the ESP32 from earlier failed tries went up oldest first, the Pi forwarded them with
+  T2's key, and they were on the server within a second. The node got its schedule and slept until
+  the next slot plus `node_offset_s`.
 - Built and tested: the gateway and the hub cycle (`device/tests/test_gateway.py`), adding and removing
   cameras on the dashboard (`server/tests/test_manage.py`), and on this Mac: a camera added on the
   dashboard, picked up by a real `sentinel-gateway`, a photo posted the way the firmware does with its
   key, and on its trap page seconds later. The node firmware compiles. The camera check found the board's pins (ESP32-S3-EYE / Freenove layout) and an OV3660,
   and took 1600×1200 photos over USB.
-- Not yet done: the node on real Wi-Fi with a hub, drift correction over real sleeps, range in the
+- Not yet done: the node on the hub's own access point, drift correction over real sleeps, range in the
   orchard, and the ESP32's deep-sleep current (dev boards have a power LED and USB chip that draw
   power even while the ESP32 sleeps).
 - ESP32 photos get no white-card correction (`flatfield.npz` is done on the Pi), so they reach the
