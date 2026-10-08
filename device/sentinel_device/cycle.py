@@ -13,12 +13,14 @@ import logging
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 
 from . import __version__, config as config_mod, hardware
 from .camera import make_camera
+from .gateway import Gateway, serve_window
 from .schedule import next_wake, wake_reason
 from .state import State
 from .uploader import Queue, drain
@@ -66,6 +68,7 @@ def capture_once(cfg: dict, data_dir: Path, reason: str, state: State, new_card:
 # The systemd unit kills the cycle after 300 s (15 s of it waiting for Wi-Fi). A killed cycle never
 # sets the wake alarm or powers off, so uploads stop starting after this many seconds of the cycle.
 UPLOAD_BUDGET_S = 180
+# A hub also stays open this long for its ESP32 traps ([hub] window_s), so the unit allows 600 s.
 
 
 def _schedule(cfgs: list[dict]) -> tuple[datetime, bool]:
@@ -104,6 +107,18 @@ def run(cfg_path: Path | None, halt: bool | None, capture: bool = True, new_card
         new_card = new_card or (reason == "manual" and cfg["schedule"].get("manual_wake_is_new_card", False))
         log.info("wake (%s), trap %s, sw %s%s", reason, cfg["trap_id"], __version__, ", NEW CARD" if new_card else "")
 
+        # A hub takes its ESP32 traps' photos while it photographs its own liner.
+        gateway, window, budget = None, None, UPLOAD_BUDGET_S
+        if cfg["hub"]["enabled"]:
+            try:
+                gateway = Gateway(cfg, data_dir)
+                budget += cfg["hub"]["window_s"]
+                window = threading.Thread(target=serve_window, args=(gateway, started + cfg["hub"]["window_s"]), daemon=True)
+                window.start()
+            except Exception as e:
+                error = f"hub failed: {e.__class__.__name__}: {e}"
+                log.exception(error)
+
         if capture:
             try:
                 path = capture_once(cfg, data_dir, reason, state, new_card, source)
@@ -112,13 +127,18 @@ def run(cfg_path: Path | None, halt: bool | None, capture: bool = True, new_card
                 error = f"capture failed: {e.__class__.__name__}: {e}"
                 log.exception(error)
 
+        if window is not None:
+            window.join()
+
         queue = Queue(data_dir)
         uploaded, reply, up_err = drain(
             queue, cfg["server_url"], cfg["api_key"], cfg["upload"]["timeout_s"], cfg["upload"]["max_per_cycle"],
-            deadline=started + UPLOAD_BUDGET_S,
+            deadline=started + budget,
         )
         log.info("uploaded %d, %d still queued", uploaded, len(queue.pending()))
         error = error or up_err
+        if gateway is not None:
+            error = error or gateway.forward(deadline=started + budget)
         if reply and isinstance(reply.get("config"), dict):
             state.set("remote_config", reply["config"])
             cfg = config_mod.load(cfg_path, remote=reply["config"])

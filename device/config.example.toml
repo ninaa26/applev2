@@ -50,3 +50,17 @@ ina219_shunt_ohms = 0.1
 [upload]
 timeout_s = 30
 max_per_cycle = 20         # drain at most this many queued photos per wake
+
+[hub]
+# This Pi as the hub for ESP32 camera traps in Wi-Fi range (docs/esp32-traps.md). Each wake it stays up
+# to window_s seconds taking their photos (less once every node has checked in), then uploads them
+# with each trap's own key.
+enabled = false
+port = 8080
+window_s = 240             # the systemd unit allows 600 s for the whole cycle
+node_offset_s = 60         # nodes wake this long after the hub's slot, once it has booted
+
+# Which ESP32 traps use this hub comes from the server (dashboard → Set up traps). Only a hub with no
+# server to ask (bench) needs them listed here, with the key the dashboard showed:
+# [hub.nodes.T2]
+# api_key = "paste-T2's-key"

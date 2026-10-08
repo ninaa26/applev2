@@ -18,9 +18,10 @@ import requests
 
 log = logging.getLogger(__name__)
 
-# Replies meaning "this photo or its metadata is bad": it will never be accepted, so park it.
+# Replies meaning "this photo or its metadata is bad", or 410 "this trap was removed on the dashboard":
+# it will never be accepted, so park it.
 # Anything else (401 wrong key, 404 wrong URL, 5xx) is a setup or server problem: keep it queued.
-PARK_STATUSES = {400, 413, 415, 422}
+PARK_STATUSES = {400, 410, 413, 415, 422}
 
 
 class Queue:

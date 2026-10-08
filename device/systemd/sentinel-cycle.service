@@ -10,8 +10,9 @@ User=sentinel
 ExecStartPre=/bin/sleep 15
 ExecStart=/opt/sentinel/venv/bin/sentinel-cycle --config /etc/sentinel/config.toml
 # Backstop for a hung cycle. A killed cycle sets no wake alarm and doesn't power off, so the cycle
-# stops starting uploads after UPLOAD_BUDGET_S (cycle.py) to finish well inside this.
-TimeoutStartSec=300
+# stops starting uploads after UPLOAD_BUDGET_S (cycle.py), plus [hub] window_s on a hub, to finish
+# well inside this.
+TimeoutStartSec=600
 
 [Install]
 WantedBy=multi-user.target
