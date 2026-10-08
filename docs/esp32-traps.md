@@ -26,6 +26,9 @@ ESP32 trap T4 ─┘  POST photo, GET schedule   gateway.py: queue per trap,   /
   next, then deep-sleeps. A photo stays on the ESP32 until the hub has it, so a missed window costs
   nothing but delay. The queue has 5.9 MB of flash, room for roughly 40–60 UXGA photos; when it is full the oldest go first.
 
+Which camera module to put on the ESP32 (OV3660 for bring-up, OV5640 wide-angle to buy):
+[hardware/CAMERAS.md](../hardware/CAMERAS.md).
+
 ## Timing
 
 The hub wakes on its schedule (`[schedule] times`). Nodes aim for `node_offset_s` (60 s) after each
