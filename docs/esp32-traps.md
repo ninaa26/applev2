@@ -106,8 +106,7 @@ so check it before a test. On the Pi, run the gateway from its own folder with a
 (`trap_id`, `api_key`, `server_url`, a writable `data_dir`, `[hub] enabled = true`):
 `sentinel-gateway --config bench-hub.toml --forward-every 20`. The server can be a Mac on Tailscale.
 
-**Hub on a Mac.**
-The gateway runs on a Mac too. Put the Mac and the ESP32 on the same Wi-Fi, set `HUB_URL` to
+**Hub on a Mac.** The gateway runs on a Mac too. Put the Mac and the ESP32 on the same Wi-Fi, set `HUB_URL` to
 `http://<mac's address>:8080`, and give the Mac a config with `data_dir` somewhere writable,
 `server_url = "http://localhost:8000"`, the hub trap's `trap_id` and `api_key`, and `[hub] enabled = true`,
 then run `sentinel-gateway --config that.toml --forward-every 30` beside `sentinel-server serve`.
