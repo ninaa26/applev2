@@ -1,7 +1,7 @@
 # Insect-ML research: what we did with each finding
 
 Status of every item in "Moth Monitoring Machine Learning (Data, Classification, Evaluation)" (Oct 6 2026)
-against this repo, as of Oct 7 2026. Start with what could **not** be done; the full item-by-item list follows.
+against this repo, as of Oct 8 2026. Start with what could **not** be done; the full item-by-item list follows.
 The imaging, detection and counting notes are in [cv-research-status.md](cv-research-status.md).
 
 Words used: **Done** = changed in code or docs on Oct 6–7 2026 and tested. **Had** = already how the repo
@@ -11,17 +11,18 @@ about light traps, other hardware or other pests. **Open n** = see the first two
 Every "tested" number is the v1 species head (BioCLIP 2 features + linear head) on other people's liner photos,
 on liners no head trained on (`ml/eval_liner_species.py`, 15 px/mm unless said): 162 OFM, 87 other insects,
 4 debris from OFM trap-camera liners and 37 CM from phone photos of CM cards. The species is the uploader's
-claim and the camera is not ours, so they choose between options; they are not trap accuracy.
+claim and the camera is not ours, so they choose between options; they are not trap accuracy. The v2 rows
+(Oct 8 2026) are fine-tuned CNNs on the later, larger held-out set (785 crops, field cards included), next to v1 on the same crops.
 
 ## Could not be done here
 
 | # | Item | Why not | What would settle it |
 |---|---|---|---|
 | 1 | Training and testing on our own trap, across a season, with decayed moths and crowded liners | `ml/data/own/` does not exist: the server holds 6 webcam photos and no reviews. Everything "real" in training is other people's liners | Run the trap, review on the dashboard, `export_server_crops.py`, lock test cards, `train_v1.py --final` |
-| 2 | Species truth for OBLR and look-alikes on glue | Real-liner crops exist for OFM (one set), CM (one set, plus 24 hand-boxed from two other photos) and potato tuber moth as a non-target (one set), nothing for OBLR or any tortricid look-alike; the 94 field-card moths have no species (pass 2 not started). The held-out test cannot say whether the head tells OFM from lesser appleworm, or OBLR from anything | Pass 2 on the field cards by a trained eye |
+| 2 | Species checked by someone who knows the moths | Real-liner species now covers all three targets, but from an uploader's claim (OFM liners, CM cards, potato tuber moth) or from Claude reading the field-card photos on Oct 7 2026 (`ml/data/field/species.csv`: 35 OBLR, 20 OFM, 13 CM, 24 left unsure). A head that never saw those cards agrees on 42 of 43 held-out moths, which is two readings, not a check. No look-alike tortricid on glue except one lesser appleworm | A trained eye over `ml/data/field/claude_sheets/` and `species.csv` |
 | 3 | The species that really land in each lure's trap here | The papers' look-alike lists are European or for other pests (*Synanthedon myopaeformis*, *Cacoecimorpha pronubana*, *Mythimna*). I have not put names in the fetch scripts from memory; the right list is whatever pass 2 finds on the Geneva field cards, checked with an entomologist | Pass 2, then add the species to `fetch_inat.py` as `lookalike_*` |
 | 4 | OFM against lesser appleworm at trap resolution | With lesser appleworm in training, 39 of 132 trap-style lesser appleworm copies are still called OFM (1% at ≥ 0.80; the rest go to review). No real-liner lesser appleworm to check against. The file `OFM and LAW.jpg` among the field cards has 2 moths | Pass 2; if they stay inseparable at 15 px/mm, review every OFM near the biofix (now flagged, see below) |
-| 5 | Fine-tuned CNN (v2) and every architecture comparison: EfficientNet, MobileNet, ConvNeXt, ViT, a small custom CNN, 128 vs 224 px input | A run is about an hour on the Mac's GPU and a YOLO run was using it. `train_v2.py` has the augmentation and reports the held-out real-liner test, so one command per architecture gives the comparison | `train_v2.py`, then `--arch mobilenet_v3_large`, then `--size 128`; compare the "real liners" table with v1's |
+| 5 | 128 vs 224 px input, and a small custom CNN | The architecture comparison itself was run on Oct 8 2026 (EfficientNet-B0, ConvNeXt-T, MobileNetV3-L on an RTX 3060 Ti): none beats the BioCLIP 2 linear head, and all three fail OFM from a second camera (3–6 of 19 against 18), see `ml/README.md`. Input size and a from-scratch CNN were not tried: with every OFM from one camera they would fail the same way | A second source of OFM first |
 | 6 | Intermediate pre-training on a pest dataset (COCO → IP102 → ours) | Detector-side, needs the IP102 download and GPU hours, and with 25 labelled photos the labels are the limit, not the starting weights (rule in `.claude/rules/ml.md`) | After the OFM liners are fully labelled and a YOLO run is scored |
 | 7 | Attention module on the detector (CBAM) | Same reason: an architecture change before the data is fixed | Same |
 | 8 | Trap-style training photos on the trap camera's own liner | The blank IMX219 liner photos predate the LED move ([cv-research-status.md](cv-research-status.md), item 3) | Recalibrate, photograph a blank liner, re-run `make_trap_style.py`, `build_dataset.py`, `train_v1.py` |
@@ -53,16 +54,16 @@ claim and the camera is not ours, so they choose between options; they are not t
 
 | Finding | Status | What we do |
 |---|---|---|
-| RandAugment + mixed resolution (trap accuracy 51.5% → 71.9%) | Done / Open 5 | `train_v2.py`: RandAugment and `MixRes` (half the photos shrunk to a 48–160 px crop and enlarged back). v1's features are frozen, so its version is the 5–16 px/mm trap-style set and real-liner crops at two resolutions |
+| RandAugment + mixed resolution (trap accuracy 51.5% → 71.9%) | Done / Tested, v1 kept | `train_v2.py`: RandAugment and `MixRes` (half the photos shrunk to a 48–160 px crop and enlarged back). v1's features are frozen, so its version is the 5–16 px/mm trap-style set and real-liner crops at two resolutions. Oct 8 2026: EfficientNet-B0, ConvNeXt-T and MobileNetV3-L trained with it match v1 overall on the 785 held-out real-liner crops but find 3–6 of 19 OFM on the held-out field card (v1 18), so v1 stays |
 | Black padding of crops at inference | Tested, kept ours | AMI padded to avoid stretching a non-square crop. Ours is already a square cut from the photo with liner around the insect, the same framing as the training crops. Same head, held-out OFM liners: our crop finds 0.94 of OFM and 0.80 of other insects; a tight box padded black 0.82 and 0.64; a tight box stretched to square 0.62 and 0.52, with 11% auto-and-wrong. So AMI's point holds (pad, never stretch) and the context crop is better still for a head trained on context crops |
 | Mixing target-domain data into training (5% → +13–15 pts) | Done | `liner_crops.py`: 1,611 real-liner crops, 6% of training, now with 881 real non-target moths (potato tuber moth liners): without them the head called 71 of 97 unseen non-target moths OFM, with them 3. Numbers for the first step: OFM found 0.43 → 0.96, counted automatically as something else 0.19 → 0.00; CM 0.89 → 0.89 (10 px/mm). Cost: other insects found 0.97 → 0.80, the rest mostly called OFM below 0.80 |
 | Foundation-model prior (BioCLIP 2) | Had | v1 |
 | Distilling BioCLIP 2 into a small net | Not ours | Species ID runs on the server, not the Pi |
 | GBIF / iNaturalist transfer learning | Had | 13,564 web photos; alone they find 3% of real OFM, so never alone |
 | Regional models + per-species cap (1,000) | Had / Tested, dropped | Look-alikes and bycatch are NY-only. Capping every label at 1,000: OFM 0.94, CM 0.95, others the same, val slightly worse (0.732 vs 0.744). Class weights already balance; no cap |
-| Label smoothing, AdamW + cosine warm-up | Done / Open 5 | `train_v2.py`: smoothing 0.1, one warm-up epoch |
+| Label smoothing, AdamW + cosine warm-up | Done / Tested, v1 kept | `train_v2.py`: smoothing 0.1, one warm-up epoch; same Oct 8 runs |
 | Separate moth / non-moth filter | Tested, dropped | A moth / other insect / debris head first, then species among moths: OFM found 0.74 (from 0.95), CM 0.84 (from 0.89), auto-and-wrong 1.7% (from 0.6%). One head does better; "called a moth" is in every table of `eval_liner_species.py` |
-| ConvNeXt-B / ViT-B/16 | Open 5 | |
+| ConvNeXt-B / ViT-B/16 | Tested (ConvNeXt-T), dropped | Oct 8 2026, ConvNeXt-T fine-tuned: 0.87 of held-out real-liner crops right (v1 0.89), 6 of 19 field-card OFM (v1 18), 6.6% wrong at ≥ 0.80 (v1 1.3%). ViT-B/16 not tried: same single-camera OFM problem |
 | Small custom CNN with heavy augmentation on tiny data | Open 5 | Their comparison was against large nets trained end to end; a frozen foundation backbone is the other answer to tiny data and is what v1 is |
 | Attention module on a lightweight detector | Open 7 | |
 | Hierarchical transfer COCO → IP102 → target | Open 6 | |
@@ -80,7 +81,7 @@ claim and the camera is not ours, so they choose between options; they are not t
 | Training only on GBIF / iNaturalist / museum photos | Done | Trap-style copies (had) and real-liner crops (new). Measured here: web photos alone 3% of real OFM, with trap-style 43%, with real-liner crops 96% |
 | Raising input resolution because web accuracy rises | Done / Open 5 | BioCLIP is fixed at 224 and our crops are 110–260 px. Note in `train_v2.py` to compare `--size 128` on real liners. Recall by crop size is now in the report: OFM 13/15 under 80 px, 281/292 at 80–180 px |
 | ConvNeXt with no prior and no trap data | Had | v1 has both |
-| Large pretrained nets fine-tuned on ~2,000 images | Had / Open 5 | v1 trains 4,600 weights on frozen features. v2 fine-tunes on 27,000 photos with heavy augmentation and is not trusted until it beats v1 on real liners |
+| Large pretrained nets fine-tuned on ~2,000 images | Had / Tested, dropped | v1 trains 4,600 weights on frozen features. v2 fine-tunes on 27,000 photos with heavy augmentation; Oct 8 2026 it did not beat v1: all three CNNs learnt the one trap camera that every training OFM came from (3–6 of 19 OFM from a second camera, v1 18) |
 | Forcing a species label on everything | Done | Statuses auto / review / unknown were there; the temperature makes them mean something; the biofix now shows when it rests on unconfirmed catches. Unseen look-alike test below |
 | Complex open-set methods | Had | None used |
 | Generic outlier data | Had | None used |
@@ -125,7 +126,7 @@ claim and the camera is not ours, so they choose between options; they are not t
 | 8 | Pool visually different taxa, or add unrelated groups, without checking | Tested both ways, kept |
 | 9 | Start with complex open-set methods | Had |
 | 10 | Use generic outlier datasets | Had |
-| 11 | Swap architectures before fixing data and augmentation | Done: data first (0.43 → 0.96 from data alone); Open 5 comes after |
+| 11 | Swap architectures before fixing data and augmentation | Done: data first (0.43 → 0.96 from data alone); three architectures compared after, Oct 8 2026, none better than v1 |
 | 12 | Skip human verification for first-of-season or high-stakes detections | Done: provisional biofix. Needs your decision on which date runs the clock |
 | 13 | Ship AGPL YOLO in a closed product | Done: noted |
 | 14 | Treat vendor accuracy claims as validated | Open 17 |
@@ -153,8 +154,8 @@ Darwin Core / Camtrap DP (Open 16). The one idea carried over is BioCLIP 2 restr
 | Define classes; merge cryptic species | Had / Open 4 |
 | Cleaned web data + own trap crops across a season; cap per species | Done (cleaning list, real-liner crops; cap tested and dropped) / Open 1, 12 |
 | Split by night, trap, site; hold out an expert-labelled trap test set | Had / Open 2 |
-| Start from a strong prior; compare a small CNN if data is tiny | Had / Open 5 |
-| ~128 px, RandAugment + mixed resolution, label smoothing | Done in `train_v2.py` / Open 5 |
+| Start from a strong prior; compare a small CNN if data is tiny | Had / Tested (three fine-tuned CNNs, v1 kept) / Open 5 (small CNN) |
+| ~128 px, RandAugment + mixed resolution, label smoothing | Done in `train_v2.py`, run Oct 8 2026 at 224 px / Open 5 (128 px) |
 | Mix in 5–50% trap-domain data; distil for the edge | Done at 4% / Not ours |
 | Moth gate and softmax / temperature rejection, thresholds tuned on trap data | Done (temperature and C on real-liner val; gate tested and dropped) |
 | Fall back below the confidence threshold | Done (review, provisional biofix) |
@@ -167,4 +168,5 @@ Darwin Core / Camtrap DP (Open 16). The one idea carried over is BioCLIP 2 restr
 
 Two-stage moth gate; head on 15 fine labels; capping labels at 1,000; removing spiders; removing AMI photos;
 removing the 220 odd web photos; a temperature fitted on web photos; zero-shot life-stage filtering;
-black-padded tight crops at inference.
+black-padded tight crops at inference; fine-tuned CNNs (EfficientNet-B0, ConvNeXt-T, MobileNetV3-L) in place of
+v1, until there is OFM on glue from a second camera.

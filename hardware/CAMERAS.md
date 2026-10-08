@@ -65,6 +65,42 @@ grid: roughly 15 px/mm in the centre and 10–11 px/mm at the edges (not yet ben
 | ArduCAM Mini UC-474 | 2 or 5 MP, SPI | No: not a camera-port device |
 | OV7670/OV7725 board; OmniVision module on a UC-260 adapter | Parallel-pin microcontroller cameras | No |
 
+## ESP32 trap camera: Freenove ESP32-S3-WROOM CAM + OV5640
+
+An ESP32 build of the trap, for lower sleep power than the Pi. The board only takes, uploads and
+schedules the photo; detection and species ID stay on the server, as with the Pi. The `device/`
+package does not run on it: the capture and upload code has to be written as ESP32 firmware.
+
+- Board: Freenove ESP32-S3-WROOM CAM (FNK0085). 24-pin DVP camera socket, `esp32-camera` driver.
+  A 5 MP frame needs 8 MB PSRAM: check the module label reads N8R8 or N16R8. The team's other
+  Freenove board ("v1.2", probably the original ESP32-WROVER) is not for the trap camera.
+- **For now: the board's own OV3660** (3 MP, 2048 × 1536). Its stock lens is narrow (roughly 66°,
+  not measured): from 110 mm it sees only about the middle 115 × 85 mm of the card, at roughly
+  18 px/mm. Use it to bring up mounting, lighting, firmware and upload, not to count a whole card.
+- **To replace it: an OV5640** (5 MP, 2592 × 1944, 1.4 µm pixels, on-chip JPEG), 24-pin 0.5 mm DVP,
+  fixed focus, ordinary IR-cut lens (not 850 nm / night vision, not autofocus: the AF lenses see
+  only ~70°). Buy two, the 130° and the 160°, from the
+  [Taidacent listing](https://www.amazon.com/Taidacent-Degree-ESP32-CAM-OV5640-Camera/dp/B09NVRCFN1),
+  choosing the longer ribbon:
+
+  | Lens (diagonal) | Effective focal length | Whole card from 110 mm? | px/mm, centre / edges |
+  |---|---|---|---|
+  | **130°** (first choice) | ~2.0 mm | Yes, ~2 mm to spare per side; raise to ~115 mm if it clips | ~13 / ~8–11 |
+  | 160° (backup) | ~1.6 mm | Yes, with room to spare | ~10 / ~7 |
+  | 120° (not ordered) | ~2.2 mm | Probably clips 5–10 mm off the long edges | ~14 / ~9 |
+
+  Estimated (2026-10-08) from the sensor size and the listed angles, assuming a fisheye
+  (equidistant) lens with the sensor's long side along the card's 198 mm side; cheap listings round
+  their angles, so none of this is measured. For comparison the UC-572 above (similar sensor size,
+  ~1.9 mm) sees the whole card at 15.3 px/mm. Either OV5640 lens is below the 15 px/mm target:
+  enough to count, but OFM against look-alikes at the edges may suffer.
+- When the OV5640s arrive: compare each ribbon's pin order with the OV3660's before plugging in,
+  focus the lens to 11 cm by turning it out and glue it, then take one full-resolution photo of
+  the grid card per lens and check all four corners are in frame and read px/mm off the 25 mm grid.
+  Keep the 130° if it covers the card.
+- The camera's JPEG output and its limited exposure and colour control mean the white-card
+  correction would be applied on the server, to JPEGs.
+
 ## What a trap camera needs
 
 | | Need |

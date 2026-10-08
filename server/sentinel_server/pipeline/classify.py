@@ -119,6 +119,7 @@ class FineTunedCNN:  # pragma: no cover - needs torch + torchvision
         m.load_state_dict(ck["state_dict"])
         self.device = "mps" if torch.backends.mps.is_available() else "cpu"
         self.model = m.to(self.device).eval()
+        self.T = float(ck.get("T", 1.0))  # temperature fitted on real-liner val crops by train_v2.py
         size = ck["size"]
         self.preprocess = transforms.Compose([transforms.Resize((size, size)), transforms.ToTensor(),
                                               transforms.Normalize(ck["mean"], ck["std"])])
@@ -130,7 +131,7 @@ class FineTunedCNN:  # pragma: no cover - needs torch + torchvision
         torch = self.torch
         with torch.no_grad():
             x = torch.stack([self.preprocess(c.convert("RGB")) for c in crops]).to(self.device)
-            p = self.model(x).softmax(dim=-1).cpu().numpy()
+            p = (self.model(x) / self.T).softmax(dim=-1).cpu().numpy()
         return [{s: float(row[self.classes.index(s)]) if s in self.classes else 0.0 for s in SPECIES} for row in p]
 
 

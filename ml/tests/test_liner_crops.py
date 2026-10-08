@@ -34,6 +34,26 @@ class LinerCrops(unittest.TestCase):
             got = liner_crops.ofm_liner_rows(Path(tmp))
         self.assertEqual([(r["label"], r["group"]) for r in got], [("OFM", "day1"), ("other_insect", "day1"), ("CM", "day1")])
 
+    def test_field_card_species_from_pass_2_or_the_species_file_and_held_out_cards(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            field = Path(tmp)
+            rows = [("PXL_20250617_1.jpg", "1", "moth"), ("PXL_20250617_1.jpg", "2", "moth"),   # 2: nobody named it
+                    ("PXL_20250617_1.jpg", "3", "CM"),                                          # pass 2 in labels.csv
+                    ("PXL_20250617_1.jpg", "4", "other_insect"), ("card_T.jpg", "1", "moth"),
+                    ("PXL_20250422_174434151.RAW.jpg", "1", "moth")]
+            with open(field / "labels.csv", "w", newline="") as f:
+                w = csv.DictWriter(f, fieldnames=FIELDS, restval="")
+                w.writeheader()
+                w.writerows({"photo": p, "n": n, "label": lab, "crop": f"{p}_{n}.jpg", "ppm": "40", "length_mm": "9"}
+                            for p, n, lab in rows)
+            (field / "species.csv").write_text("photo,n,species,by,note\nPXL_20250617_1.jpg,1,OBLR,claude,\n"
+                                               "PXL_20250617_1.jpg,2,,claude,unsure\ncard_T.jpg,1,CM,claude,\n"
+                                               "PXL_20250422_174434151.RAW.jpg,1,OFM,claude,\n")
+            (field / "test_cards.txt").write_text("# held out\ncard_T.jpg\n")
+            got = liner_crops.field_card_rows(field)
+        self.assertEqual([(r["label"], r["held_out"]) for r in got],
+                         [("OBLR", False), ("CM", False), ("CM", True), ("OFM", True)])
+
     def test_only_resolutions_the_photo_can_give(self):
         self.assertEqual(liner_crops.resolutions(26.0, [15.0, 10.0]), [15.0, 10.0])
         self.assertEqual(liner_crops.resolutions(10.3, [15.0, 10.0]), [10.0])
