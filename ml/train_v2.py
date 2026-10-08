@@ -2,6 +2,7 @@
 
     python train_v2.py                              # EfficientNet-B0, 8 epochs
     python train_v2.py --arch mobilenet_v3_large    # smaller/faster, a candidate for running on the Pi
+    python train_v2.py --arch convnext_tiny --epochs 20 --batch 64   # on a CUDA machine (RUN_ON_CUDA.md)
     python train_v2.py --final                      # also report on our locked test cards (once, at the end)
 
 Grew out of Patti's MobileNetV3 script (CM vs not-CM on an ImageFolder, repo root "Patti's code"):
@@ -18,6 +19,11 @@ AMI classifiers. --size stays 224: a trap crop is 110-260 px here (10-15 px/mm, 
 going from 128 to 224 helped web photos but cost 3.5 points on trap crops, so compare --size 128 on
 real-liner crops (eval_liner_species.py) before trusting the web-photo score.
 
+The epoch kept is the one that does best on the real-liner val crops when the dataset has them (source "liner"
+or "own"), else on all of val, and a temperature fitted on the same crops is saved with the weights, as
+train_v1.py does for the linear head: the web-photo val score says little about a liner. On CUDA the
+forward pass runs in mixed precision.
+
 Reports use the same format as train_v1.py, with web photos and trap-style photos
 (make_trap_style.py) scored separately. Writes models/v2/<arch>.pt (weights, classes, arch,
 image size), metrics.json and report.md.
@@ -33,9 +39,9 @@ from pathlib import Path
 
 import numpy as np
 
-from train_v1 import format_report, load_rows, report
+from train_v1 import REAL, fit_temperature, format_report, load_rows, report
 
-ARCHS = ("efficientnet_b0", "mobilenet_v3_large", "mobilenet_v3_small")
+ARCHS = ("efficientnet_b0", "mobilenet_v3_large", "mobilenet_v3_small", "convnext_tiny")
 MEAN, STD = [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]
 
 
@@ -52,6 +58,9 @@ def build_model(arch: str, n_classes: int):
     elif arch == "mobilenet_v3_small":
         m = models.mobilenet_v3_small(weights=models.MobileNet_V3_Small_Weights.DEFAULT)
         m.classifier[3] = nn.Linear(m.classifier[3].in_features, n_classes)
+    elif arch == "convnext_tiny":
+        m = models.convnext_tiny(weights=models.ConvNeXt_Tiny_Weights.DEFAULT)
+        m.classifier[2] = nn.Linear(m.classifier[2].in_features, n_classes)
     else:
         raise ValueError(arch)
     return m
@@ -159,6 +168,7 @@ def main(argv=None) -> int:
 
     train_items = items(lambda r: r["split"] == "train")
     evals = {"val": items(lambda r: r["split"] == "val"),
+             "val · real liners": items(lambda r: r["split"] == "val" and r["source"] in REAL),
              "test · web photos": items(lambda r: r["split"] == "test" and r["source"] in ("inat", "ami")),
              "test · trap-style": items(lambda r: r["split"] == "test" and r["source"] == "synth"),
              "test · real liners (held out)": items(lambda r: r["split"] == "test" and r["source"] == "liner")}
@@ -185,39 +195,45 @@ def main(argv=None) -> int:
         torch.optim.lr_scheduler.LinearLR(opt, start_factor=0.05, total_iters=warm),
         torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=max(1, steps - warm))])
     loss_fn = torch.nn.CrossEntropyLoss(label_smoothing=0.1)
+    amp = device.startswith("cuda")
+    scaler = torch.amp.GradScaler("cuda", enabled=amp)
+    tune = "val · real liners" if len(evals.get("val · real liners", [])) >= 50 else "val"
 
-    best, best_state = -1.0, None
+    best, best_state, T = -1.0, None, 1.0
     for epoch in range(1, args.epochs + 1):
         model.train()
         t0, total, n = time.time(), 0.0, 0
         for x, y in train_loader:
             x, y = x.to(device), y.to(device)
             opt.zero_grad()
-            loss = loss_fn(model(x), y)
-            loss.backward()
-            opt.step()
+            with torch.autocast("cuda", enabled=amp):
+                loss = loss_fn(model(x), y)
+            scaler.scale(loss).backward()
+            scaler.step(opt)
+            scaler.update()
             sched.step()
             total, n = total + loss.item() * len(y), n + len(y)
-        val = report(y_eval["val"], predict(model, eval_loaders["val"], device).argmax(1), classes)
-        print(f"epoch {epoch}/{args.epochs}  loss {total / n:.3f}  val balanced acc {val['balanced_accuracy']:.3f}"
+        logits = predict(model, eval_loaders[tune], device)
+        val = report(y_eval[tune], logits.argmax(1), classes)
+        print(f"epoch {epoch}/{args.epochs}  loss {total / n:.3f}  {tune} balanced acc {val['balanced_accuracy']:.3f}"
               f"  ({time.time() - t0:.0f}s)", flush=True)
         if val["balanced_accuracy"] > best:
-            best = val["balanced_accuracy"]
+            best, T = val["balanced_accuracy"], fit_temperature(logits, y_eval[tune])
             best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
 
     model.load_state_dict(best_state)
     results = {}
     for k in evals:
-        if k != "val":
+        if not k.startswith("val"):
             results[f"v2 {args.arch} · {k}"] = report(y_eval[k], predict(model, eval_loaders[k], device).argmax(1), classes)
 
     args.out.mkdir(parents=True, exist_ok=True)
     torch.save({"state_dict": best_state, "arch": args.arch, "classes": classes, "size": args.size,
-                "mean": MEAN, "std": STD, "val_balanced_accuracy": best}, args.out / f"{args.arch}.pt")
+                "mean": MEAN, "std": STD, "T": T, "val_balanced_accuracy": best}, args.out / f"{args.arch}.pt")
     (args.out / "metrics.json").write_text(json.dumps(results, indent=2))
     md = [f"# Species ID v2: fine-tuned {args.arch}", "",
-          f"{args.epochs} epochs, {args.samples_per_epoch} class-balanced draws each; best val balanced accuracy "
-          f"{best:.3f}. Web-photo and trap-style tests are sanity checks, not trap accuracy (see ml/README.md).", ""]
+          f"{args.epochs} epochs, {args.samples_per_epoch} class-balanced draws each; best balanced accuracy on "
+          f"{tune} {best:.3f}, temperature {T:.2f}. Web-photo and trap-style tests are sanity checks, not trap accuracy (see ml/README.md).", ""]
     md += [format_report(k, v) for k, v in results.items()]
     (args.out / "report.md").write_text("\n".join(md))
     for k, v in results.items():

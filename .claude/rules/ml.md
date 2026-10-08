@@ -9,6 +9,7 @@ paths:
 
 ## Running
 
+- Training on another machine: `make_bundle.py`, then [ml/RUN_ON_CUDA.md](../../ml/RUN_ON_CUDA.md). `data/` and `models/` are not in git.
 - Run scripts from inside `ml/` with `.venv/bin/python`; paths like `data/` and `models/` are relative to it.
 - `train_v1.py` on the 16 GB M3: batch 16 and `--device cpu` (larger batches hang MPS). `train_v1.py --final` is run once, at the end, for the report's numbers.
 - Tests are `unittest` and need numpy + pillow only: `.venv/bin/python -m unittest discover tests`. Keep new tests free of torch so CI stays light.
@@ -18,7 +19,7 @@ paths:
 - Everything under `data/` and `models/` is gitignored. When a script changes what it writes there, update `ml/README.md` in the same change.
 - Sources stay apart: `data/ami`, `data/inat` (web photos), `data/synth` (trap-style composites), `data/field` (phone photos of used field cards), `data/web_liners` (other people's liner photos; its species crops from `liner_crops.py` are source `liner` in `dataset.csv`), `data/own` (our trap, reviewed on the dashboard), `data/trap_camera` (bench captures).
 - `data/own/<label>/<card>/*.jpg`, one folder per card. Field-card crops do not go in `data/own/`: real moths on glue, but not our liner or camera.
-- Held-out sets are listed in files, not chosen at random each run: `data/own/locked_test.txt`, `data/field/test_cards.txt`, and `TEST_GROUPS` in `liner_crops.py` for other people's liners. Never train on them.
+- Held-out sets are listed in files, not chosen at random each run: `data/own/locked_test.txt`, `data/field/test_cards.txt`, and `TEST_GROUPS` and `FIELD_TEST` in `liner_crops.py` for real-liner crops. Never train on them.
 - A split keeps every photo of one liner or card on the same side. Synthetic copies keep their source photo's split.
 - Blank-liner backgrounds for `make_trap_style.py` go in `data/liners/` and must come from the trap camera.
 
@@ -29,6 +30,7 @@ paths:
 - Box every insect on a photo, also the tiny, blurred, half-hidden, overlapping and decayed ones. A detector trained on photos where they were left out learns to miss them, and its counts become biased towards big insects.
 - Labelling is two passes: pass 1 (anyone) moth / other insect / debris and box fixes; pass 2 (a trained eye) the species of each moth.
 - Trap-camera sets photograph one liner on several days. Label the latest photo of each liner, stop the labeller, then run `carry_liner_labels.py --write` to copy labels to the earlier photos.
+- Labels Claude adds go where a person can check them and never silently into a labelled file: a list beside it (`labelled_by_claude.csv`, `species.csv` with a `by` column), the contact sheets it looked at, a backup of the file first, and anything it was unsure of marked unsure or left blank, never passed off as sure.
 - `labels.csv` also records how flatbug did (`skip`, `flatbug-edited`, `manual`); keep those values intact when editing it by script.
 
 ## Reporting results

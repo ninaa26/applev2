@@ -18,6 +18,12 @@ nearest thing:
                OFM. Phone photos at ~6-8 px/mm whose grid often reads wrongly, so crops are kept as
                photographed, only boxes 45-140 px long (a moth the size the trap sees at its edges), at most
                --per-photo from each photo. The set's "Count-other" boxes are not used: other is not a label.
+  Field cards  data/field (phone photos of used Trécé cards from the orchard): moths with a species, from pass 2
+               in labels.csv or, until someone has done pass 2, from data/field/species.csv (photo, n, species,
+               by, note; Oct 7 2026: Claude's reading of the full-size crops, to be checked: 35 OBLR, 20 OFM,
+               13 CM, 2 others, 24 left blank as unsure). The only real-liner OBLR there is, and a second
+               source of OFM and CM. Held out: the cards in data/field/test_cards.txt (CM) plus FIELD_TEST, the
+               April 2025 OFM card and the June 2024 OBLR photos, so each target has field moths the head never saw.
 The species is the uploader's claim (a pheromone trap's target), not an expert's ID of each moth, and the
 liner, camera and light are not ours.
 
@@ -98,6 +104,32 @@ def cm_card_rows(data: Path, grid_mm: float) -> list[dict]:
     return out
 
 
+FIELD_TEST = ["PXL_20250422_174434151", "PXL_20240617_1319"]  # on top of data/field/test_cards.txt
+
+
+def field_card_rows(field: Path) -> list[dict]:
+    if not (field / "labels.csv").exists():
+        return []
+    species = {}
+    if (field / "species.csv").exists():
+        with open(field / "species.csv", newline="") as f:
+            species = {(r["photo"], r["n"]): r["species"] for r in csv.DictReader(f) if r["species"]}
+    held = set()
+    if (field / "test_cards.txt").exists():
+        held = {ln.strip() for ln in (field / "test_cards.txt").read_text().splitlines()
+                if ln.strip() and not ln.startswith("#")}
+    out = []
+    with open(field / "labels.csv", newline="") as f:
+        for r in csv.DictReader(f):
+            label = r["label"] if r["label"] in CLASS_OF and CLASS_OF[r["label"]] not in ("other_insect", "debris") \
+                else species.get((r["photo"], r["n"]), "") if r["label"] == "moth" else ""
+            if label in CLASS_OF and r["ppm"]:
+                out.append({"set": "field-cards", "photo": r["photo"], "crop": r["crop"], "label": label,
+                            "group": Path(r["photo"]).stem, "src_ppm": float(r["ppm"]), "length_mm": r["length_mm"],
+                            "held_out": r["photo"] in held or any(r["photo"].startswith(t) for t in FIELD_TEST)})
+    return out
+
+
 PTM_PX = (45, 140)  # box long side kept, px
 
 
@@ -157,7 +189,8 @@ def main(argv=None) -> int:
     ap.add_argument("--per-photo", type=int, default=12, help="most moths taken from one PTM liner photo")
     args = ap.parse_args(argv)
 
-    rows = ofm_liner_rows(args.data) + cm_card_rows(args.data, args.grid_mm) + ptm_liner_rows(args.data, args.per_photo)
+    rows = (ofm_liner_rows(args.data) + cm_card_rows(args.data, args.grid_mm) + ptm_liner_rows(args.data, args.per_photo)
+            + field_card_rows(args.data.parent / "field"))
     for r in rows:
         r.setdefault("held_out", any(r["group"].startswith(t) for t in TEST_GROUPS))
     if not rows:
