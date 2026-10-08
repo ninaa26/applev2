@@ -19,7 +19,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from PIL import Image
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from . import __version__, services
@@ -80,7 +80,7 @@ def create_app(start_worker: bool = False) -> FastAPI:
     # ---------------------------------------------------------------- dashboard password
 
     # Traps sign uploads with their own key, and /healthz says nothing worth hiding.
-    no_password = {"/api/v1/captures", "/healthz"}
+    no_password = {"/api/v1/captures", "/api/v1/hub/nodes", "/healthz"}
 
     @app.middleware("http")
     async def dashboard_password(request: Request, call_next):
@@ -103,6 +103,8 @@ def create_app(start_worker: bool = False) -> FastAPI:
         trap = db.scalar(select(Trap).where(Trap.api_key_hash == services.hash_key(key))) if key else None
         if trap is None:
             raise HTTPException(401, "unknown or missing trap API key")
+        if trap.retired_at is not None:
+            raise HTTPException(410, f"trap {trap.id} was removed from the orchard on the dashboard")
         return trap
 
     @app.post("/api/v1/captures", status_code=201)
@@ -157,13 +159,18 @@ def create_app(start_worker: bool = False) -> FastAPI:
         db.flush()
         return {"capture_id": cap.id, "card_id": card.id, "config": trap.device_config or {}}
 
+    @app.get("/api/v1/hub/nodes")
+    def api_hub_nodes(trap: Trap = Depends(device_trap), db: Session = Depends(get_session)):
+        """The ESP32 traps this hub takes photos from, with their key hashes so the hub can check them."""
+        return {"nodes": services.hub_nodes(db, trap.id)}
+
     @app.get("/api/v1/traps")
     def api_traps(db: Session = Depends(get_session)):
         out = []
-        for t in db.scalars(select(Trap).order_by(Trap.id)):
+        for t in services.active_traps(db):
             h = services.trap_health(db, t)
             out.append({
-                "id": t.id, "name": t.name, "lure": t.lure, "state": h["state"],
+                "id": t.id, "name": t.name, "lure": t.lure, "kind": t.kind, "hub_id": t.hub_id, "state": h["state"],
                 "last_photo_at": h["last"].captured_at.isoformat() if h.get("last") else None,
                 "week_counts": dict(services.week_counts(db, t.id)),
                 "pending_reviews": len(services.pending_reviews(db, t.id)),
@@ -226,14 +233,17 @@ def create_app(start_worker: bool = False) -> FastAPI:
     @app.get("/", response_class=HTMLResponse)
     def overview(request: Request, db: Session = Depends(get_session)):
         rows = []
-        for t in db.scalars(select(Trap).order_by(Trap.id)):
+        traps = services.active_traps(db)
+        for t in traps:
             rows.append({
                 "trap": t, "health": services.trap_health(db, t), "week": services.week_counts(db, t.id),
                 "pending": len(services.pending_reviews(db, t.id)), "card": services.open_card(db, t.id),
                 "pheno": services.phenology_status(db, t),
             })
         events = list(db.scalars(select(Event).order_by(Event.at.desc()).limit(12)))
-        return templates.TemplateResponse(request, "overview.html", {"rows": rows, "events": events})
+        return templates.TemplateResponse(request, "overview.html", {
+            "rows": rows, "events": events, "orchard": services.orchard_summary(db, traps),
+        })
 
     @app.get("/traps/{trap_id}", response_class=HTMLResponse)
     def trap_page(trap_id: str, request: Request, db: Session = Depends(get_session)):
@@ -251,6 +261,62 @@ def create_app(start_worker: bool = False) -> FastAPI:
             "pheno": services.phenology_status(db, trap), "pending": len(services.pending_reviews(db, trap_id)),
             "checks": services.spot_checks(db, trap_id),
         })
+
+    @app.get("/traps/{trap_id}/photos", response_class=HTMLResponse)
+    def trap_photos(trap_id: str, request: Request, page: int = 1, db: Session = Depends(get_session)):
+        trap = db.get(Trap, trap_id)
+        if trap is None:
+            raise HTTPException(404, "no such trap")
+        per_page = 48
+        total = db.scalar(select(func.count(Capture.id)).where(Capture.trap_id == trap_id))
+        pages = max(1, -(-total // per_page))
+        page = min(max(1, page), pages)
+        caps = list(db.scalars(select(Capture).where(Capture.trap_id == trap_id).order_by(Capture.captured_at.desc())
+                               .offset((page - 1) * per_page).limit(per_page)))
+        return templates.TemplateResponse(request, "photos.html", {
+            "trap": trap, "caps": caps, "page": page, "pages": pages, "total": total,
+        })
+
+    def manage_page(request: Request, db: Session, new_key: dict | None = None, error: str | None = None,
+                    status_code: int = 200):
+        traps = list(db.scalars(select(Trap).order_by(Trap.retired_at.is_not(None), Trap.id)))
+        return templates.TemplateResponse(request, "manage.html", {
+            "traps": traps, "hubs": [t for t in traps if t.kind == "pi" and t.retired_at is None],
+            "health": {t.id: services.trap_health(db, t) for t in traps}, "suggest_id": services.next_trap_id(db),
+            "kinds": services.TRAP_KINDS, "new_key": new_key, "error": error,
+            "server_url": str(request.base_url).rstrip("/"),
+        }, status_code=status_code)
+
+    @app.get("/manage", response_class=HTMLResponse)
+    def manage(request: Request, db: Session = Depends(get_session)):
+        return manage_page(request, db)
+
+    @app.post("/manage/traps", response_class=HTMLResponse)
+    def manage_add(request: Request, trap_id: str = Form(...), name: str = Form(default=""), block: str = Form(default=""),
+                   lure: str = Form(default="CM"), kind: str = Form(default="esp32"), hub_id: str = Form(default=""),
+                   db: Session = Depends(get_session)):
+        try:
+            key = services.create_trap(db, trap_id.strip(), name.strip()[:120], block.strip()[:120], lure, kind, hub_id or None)
+        except ValueError as e:
+            return manage_page(request, db, error=str(e), status_code=422)
+        return manage_page(request, db, new_key={"trap": db.get(Trap, trap_id.strip()), "key": key, "why": "added"})
+
+    @app.post("/manage/traps/{trap_id}/{action}", response_class=HTMLResponse)
+    def manage_action(trap_id: str, action: str, request: Request, db: Session = Depends(get_session)):
+        trap = db.get(Trap, trap_id)
+        if trap is None:
+            raise HTTPException(404, "no such trap")
+        if action == "remove":
+            services.retire_trap(db, trap)
+        elif action == "restore":
+            services.restore_trap(db, trap)
+        elif action == "new-key":
+            key = services.new_api_key()
+            trap.api_key_hash = services.hash_key(key)
+            return manage_page(request, db, new_key={"trap": trap, "key": key, "why": "new key"})
+        else:
+            raise HTTPException(404, "unknown action")
+        return RedirectResponse("/manage", status_code=303)
 
     @app.get("/captures/{capture_id}", response_class=HTMLResponse)
     def capture_page(capture_id: int, request: Request, db: Session = Depends(get_session)):

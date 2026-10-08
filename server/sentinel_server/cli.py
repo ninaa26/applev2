@@ -24,7 +24,7 @@ from sqlalchemy import select
 
 from .db import init_db, session_scope
 from .models import Trap, WeatherDay
-from .services import hash_key, new_api_key
+from .services import create_trap, hash_key, new_api_key
 from .settings import get_settings
 
 
@@ -37,13 +37,14 @@ def cmd_init(args) -> int:
 
 def cmd_add_trap(args) -> int:
     init_db()
-    key = new_api_key()
-    with session_scope() as db:
-        if db.get(Trap, args.trap_id):
-            print(f"trap {args.trap_id} already exists; use rotate-key for a new key", file=sys.stderr)
-            return 1
-        db.add(Trap(id=args.trap_id, name=args.name, block=args.block, lure=args.lure, api_key_hash=hash_key(key)))
-    print(f"Created trap {args.trap_id} ({args.lure} lure).\nAPI key (shown once, put it in the device config.toml):\n\n  {key}\n")
+    try:
+        with session_scope() as db:
+            key = create_trap(db, args.trap_id, args.name, args.block, args.lure, args.kind, args.hub)
+    except ValueError as e:
+        print(f"{e}{'; use rotate-key for a new key' if 'exists' in str(e) else ''}", file=sys.stderr)
+        return 1
+    where = f"ESP32 node_config.h API_KEY (uploads through {args.hub})" if args.kind == "esp32" else "device config.toml"
+    print(f"Created trap {args.trap_id} ({args.lure} lure).\nAPI key (shown once, put it in the {where}):\n\n  {key}\n")
     return 0
 
 
@@ -194,6 +195,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--lure", choices=["CM", "OFM", "OBLR"], required=True)
     p.add_argument("--name", default="")
     p.add_argument("--block", default="")
+    p.add_argument("--kind", choices=["pi", "esp32"], default="pi", help="esp32: a camera that uploads through --hub")
+    p.add_argument("--hub", default=None, help="the Raspberry Pi trap an ESP32 camera sends its photos through")
     p.set_defaults(fn=cmd_add_trap)
 
     p = sub.add_parser("rotate-key", help="issue a new API key for a trap")

@@ -1,18 +1,49 @@
 {% extends "base.html" %}
 {% set nav = 'overview' %}
-{% block title %}Traps · Orchard Sentinel{% endblock %}
+{% block title %}Orchard · Orchard Sentinel{% endblock %}
 {% block head %}<meta http-equiv="refresh" content="60">{% endblock %}
 {% block main %}
 <div>
-  <h1>All traps</h1>
-  <p class="muted">New catches in the last 7 days. Pending reviews aren't counted until a person confirms them.</p>
+  <h1>Orchard</h1>
+  <p class="muted">New catches in the last 7 days, all traps together. Pending reviews aren't counted until a person confirms them.</p>
 </div>
 
 {% if not rows %}
-<div class="notice">No traps yet. Create one on the server with <code>sentinel-server add-trap T1 --lure CM --name "Bench"</code>, then point a device at it.</div>
+<div class="notice">No traps yet. <a href="/manage">Add one</a>, then point its Pi or ESP32 camera at it.</div>
 {% endif %}
 
 {% if rows %}
+{% set o = orchard %}
+<div class="tiles">
+  <div class="tile"><span class="lbl">Traps reporting</span><span class="val">{{ o.reporting }}<small> / {{ o.n_traps }}</small></span>
+    <span class="sub">{% if o.problems %}<span class="pill offline">{{ o.problems }} need a look</span>{% else %}all fine{% endif %}</span></div>
+  {% for sp in PESTS %}
+  <div class="tile"><span class="lbl"><i class="dot c-{{ sp }}"></i> {{ SPECIES_LABELS[sp] }}</span><span class="val">{{ o.week.get(sp, 0) }}</span><span class="sub">this week</span></div>
+  {% endfor %}
+  <div class="tile"><span class="lbl">To review</span><span class="val">{% if o.pending %}<a href="/review">{{ o.pending }}</a>{% else %}0{% endif %}</span><span class="sub">{{ o.photos_24h }} photos in 24 h</span></div>
+</div>
+
+<div class="card">
+  <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px">
+    <h2>New catches per day, whole orchard, last 30 days</h2>
+    <span class="muted" style="display:flex;gap:12px;flex-wrap:wrap;font-size:12.5px">
+      {% for sp in ['CM','OFM','OBLR','other_moth','unclassified'] %}<span class="sp"><i class="dot c-{{ sp }}"></i>{{ SPECIES_LABELS[sp] }}</span>{% endfor %}
+    </span>
+  </div>
+  <div class="bars" role="img" aria-label="Daily new catches across the orchard by species">
+    {% for r in o.daily %}
+      <div class="bar" title="{{ r.date.strftime('%b %d') }}: {% for k, v in r.counts.items() %}{{ k }} {{ v }} {% endfor %}">
+        {% for sp in ['CM','OFM','OBLR','other_moth','unclassified'] %}{% if r.counts.get(sp) %}<i class="c-{{ sp }}" style="height:{{ 120 * r.counts[sp] / o.peak }}px"></i>{% endif %}{% endfor %}
+      </div>
+    {% endfor %}
+  </div>
+  <div class="axis"><span>{{ o.daily[0].date.strftime('%b %d') }}</span><span>peak {{ o.peak }}/day</span><span>{{ o.daily[-1].date.strftime('%b %d') }}</span></div>
+</div>
+
+<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap">
+  <h2>Each trap</h2>
+  <a href="/manage">Add or remove traps</a>
+</div>
 <div class="card tbl">
 <table>
   <thead><tr><th>Trap</th><th>Status</th>{% for sp in PESTS %}<th style="text-align:right">{{ sp }}</th>{% endfor %}<th style="text-align:right">Other</th><th style="text-align:right">To review</th><th>Liner since</th><th>Battery</th><th>Degree days</th></tr></thead>
@@ -20,7 +51,7 @@
   {% for r in rows %}
   {% set h = r.health %}
   <tr>
-    <td><a href="/traps/{{ r.trap.id }}"><b>{{ r.trap.id }}</b></a> <span class="muted">{{ r.trap.name }} · {{ r.trap.lure }} lure</span></td>
+    <td><a href="/traps/{{ r.trap.id }}"><b>{{ r.trap.id }}</b></a> <span class="muted">{{ r.trap.name }} · {{ r.trap.lure }} lure{% if r.trap.kind == 'esp32' %} · ESP32 via {{ r.trap.hub_id }}{% endif %}</span></td>
     <td><span class="pill {{ h.state }}">{% if h.state == 'never' %}No photos yet{% else %}{{ h.state|capitalize }} · {{ h.last.received_at|ago }}{% endif %}</span></td>
     {% for sp in PESTS %}<td class="n">{{ r.week.get(sp, 0) }}</td>{% endfor %}
     <td class="n">{{ r.week.get('other_moth', 0) + r.week.get('unclassified', 0) }}</td>
