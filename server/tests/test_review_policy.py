@@ -61,3 +61,11 @@ def test_biofix_says_when_it_rests_on_unconfirmed_catches():
     with session_scope() as db:
         s = services.phenology_status(db, db.get(Trap, "T1"))
         assert s["biofix_sure"] == s["biofix"] and s["unsure_catches"] == 0
+
+
+def test_biofix_comes_from_this_seasons_catches_only():
+    # last year's catches qualified two weeks in a row; nothing yet this year
+    trap_with_tracks([("CM", 0.95, "auto", d) for d in (380, 379, 373, 372)])
+    with session_scope() as db:
+        s = services.phenology_status(db, db.get(Trap, "T1"))
+        assert s["biofix"] is None and s["catches"] == 0 and "dd" not in s
