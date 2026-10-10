@@ -45,5 +45,6 @@ the MAC registered).
 
 `ERROR camera not found`: the ribbon cable is loose or upside down, or the camera's pins differ from
 `node_config.h`. `ERROR hub not reachable`: out of range, the wrong Wi-Fi password, or the hub was not
-awake (it is awake for a few minutes after each scheduled time). `ERROR hub does not know this trap's
+awake (it is awake for a few minutes after each scheduled time). `ERROR hub not answering`: the node
+joined the Wi-Fi but the gateway never took the photos before the connect window ran out. `ERROR hub does not know this trap's
 key`: the camera was removed on the dashboard, given a new key, or not added yet.
