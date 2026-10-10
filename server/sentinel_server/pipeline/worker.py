@@ -239,17 +239,37 @@ def process_pending(pipeline: Pipeline, limit: int = 10) -> int:
     with session_scope() as db:
         ids = list(db.scalars(select(Capture.id).where(Capture.status == "new").order_by(Capture.captured_at).limit(limit)))
     for cid in ids:
-        with session_scope() as db:
-            cap = db.get(Capture, cid)
-            try:
-                pipeline.process(db, cap)
-            except Exception as e:  # keep the worker alive; the capture shows the error on the dashboard
-                log.exception("capture %s failed", cid)
-                db.rollback()
+        # Saving can fail too (e.g. "database is locked"), not only processing: either way the capture is
+        # marked failed in a fresh session, so the worker moves on and the dashboard shows the error.
+        try:
+            with session_scope() as db:
                 cap = db.get(Capture, cid)
-                cap.status, cap.error = "failed", f"{e.__class__.__name__}: {e}"
+                if cap is not None and cap.status == "new":
+                    _process_in_order(pipeline, db, cap)
+        except Exception as e:
+            log.exception("capture %s failed", cid)
+            try:
+                with session_scope() as db:
+                    cap = db.get(Capture, cid)
+                    if cap is not None:
+                        cap.status, cap.error = "failed", f"{e.__class__.__name__}: {e}"[:2000]
+            except Exception:
+                log.exception("could not mark capture %s failed", cid)
         done += 1
     return done
+
+
+def _process_in_order(pipeline: Pipeline, db: Session, cap: Capture) -> None:
+    """Tracking assumes a liner's photos come in the order they were taken. A photo that arrives after a later
+    one was already processed (it sat in a trap's or hub's queue) has its whole liner re-run in order."""
+    later = db.scalar(select(Capture.id).where(
+        Capture.card_id == cap.card_id, Capture.id != cap.id, Capture.status == "processed",
+        Capture.captured_at > cap.captured_at).limit(1))
+    if later is None:
+        pipeline.process(db, cap)
+    else:
+        log.info("capture %s arrived after later photos of liner %s: re-running the liner", cap.id, cap.card_id)
+        pipeline.reprocess_card(db, cap.card_id)
 
 
 def run_forever(stop_flag=None) -> None:
@@ -257,5 +277,10 @@ def run_forever(stop_flag=None) -> None:
     log.info("worker started (%s)", pipeline.version)
     poll = get_settings().worker_poll_s
     while not (stop_flag and stop_flag.is_set()):
-        if process_pending(pipeline) == 0:
+        try:
+            busy = process_pending(pipeline) > 0
+        except Exception:  # e.g. the database is unreachable: try again rather than end the thread
+            log.exception("worker pass failed")
+            busy = False
+        if not busy:
             time.sleep(poll)

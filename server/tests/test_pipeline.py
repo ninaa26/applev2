@@ -343,3 +343,81 @@ def test_blurred_photo_is_left_out_and_context_is_logged():
     with session_scope() as db:
         meta = db.get(Capture, 1).meta
     assert {"sharpness", "glare", "card_rgb", "liner_days", "moon", "px_per_mm"} <= set(meta)
+
+
+def test_late_photo_goes_on_the_liner_it_was_taken_on():
+    # photos wait in the trap's queue while the liner is changed on the dashboard
+    key = add_trap()
+    t0 = datetime.now(timezone.utc) - timedelta(hours=6)
+    with TestClient(create_app()) as client:
+        upload(client, key, t0, MOTHS, "c1")
+        old = upload(client, key, t0 + timedelta(hours=1), MOTHS, "c2").json()["card_id"]
+        client.post("/traps/T1/new-card", data={"note": "changed"})
+        late = upload(client, key, t0 + timedelta(hours=2), MOTHS, "c3").json()["card_id"]
+        stale_flag = upload(client, key, t0 + timedelta(hours=3), MOTHS, "c4", new_card=True).json()["card_id"]
+        after = upload(client, key, datetime.now(timezone.utc) + timedelta(minutes=5), [], "c5").json()["card_id"]
+    assert late == old and stale_flag == old, "taken before the new liner went in"
+    assert after != old
+    with session_scope() as db:
+        assert services.open_card(db, "T1").id == after
+
+
+def test_late_photo_is_tracked_in_order():
+    key = add_trap()
+    t0 = datetime.now(timezone.utc) - timedelta(hours=6)
+    with TestClient(create_app()) as client:
+        upload(client, key, t0, MOTHS[:2], "c1")
+        upload(client, key, t0 + timedelta(hours=4), MOTHS, "c3")
+        process_pending(Pipeline(), limit=10)
+        upload(client, key, t0 + timedelta(hours=2), MOTHS[:2], "c2")  # sat in a queue
+        process_pending(Pipeline(), limit=10)
+    with session_scope() as db:
+        assert all(c.status == "processed" for c in db.query(Capture).all())
+        tracks = db.query(Track).all()
+        assert sorted(t.status for t in tracks) == ["candidate", "confirmed", "confirmed"]
+        # the first two moths were confirmed by the photo taken second, not by the one that arrived second
+        expected = (t0 + timedelta(hours=2)).replace(tzinfo=None)
+        assert all(t.confirmed_at == expected for t in tracks if t.status == "confirmed")
+
+
+def test_worker_survives_a_failed_save(monkeypatch):
+    key = add_trap()
+    t0 = datetime.now(timezone.utc) - timedelta(hours=6)
+    with TestClient(create_app()) as client:
+        upload(client, key, t0, MOTHS, "c1")
+        upload(client, key, t0 + timedelta(hours=1), MOTHS, "c2")
+    pipeline = Pipeline()
+    real = pipeline.process
+
+    def breaks_the_save(db, cap, **kw):
+        if cap.uid == "c1":
+            cap.card_id = 999_999  # no such liner: the commit fails on the foreign key, after processing
+            return
+        real(db, cap, **kw)
+
+    monkeypatch.setattr(pipeline, "process", breaks_the_save)
+    assert process_pending(pipeline, limit=10) == 2
+    with session_scope() as db:
+        caps = {c.uid: c for c in db.query(Capture).all()}
+        assert caps["c1"].status == "failed" and "IntegrityError" in caps["c1"].error
+        assert caps["c2"].status == "processed"
+
+
+def test_worker_thread_keeps_going_after_a_failed_pass(monkeypatch):
+    import threading
+
+    from sentinel_server.pipeline import worker
+
+    stop, calls = threading.Event(), []
+
+    def flaky(pipeline):
+        calls.append(1)
+        if len(calls) == 1:
+            raise RuntimeError("database is locked")
+        stop.set()
+        return 0
+
+    monkeypatch.setattr(worker, "process_pending", flaky)
+    monkeypatch.setattr(worker.time, "sleep", lambda s: None)
+    worker.run_forever(stop)
+    assert len(calls) == 2
