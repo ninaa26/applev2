@@ -33,14 +33,17 @@ Which camera module to put on the ESP32 (OV3660 for bring-up, OV5640 wide-angle 
 
 The hub wakes on its schedule (`[schedule] times`). Nodes aim for `node_offset_s` (60 s) after each
 slot, when the hub has booted and its access point is up. Each reply from the hub carries the time and
-the next 12 wake times, so a node that misses the hub once still wakes for the next slot.
+the next 12 wake times, so a node that misses the hub once still wakes for the next slot. Once those
+have passed (the hub out of reach for days), the node assumes the hub's schedule repeats daily and keeps
+waking at the same times.
 
 The ESP32's sleep clock is an RC oscillator that can be off by a few percent. The node never sets its
 clock. It measures the hub's time against its own on every contact, works out its drift from
 successive contacts, and corrects the next sleep. It also wakes early by `15 s + 0.3%` of the sleep
 (about 2.5 min before a 12 h slot) and keeps trying the hub's Wi-Fi for 2–5 min. A node that has
-never reached the hub tries every 10 min, so run the hub's gateway standalone while installing nodes
-(below).
+never reached the hub since power-on photographs once, then looks for the hub after 10 min, 20 min and
+then every 30 min, for 2 min each time and without taking more photos, so it does not flatten its
+battery. Run the hub's gateway standalone while installing nodes (below).
 
 What this costs the hub: each wake it stays on up to `window_s` longer, 4 min by default against about
 1.5 min without nodes. The systemd unit allows the cycle 600 s.
