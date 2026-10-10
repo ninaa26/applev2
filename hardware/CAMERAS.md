@@ -7,7 +7,7 @@ The camera looks down from the top middle of the trap, lens about 110 mm above t
 
 8 MP (3280 × 2464, 4:3), Raspberry Pi camera port (`imx219` driver), fisheye M12 lens, no focus
 motor. From the peak of the trap it sees the whole card. Read off a preview of the card's 25 mm
-grid: roughly 15 px/mm in the centre and 10–11 px/mm at the edges (not yet bench-tested).
+grid: roughly 15 px/mm in the centre (15.3 px/mm measured on the bench, below) and 10–11 px/mm at the edges.
 
 - Focus by turning the lens by hand; `lens_position` is ignored.
 - Optics, as far as they are known (2026-10-07). Measured: 15.3 px/mm at the card's centre with the
