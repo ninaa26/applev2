@@ -15,7 +15,7 @@ DEFAULTS: dict[str, Any] = {
     "server_url": "http://localhost:8000",
     "data_dir": "/var/lib/sentinel",
     "timezone": "America/New_York",
-    "schedule": {"times": ["07:00", "13:00", "19:30"], "halt_after_cycle": False, "manual_wake_is_new_card": False},
+    "schedule": {"times": ["07:00", "10:00", "13:00", "16:00", "19:30", "22:00"], "halt_after_cycle": False, "manual_wake_is_new_card": False},
     "camera": {
         "backend": "picamera2",
         "lens_position": 6.5,

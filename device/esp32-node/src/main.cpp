@@ -19,7 +19,9 @@
 #define FW_VERSION "0.1.0"
 static const int CONNECT_MIN_S = 120;      // keep trying the hub at least this long per wake
 static const int CONNECT_MAX_S = 300;
-static const int UNSYNCED_SLEEP_S = 600;   // never heard from the hub: try again this often
+static const int UNSYNCED_SLEEP_S = 600;   // never heard from the hub: first retry after this long,
+static const int UNSYNCED_SLEEP_MAX_S = 1800;  // doubling up to this, without a photo on retries
+static const int RETRY_CONNECT_S = 120;    // Wi-Fi tries on a retry wake (no schedule to aim at)
 static const size_t FS_RESERVE = 600000;   // drop the oldest photos to keep this much flash free
 static const int MAX_WAKES = 12;
 
@@ -33,6 +35,7 @@ RTC_DATA_ATTR int64_t wakes[MAX_WAKES];    // upcoming wake times (hub unix seco
 RTC_DATA_ATTR int n_wakes = 0;
 RTC_DATA_ATTR uint32_t boots = 0;
 RTC_DATA_ATTR char last_error[96] = "";
+RTC_DATA_ATTR int retries = 0;             // wakes in a row spent looking for a hub we have no schedule from
 
 static double clockNow() {
   struct timeval tv;
@@ -236,19 +239,36 @@ static int uploadQueue() {
 
 // ------------------------------------------------------------------ sleep
 
+// Seconds of hub time until the next wake on the hub's schedule, or -1 without one. The hub sends the next
+// 12 wakes; once those have passed (the hub was out of reach for days), its schedule repeats daily, so the
+// same times a whole number of days later are used rather than falling back to frequent blind retries.
+static double untilNextWake(double hub_now) {
+  if (!synced || n_wakes == 0) return -1;
+  for (int days = 0; days <= 60; days++) {
+    for (int i = 0; i < n_wakes; i++) {
+      double real = wakes[i] + days * 86400.0 - hub_now;
+      if (real >= 60) return real;
+    }
+  }
+  return -1;
+}
+
+static bool haveSchedule() { return untilNextWake(clockNow() + offset) >= 0; }
+
 static void sleepUntilNextWake() {
   double now = clockNow();
-  double sleep_clock = UNSYNCED_SLEEP_S;
-  if (synced) {
-    double hub_now = now + offset;
-    for (int i = 0; i < n_wakes; i++) {
-      double real = wakes[i] - hub_now;
-      if (real < 60) continue;
-      // Wake early by a margin that grows with the sleep, then convert hub seconds to RTC seconds.
-      double margin = 15 + 0.003 * real;
-      sleep_clock = (real - margin) / rate;
-      break;
-    }
+  double real = untilNextWake(now + offset);
+  double sleep_clock;
+  if (real >= 0) {
+    retries = 0;
+    // Wake early by a margin that grows with the sleep, then convert hub seconds to RTC seconds.
+    double margin = 15 + 0.003 * real;
+    sleep_clock = (real - margin) / rate;
+  } else {
+    // No schedule yet: look for the hub again, less often each time, so a node that never finds it
+    // does not flatten its battery (the hub is up for a few minutes after each of its wakes).
+    sleep_clock = std::min(UNSYNCED_SLEEP_MAX_S, UNSYNCED_SLEEP_S << std::min(retries, 4));
+    retries++;
   }
   if (sleep_clock < 30) sleep_clock = 30;
   Serial.printf("sleeping %.0f s\n", sleep_clock);
@@ -269,10 +289,12 @@ void setup() {
 
   if (!LittleFS.begin(true)) setError("flash filesystem failed");
   LittleFS.mkdir("/q");
-  captureToQueue(reason, new_card);
+  // A timer wake without a schedule is only a search for the hub: no photo, or the queue fills with them.
+  bool retry = cause == ESP_SLEEP_WAKEUP_TIMER && retries > 0;
+  if (!retry) captureToQueue(reason, new_card);
 
-  double real_margin = n_wakes ? 15 + 0.003 * 43200 : 0;  // as early as we might have woken
-  int connect_s = std::min(CONNECT_MAX_S, CONNECT_MIN_S + (int)(2 * real_margin));
+  double real_margin = haveSchedule() ? 15 + 0.003 * 43200 : 0;  // as early as we might have woken
+  int connect_s = retry ? RETRY_CONNECT_S : std::min(CONNECT_MAX_S, CONNECT_MIN_S + (int)(2 * real_margin));
   uint32_t until = millis() + connect_s * 1000UL;
   if (connectWifi(connect_s)) {
     // The hub's Wi-Fi can be up before its gateway opens (it is still booting or photographing its
