@@ -13,7 +13,8 @@ device/     Raspberry Pi 5 software: wake → LED → photo → queue → upload
             a Pi can also be the hub for ESP32 camera traps (device/esp32-node/ firmware)
 server/     FastAPI + SQLite (Postgres later): upload API, detection/tracking/counting worker, dashboard
 ml/         training photos (AMI, iNaturalist, trap-style synthetic), labelling tool, detector and classifier training and scoring
-hardware/   trap dimensions (TRAP.md), mockup trap template, 3D-printable camera mount + liner tray, calibration prints
+hardware/   trap dimensions (TRAP.md), weatherproof camera head that retrofits onto the stock trap (HOUSING.md),
+            mockup trap template, liner tray, calibration prints
 docs/       bring-up, wiring, running the server on the Mac, camera bench test, measuring accuracy
 ```
 
@@ -40,6 +41,7 @@ With the Pi and camera: [docs/bring-up.md](docs/bring-up.md). More traps on ESP3
 
 ## Not done yet
 
+printing and fitting the trap housing (designed Oct 14 2026, not yet printed: a sealed head with the Pi 5, a swappable 72 Wh battery cartridge, diffused LED strips and a glass window, clamped over one slot cut in the stock trap's roof; [hardware/HOUSING.md](hardware/HOUSING.md)) ·
 ArUco alignment in the pipeline · white-card calibration for the LED's new position · a diffuser for the LED (10–13% of the card is blown out) · finishing the OFM liner labels (454 boxes) ·
 accuracy on our own trap's photos, on locked test cards ([docs/evaluation.md](docs/evaluation.md)) · an entomologist's check of the field-card species and of the 454 pass-1 labels Claude added · a second source of OFM on glue (every CNN learnt the one trap camera's OFM) ·
 dashboard settings page for `device_config` · alerts · Postgres/Docker for the real server.
