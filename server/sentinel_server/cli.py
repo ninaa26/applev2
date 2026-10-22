@@ -1,7 +1,9 @@
 """sentinel-server: run the server and manage traps.
 
     sentinel-server init
-    sentinel-server add-trap T1 --lure CM --name "Bench mockup"
+    sentinel-server add-trap T1 --kind hub --name "Fieldhouse hub"
+    sentinel-server add-trap T2 --kind esp32 --hub T1 --lure CM --name "Row 4 east"
+    sentinel-server set-kind T1 hub        # a Pi that was a camera trap is now a hub with no camera
     sentinel-server serve                  # API + dashboard + worker in one process (Mac dev setup)
     sentinel-server serve --no-worker      # API only; run `sentinel-server worker` separately
     sentinel-server worker
@@ -24,7 +26,7 @@ from sqlalchemy import select
 
 from .db import init_db, session_scope
 from .models import Trap, WeatherDay
-from .services import create_trap, hash_key, new_api_key
+from .services import TRAP_KINDS, create_trap, hash_key, new_api_key, set_kind
 from .settings import get_settings
 
 
@@ -36,15 +38,35 @@ def cmd_init(args) -> int:
 
 
 def cmd_add_trap(args) -> int:
+    if args.kind != "hub" and not args.lure:
+        print("a camera needs --lure (CM, OFM or OBLR)", file=sys.stderr)
+        return 1
     init_db()
     try:
         with session_scope() as db:
-            key = create_trap(db, args.trap_id, args.name, args.block, args.lure, args.kind, args.hub)
+            key = create_trap(db, args.trap_id, args.name, args.block, args.lure or "CM", args.kind, args.hub)
     except ValueError as e:
         print(f"{e}{'; use rotate-key for a new key' if 'exists' in str(e) else ''}", file=sys.stderr)
         return 1
-    where = f"ESP32 node_config.h API_KEY (uploads through {args.hub})" if args.kind == "esp32" else "device config.toml"
-    print(f"Created trap {args.trap_id} ({args.lure} lure).\nAPI key (shown once, put it in the {where}):\n\n  {key}\n")
+    where = {"esp32": f"ESP32 node_config.h API_KEY (uploads through {args.hub})",
+             "hub": "hub's /etc/sentinel/config.toml"}.get(args.kind, "device config.toml")
+    what = "hub (no camera)" if args.kind == "hub" else f"trap ({args.lure} lure)"
+    print(f"Created {what} {args.trap_id}.\nAPI key (shown once, put it in the {where}):\n\n  {key}\n")
+    return 0
+
+
+def cmd_set_kind(args) -> int:
+    init_db()
+    try:
+        with session_scope() as db:
+            trap = db.get(Trap, args.trap_id)
+            if trap is None:
+                raise ValueError(f"no trap {args.trap_id}")
+            set_kind(db, trap, args.kind)
+    except ValueError as e:
+        print(e, file=sys.stderr)
+        return 1
+    print(f"{args.trap_id} is now: {TRAP_KINDS[args.kind]}")
     return 0
 
 
@@ -64,7 +86,8 @@ def cmd_list(args) -> int:
     init_db()
     with session_scope() as db:
         for t in db.scalars(select(Trap).order_by(Trap.id)):
-            print(f"{t.id:6} {t.lure:5} {t.name}")
+            print(f"{t.id:6} {t.kind:5} {'-' if t.kind == 'hub' else t.lure:5} {t.name}"
+                  f"{f' (via {t.hub_id})' if t.hub_id else ''}{' [removed]' if t.retired_at else ''}")
     return 0
 
 
@@ -192,12 +215,18 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("add-trap", help="register a trap and print its API key")
     p.add_argument("trap_id")
-    p.add_argument("--lure", choices=["CM", "OFM", "OBLR"], required=True)
+    p.add_argument("--lure", choices=["CM", "OFM", "OBLR"], help="the trap's lure (cameras only)")
     p.add_argument("--name", default="")
     p.add_argument("--block", default="")
-    p.add_argument("--kind", choices=["pi", "esp32"], default="pi", help="esp32: a camera that uploads through --hub")
-    p.add_argument("--hub", default=None, help="the Raspberry Pi trap an ESP32 camera sends its photos through")
+    p.add_argument("--kind", choices=list(TRAP_KINDS), default="pi",
+                   help="esp32: a camera that uploads through --hub; hub: a Pi with no camera; pi: a Pi camera trap")
+    p.add_argument("--hub", default=None, help="the hub an ESP32 camera sends its photos through")
     p.set_defaults(fn=cmd_add_trap)
+
+    p = sub.add_parser("set-kind", help="switch a Raspberry Pi between camera trap ('pi') and hub with no camera ('hub')")
+    p.add_argument("trap_id")
+    p.add_argument("kind", choices=["pi", "hub"])
+    p.set_defaults(fn=cmd_set_kind)
 
     p = sub.add_parser("rotate-key", help="issue a new API key for a trap")
     p.add_argument("trap_id")

@@ -4,7 +4,7 @@
 {% block main %}
 <div>
   <h1>Set up traps</h1>
-  <p class="muted">Add a camera to the orchard or take one out. ESP32 cameras send their photos through a Raspberry Pi trap in Wi-Fi range (the hub), which picks up changes here at its next wake.</p>
+  <p class="muted">Add a camera to the orchard or take one out. ESP32 cameras send their photos through a hub: a Raspberry Pi with no camera, on mains power, in Wi-Fi range of them. The hub picks up changes here within a minute.</p>
 </div>
 
 {% if error %}<div class="notice err">{{ error }}</div>{% endif %}
@@ -18,7 +18,12 @@
   <p class="muted">In <code>device/esp32-node/include/node_config.h</code> for this ESP32, then flash it (<code>pio run -t upload</code>):</p>
   <pre class="cfg">#define TRAP_ID "{{ t.id }}"
 #define API_KEY "{{ new_key.key }}"</pre>
-  <p class="muted">Hub {{ t.hub_id }} accepts this camera from its next wake, with no change on the hub. To start sooner, restart the gateway on {{ t.hub_id }}.</p>
+  <p class="muted">Hub {{ t.hub_id }} accepts this camera within a minute, with no change on the hub.</p>
+  {% elif t.kind == 'hub' %}
+  <p class="muted">In <code>/etc/sentinel/config.toml</code> on the hub Pi (<code>device/install-hub.sh</code> makes it), then <code>sudo systemctl restart sentinel-gateway</code>:</p>
+  <pre class="cfg">trap_id = "{{ t.id }}"
+api_key = "{{ new_key.key }}"
+server_url = "{{ server_url }}"</pre>
   {% else %}
   <p class="muted">In <code>/etc/sentinel/config.toml</code> on this Pi:</p>
   <pre class="cfg">trap_id = "{{ t.id }}"
@@ -29,28 +34,29 @@ server_url = "{{ server_url }}"</pre>
 {% endif %}
 
 <div class="card">
-  <h2>Add a camera</h2>
+  <h2>Add a hub or camera</h2>
   <form class="add" method="post" action="/manage/traps" style="margin-top:12px">
     <label>Camera
       <select name="kind" id="kind">
         <option value="esp32" {{ 'selected' if hubs }}>ESP32 camera (through a hub)</option>
-        <option value="pi" {{ 'selected' if not hubs }}>Raspberry Pi (uploads itself)</option>
+        <option value="hub" {{ 'selected' if not hubs }}>Hub (Raspberry Pi, no camera)</option>
+        <option value="pi">Raspberry Pi camera (uploads itself)</option>
       </select></label>
     <label id="hub-field">Hub
       <select name="hub_id">
-        {% for h in hubs %}<option value="{{ h.id }}">{{ h.id }}{% if h.name %} · {{ h.name }}{% endif %}</option>{% else %}<option value="">Add a Raspberry Pi trap first</option>{% endfor %}
+        {% for h in hubs %}<option value="{{ h.id }}">{{ h.id }}{% if h.name %} · {{ h.name }}{% endif %}</option>{% else %}<option value="">Add a hub first</option>{% endfor %}
       </select></label>
     <label>Trap id <input name="trap_id" value="{{ suggest_id }}" required pattern="[A-Za-z0-9][A-Za-z0-9_\-]{0,31}" maxlength="32"></label>
     <label>Name <input name="name" placeholder="Row 4, east end" maxlength="120"></label>
     <label>Block <input name="block" placeholder="Honeycrisp block" maxlength="120"></label>
-    <label>Lure
+    <label id="lure-field">Lure
       <select name="lure">{% for sp in PESTS %}<option value="{{ sp }}">{{ sp }} · {{ SPECIES_LABELS[sp] }}</option>{% endfor %}</select></label>
-    <div><button class="primary" type="submit">Add camera</button></div>
+    <div><button class="primary" type="submit">Add</button></div>
   </form>
 </div>
 
 <div class="card tbl">
-  <h2>Cameras</h2>
+  <h2>Hubs and cameras</h2>
   {% if traps %}
   <table style="margin-top:8px">
     <thead><tr><th>Trap</th><th>Camera</th><th>Lure</th><th>Status</th><th>Added</th><th></th></tr></thead>
@@ -59,9 +65,9 @@ server_url = "{{ server_url }}"</pre>
     {% set h = health[t.id] %}
     <tr class="{{ 'retired' if t.retired_at }}">
       <td><a href="/traps/{{ t.id }}"><b>{{ t.id }}</b></a> <span class="muted">{{ t.name }}{% if t.block %} · {{ t.block }}{% endif %}</span></td>
-      <td>{% if t.kind == 'esp32' %}ESP32 via {{ t.hub_id }}{% else %}Raspberry Pi{% set n = traps|selectattr('hub_id', 'equalto', t.id)|rejectattr('retired_at')|list|length %}{% if n %} · hub for {{ n }}{% endif %}{% endif %}</td>
-      <td>{{ t.lure }}</td>
-      <td>{% if t.retired_at %}<span class="pill never">Removed {{ t.retired_at|local('%b %d') }}</span>{% else %}<span class="pill {{ h.state }}">{% if h.state == 'never' %}No photos yet{% else %}{{ h.state|capitalize }} · {{ h.last.received_at|ago }}{% endif %}</span>{% endif %}</td>
+      <td>{% if t.kind == 'esp32' %}ESP32 via {{ t.hub_id }}{% else %}{{ 'Hub, no camera' if t.kind == 'hub' else 'Raspberry Pi camera' }}{% set n = traps|selectattr('hub_id', 'equalto', t.id)|rejectattr('retired_at')|list|length %}{% if n %} · hub for {{ n }}{% endif %}{% endif %}</td>
+      <td>{{ '—' if t.kind == 'hub' else t.lure }}</td>
+      <td>{% if t.retired_at %}<span class="pill never">Removed {{ t.retired_at|local('%b %d') }}</span>{% elif t.kind == 'hub' %}<span class="pill {{ h.state }}">{% if h.state == 'never' %}Not heard from yet{% else %}{{ h.state|capitalize }} · checked in {{ h.seen_at|ago }}{% endif %}</span>{% else %}<span class="pill {{ h.state }}">{% if h.state == 'never' %}No photos yet{% else %}{{ h.state|capitalize }} · {{ h.last.received_at|ago }}{% endif %}</span>{% endif %}</td>
       <td class="mono muted">{{ t.created_at|local('%b %d, %Y') }}</td>
       <td style="text-align:right;white-space:nowrap">
         {% if t.retired_at %}
@@ -79,8 +85,8 @@ server_url = "{{ server_url }}"</pre>
 </div>
 
 <script>
-  const kind = document.getElementById('kind'), hub = document.getElementById('hub-field');
-  const sync = () => { hub.style.display = kind.value === 'esp32' ? '' : 'none'; };
+  const kind = document.getElementById('kind'), hub = document.getElementById('hub-field'), lure = document.getElementById('lure-field');
+  const sync = () => { hub.style.display = kind.value === 'esp32' ? '' : 'none'; lure.style.display = kind.value === 'hub' ? 'none' : ''; };
   kind.addEventListener('change', sync); sync();
 </script>
 {% endblock %}

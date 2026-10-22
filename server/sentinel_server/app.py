@@ -105,6 +105,7 @@ def create_app(start_worker: bool = False) -> FastAPI:
             raise HTTPException(401, "unknown or missing trap API key")
         if trap.retired_at is not None:
             raise HTTPException(410, f"trap {trap.id} was removed from the orchard on the dashboard")
+        services.note_seen(trap)
         return trap
 
     @app.post("/api/v1/captures", status_code=201)
@@ -233,7 +234,7 @@ def create_app(start_worker: bool = False) -> FastAPI:
     @app.get("/", response_class=HTMLResponse)
     def overview(request: Request, db: Session = Depends(get_session)):
         rows = []
-        traps = services.active_traps(db)
+        traps = services.camera_traps(db)
         for t in traps:
             rows.append({
                 "trap": t, "health": services.trap_health(db, t), "week": services.week_counts(db, t.id),
@@ -241,8 +242,10 @@ def create_app(start_worker: bool = False) -> FastAPI:
                 "pheno": services.phenology_status(db, t),
             })
         events = list(db.scalars(select(Event).order_by(Event.at.desc()).limit(12)))
+        hubs = [{"trap": h, "health": services.hub_health(h),
+                 "cameras": sum(t.hub_id == h.id for t in traps)} for h in services.hubs(db)]
         return templates.TemplateResponse(request, "overview.html", {
-            "rows": rows, "events": events, "orchard": services.orchard_summary(db, traps),
+            "rows": rows, "hubs": hubs, "events": events, "orchard": services.orchard_summary(db, traps),
         })
 
     @app.get("/traps/{trap_id}", response_class=HTMLResponse)
@@ -281,7 +284,7 @@ def create_app(start_worker: bool = False) -> FastAPI:
                     status_code: int = 200):
         traps = list(db.scalars(select(Trap).order_by(Trap.retired_at.is_not(None), Trap.id)))
         return templates.TemplateResponse(request, "manage.html", {
-            "traps": traps, "hubs": [t for t in traps if t.kind == "pi" and t.retired_at is None],
+            "traps": traps, "hubs": [t for t in traps if t.kind in services.HUB_KINDS and t.retired_at is None],
             "health": {t.id: services.trap_health(db, t) for t in traps}, "suggest_id": services.next_trap_id(db),
             "kinds": services.TRAP_KINDS, "new_key": new_key, "error": error,
             "server_url": str(request.base_url).rstrip("/"),
