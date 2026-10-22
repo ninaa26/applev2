@@ -1,6 +1,11 @@
 # Bring-up: from a blank Pi 5 to photos on the dashboard
 
-Do the server steps in [server-on-mac.md](server-on-mac.md) first, so there is somewhere to upload to.
+This is for a Pi with its **own camera**: the first design, and still the bench rig for camera and
+white-card calibration. The plan since Oct 22 2026 is ESP32 cameras sending through a hub Pi with no
+camera: for that, set up the hub with `device/install-hub.sh` as in [esp32-traps.md](esp32-traps.md#setting-up-a-hub).
+The bench Pi that was `sentinel-t1` below is now that hub, renamed `apple-pi-hub`.
+
+Do the server steps in [server-on-mac.md](server-on-mac.md) or [server-on-linux.md](server-on-linux.md) first, so there is somewhere to upload to.
 
 ## 1. Flash and first boot
 

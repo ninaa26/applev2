@@ -26,11 +26,30 @@ def new_api_key() -> str:
     return secrets.token_urlsafe(24)
 
 
-TRAP_KINDS = {"pi": "Raspberry Pi", "esp32": "ESP32 camera"}
+TRAP_KINDS = {"esp32": "ESP32 camera", "hub": "Hub (no camera)", "pi": "Raspberry Pi camera"}
+HUB_KINDS = ("hub", "pi")  # what an ESP32 camera can send its photos through
+SEEN_EVERY = timedelta(minutes=5)  # how stale last_seen_at may get before a request writes it again
 
 
 def active_traps(db: Session) -> list[Trap]:
+    """Everything in the orchard that has a key, hubs included."""
     return list(db.scalars(select(Trap).where(Trap.retired_at.is_(None)).order_by(Trap.id)))
+
+
+def camera_traps(db: Session) -> list[Trap]:
+    """Traps that take photos: the ones with counts, liners and a row on the overview."""
+    return [t for t in active_traps(db) if t.kind != "hub"]
+
+
+def hubs(db: Session) -> list[Trap]:
+    return [t for t in active_traps(db) if t.kind == "hub"]
+
+
+def note_seen(trap: Trap) -> None:
+    """Remember that the device just used its key. Written at most every SEEN_EVERY, since a hub asks every minute."""
+    now = utcnow()
+    if trap.last_seen_at is None or now - trap.last_seen_at >= SEEN_EVERY:
+        trap.last_seen_at = now
 
 
 def next_trap_id(db: Session) -> str:
@@ -52,8 +71,8 @@ def create_trap(db: Session, trap_id: str, name: str = "", block: str = "", lure
         raise ValueError(f"unknown kind {kind!r}")
     if kind == "esp32":
         hub = db.get(Trap, hub_id or "")
-        if hub is None or hub.kind != "pi" or hub.retired_at is not None:
-            raise ValueError("an ESP32 camera needs a Raspberry Pi trap in the orchard as its hub")
+        if hub is None or hub.kind not in HUB_KINDS or hub.retired_at is not None:
+            raise ValueError("an ESP32 camera needs a hub in the orchard: add the hub first")
     key = new_api_key()
     db.add(Trap(id=trap_id, name=name, block=block, lure=lure, kind=kind,
                 hub_id=hub_id if kind == "esp32" else None, api_key_hash=hash_key(key)))
@@ -71,6 +90,15 @@ def retire_trap(db: Session, trap: Trap) -> None:
 def restore_trap(db: Session, trap: Trap) -> None:
     trap.retired_at = None
     db.add(Event(trap_id=trap.id, kind="trap_restored", payload={"note": trap.name}))
+
+
+def set_kind(db: Session, trap: Trap, kind: str) -> None:
+    """Turn a Pi camera trap into a hub with no camera, or back. ESP32 cameras keep their kind."""
+    if trap.kind not in HUB_KINDS or kind not in HUB_KINDS:
+        raise ValueError("only a Raspberry Pi can switch between 'pi' (camera) and 'hub' (no camera)")
+    if trap.kind != kind:
+        trap.kind = kind
+        db.add(Event(trap_id=trap.id, kind="trap_changed", payload={"note": TRAP_KINDS[kind]}))
 
 
 def hub_nodes(db: Session, hub_id: str) -> dict[str, str]:
@@ -210,7 +238,20 @@ def last_capture(db: Session, trap_id: str) -> Capture | None:
     return db.scalar(select(Capture).where(Capture.trap_id == trap_id).order_by(Capture.captured_at.desc()))
 
 
+def hub_health(trap: Trap) -> dict:
+    """A hub has no photos: it is online while it keeps asking for its camera list."""
+    if trap.last_seen_at is None:
+        return {"state": "never", "label": "Not heard from yet", "last": None, "seen_at": None}
+    age_min = (utcnow() - trap.last_seen_at).total_seconds() / 60
+    # note_seen writes at most every SEEN_EVERY, so allow for that on top of the limit.
+    limit = get_settings().hub_offline_after_min + SEEN_EVERY.total_seconds() / 60
+    return {"state": "online" if age_min <= limit else "offline", "age_h": age_min / 60, "last": None,
+            "seen_at": trap.last_seen_at}
+
+
 def trap_health(db: Session, trap: Trap) -> dict:
+    if trap.kind == "hub":
+        return hub_health(trap)
     last = last_capture(db, trap.id)
     if last is None:
         return {"state": "never", "label": "No photos yet", "last": None}

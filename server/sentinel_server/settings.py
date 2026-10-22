@@ -47,6 +47,8 @@ class Settings:
     # A liner older than this raises a "card_old" event: glue dries, dust and scales build up, moths decay.
     liner_max_days: float = field(default_factory=lambda: float(os.environ.get("SENTINEL_LINER_MAX_DAYS", "28")))
     offline_after_h: float = field(default_factory=lambda: float(os.environ.get("SENTINEL_OFFLINE_AFTER_H", "12")))
+    # A hub is always on and checks in every minute or so, so it is offline much sooner than a camera.
+    hub_offline_after_min: float = field(default_factory=lambda: float(os.environ.get("SENTINEL_HUB_OFFLINE_AFTER_MIN", "30")))
     # Empty = the dashboard is open to anyone who can reach the port. Set it to ask for a password (any user name).
     dashboard_password: str = field(default_factory=lambda: os.environ.get("SENTINEL_DASHBOARD_PASSWORD", ""))
 

@@ -101,3 +101,48 @@ def test_cli_add_trap_esp32_needs_a_hub(capsys):
     assert "node_config.h" in capsys.readouterr().out
     with session_scope() as db:
         assert db.get(Trap, "T5").hub_id == "T1"
+
+
+def test_hub_without_a_camera_relays_esp32s_and_shows_when_it_last_checked_in():
+    with TestClient(create_app()) as client:
+        status, hub_key = _add(client, trap_id="T1", kind="hub", name="Fieldhouse")
+        assert status == 200 and hub_key
+        assert "/etc/sentinel/config.toml" in client.post("/manage/traps/T1/new-key").text
+        hub_key = re.search(r'api_key = "([^"]+)"', client.post("/manage/traps/T1/new-key").text).group(1)
+        status, cam_key = _add(client, trap_id="T2", kind="esp32", hub_id="T1", lure="OFM", name="Row 4")
+        assert status == 200
+
+        page = client.get("/").text
+        assert "Not heard from yet" in page
+        table = page.split("Each trap")[1]
+        assert "/traps/T2" in table and "/traps/T1" not in table  # the hub has no row of counts
+        assert "0<small> / 1</small>" in page  # one camera in the orchard, not two
+
+        assert client.get("/api/v1/hub/nodes", headers={"Authorization": f"Bearer {hub_key}"}).status_code == 200
+        page = client.get("/").text
+        assert "checked in" in page and "1 camera" in page
+        with session_scope() as db:
+            seen = db.get(Trap, "T1").last_seen_at
+            assert seen is not None and services.trap_health(db, db.get(Trap, "T1"))["state"] == "online"
+        client.get("/api/v1/hub/nodes", headers={"Authorization": f"Bearer {hub_key}"})
+        with session_scope() as db:
+            assert db.get(Trap, "T1").last_seen_at == seen  # not rewritten on every request
+
+        with session_scope() as db:
+            db.get(Trap, "T1").last_seen_at = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=2)
+        assert "Offline" in client.get("/").text.split("Each trap")[0]
+        assert _upload(client, cam_key, "T2", "b1").status_code == 201
+
+
+def test_cli_hub_and_set_kind(capsys):
+    from sentinel_server.cli import main
+
+    assert main(["add-trap", "T1", "--kind", "hub", "--name", "Fieldhouse"]) == 0
+    assert "config.toml" in capsys.readouterr().out
+    assert main(["add-trap", "T2", "--kind", "esp32", "--hub", "T1"]) == 1  # a camera needs a lure
+    assert main(["add-trap", "T2", "--kind", "esp32", "--hub", "T1", "--lure", "CM"]) == 0
+    assert main(["add-trap", "T3", "--lure", "CM"]) == 0
+    assert main(["set-kind", "T3", "hub"]) == 0
+    assert main(["set-kind", "T2", "hub"]) == 1  # an ESP32 stays a camera
+    with session_scope() as db:
+        assert db.get(Trap, "T3").kind == "hub"

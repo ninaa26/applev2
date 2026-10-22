@@ -90,6 +90,14 @@ class Pipeline:
             cap.status, cap.processed_at, cap.model_version = "failed", utcnow(), self.version
             cap.error = f"photo not used: {problem}"
             return
+        with Image.open(path) as img:
+            w, h = img.size
+            boxes = [b for b in boxes if not in_mask(b, trap.mask, w, h)]
+            probs = self.classifier.classify([crop(img, b) for b in boxes])
+
+        # Writes from here on. Nothing above may change the session: the first query after a change
+        # autoflushes it and takes SQLite's write lock, and uploads would then wait out the busy timeout
+        # while the classifier (minutes for a cluttered photo on the Pi's CPU) runs.
         card = db.get(Card, cap.card_id)
         liner_days = round((cap.captured_at - card.installed_at).total_seconds() / 86400, 1)
         cap.meta = {**(cap.meta or {}), **quality, **({"px_per_mm": round(ppm, 2)} if ppm else {}),
@@ -98,10 +106,6 @@ class Pipeline:
             _event_once(db, cap, "glare", {"share_of_card": quality["glare"]})
         if liner_days > get_settings().liner_max_days:
             _event_once(db, cap, "card_old", {"days": liner_days})
-        with Image.open(path) as img:
-            w, h = img.size
-            boxes = [b for b in boxes if not in_mask(b, trap.mask, w, h)]
-            probs = self.classifier.classify([crop(img, b) for b in boxes])
         cap.width, cap.height = w, h
         if check_liner:
             _keep_liner_if_unchanged(db, cap, [trk.Rect(b.x1, b.y1, b.x2, b.y2) for b in boxes])
