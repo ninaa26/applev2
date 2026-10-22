@@ -33,7 +33,7 @@
 #define SETUP_HOLD_MS 3000               // hold BUTTON_PIN this long on a button wake for setup mode
 #endif
 
-#define FW_VERSION "0.2.2"
+#define FW_VERSION "0.2.3"
 static const int CONNECT_MIN_S = 120;      // keep trying the hub at least this long per wake
 static const int CONNECT_MAX_S = 300;
 static const int UNSYNCED_SLEEP_S = 600;   // never heard from the hub: first retry after this long,
@@ -370,6 +370,11 @@ static void runPreview() {
   if (web) httpd_stop(web);
   if (LED_PIN >= 0) digitalWrite(LED_PIN, LOW);
   esp_camera_deinit();
+  // Start the photo's upload on a fresh connection, as on any other wake. After 5 min on the same one the
+  // uploads all failed (Oct 22 2026, RedRover) while Wi-Fi still read as connected.
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_OFF);
+  delay(200);
 }
 
 // On a button wake: still held after SETUP_HOLD_MS means setup mode, released sooner means a new liner.
@@ -466,8 +471,12 @@ void setup() {
     // The hub's Wi-Fi can be up before its gateway opens (it is still booting or photographing its
     // own liner), so keep trying it for the rest of this wake's window. A check-in tries once.
     int code = uploadQueue();
-    while (!checkin && code != 0 && code != 401 && (int32_t)(until - millis()) > 5000) {
+    for (int tries = 1; !checkin && code != 0 && code != 401 && (int32_t)(until - millis()) > 5000; tries++) {
       delay(5000);
+      if (tries % 3 == 0) {  // still failing on a connection that reads as up: it may be stale, so make a new one
+        WiFi.disconnect(true);
+        delay(200);
+      }
       if (WiFi.status() != WL_CONNECTED) connectWifi(std::max(10, (int)((int32_t)(until - millis()) / 1000)));
       code = uploadQueue();
     }
