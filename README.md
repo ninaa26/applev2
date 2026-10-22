@@ -50,6 +50,7 @@ What the insect-monitoring literature says works and fails, and what this repo d
 
 - The biofix is worked out from every catch the trap has ever had, so from the second season on it stays on the first season's date.
 - An error while saving a processed photo (e.g. "database is locked") stops the server's worker thread without notice; photos then wait unprocessed until a restart.
+  Until Oct 22 2026 the worker held the database's write lock while classifying, so on the Pi 5 with BioCLIP on CPU uploads waited minutes and failed with "database is locked"; it now classifies before writing anything. `sentinel-server reprocess` still holds the lock for the whole liner, so stop uploads (or expect retries) while it runs.
 - A queued photo is filed under the liner that is current when it arrives, not when it was taken, so photos uploaded after "New liner installed" can count the old liner's moths again.
 - An ESP32 that loses the hub wakes, photographs and tries Wi-Fi for 2–5 min every 10 min, which will flatten its battery.
 - Degree days from the trap's own sensor need 4 readings a day; the built-in schedule has 3 (the example config has 6). ESP32 traps have no sensor, so they need the NEWA import.
