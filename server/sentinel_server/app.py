@@ -253,6 +253,12 @@ def create_app(start_worker: bool = False) -> FastAPI:
         trap = db.get(Trap, trap_id)
         if trap is None:
             raise HTTPException(404, "no such trap")
+        if trap.kind == "hub":  # no photos or liner: its status and its cameras
+            cameras = [{"trap": t, "health": services.trap_health(db, t)}
+                       for t in services.camera_traps(db) if t.hub_id == trap_id]
+            return templates.TemplateResponse(request, "hub.html", {
+                "trap": trap, "health": services.hub_health(trap), "cameras": cameras,
+            })
         caps = list(db.scalars(select(Capture).where(Capture.trap_id == trap_id).order_by(Capture.captured_at.desc()).limit(40)))
         daily = services.daily_counts(db, trap_id, 30)
         peak = max([sum(r["counts"].values()) for r in daily] + [1])

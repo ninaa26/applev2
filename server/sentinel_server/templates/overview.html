@@ -49,7 +49,7 @@
   {% for r in hubs %}
   {% set h = r.health %}
   <tr>
-    <td><a href="/manage"><b>{{ r.trap.id }}</b></a> <span class="muted">{{ r.trap.name }}{% if r.trap.block %} · {{ r.trap.block }}{% endif %}</span></td>
+    <td><a href="/traps/{{ r.trap.id }}"><b>{{ r.trap.id }}</b></a> <span class="muted">{{ r.trap.name }}{% if r.trap.block %} · {{ r.trap.block }}{% endif %}</span></td>
     <td><span class="pill {{ h.state }}">{% if h.state == 'never' %}Not heard from yet{% else %}{{ h.state|capitalize }} · checked in {{ h.seen_at|ago }}{% endif %}</span></td>
     <td class="muted">{{ r.cameras }} camera{{ '' if r.cameras == 1 else 's' }}</td>
   </tr>
