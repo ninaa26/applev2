@@ -222,8 +222,22 @@ class Gateway:
         with self.lock:
             self.done.add(trap_id)
         if meta_header:
-            log.info("node %s status: %s", trap_id, meta_header[:300])
+            log.info("node %s status: %s", trap_id, meta_header[:600])
+            self._save_status(trap_id, meta_header)
         return 200, self.schedule_reply(trap_id)
+
+    def _save_status(self, trap_id: str, meta_header: str) -> None:
+        """Keep each node's end-of-wake status (awake time, signal, errors) in data_dir/nodes/<trap_id>/status.jsonl."""
+        try:
+            status = json.loads(meta_header)
+            assert isinstance(status, dict)
+        except (ValueError, AssertionError):
+            return
+        status = {"at": datetime.fromtimestamp(self.clock(), timezone.utc).isoformat(), **status}
+        path = self.nodes_dir / trap_id / "status.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with self.lock, path.open("a") as f:
+            f.write(json.dumps(status) + "\n")
 
     def preview(self, authorization: str, meta_header: str) -> tuple[int, dict]:
         """A node in setup mode streams a live preview; list it on the hub's page while it lasts."""
