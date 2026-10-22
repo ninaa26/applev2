@@ -1,6 +1,6 @@
 # ESP32 camera trap firmware
 
-An ESP32-S3 camera board in a delta trap that sends its photos through the hub Pi. How it fits
+An ESP32-S3 camera board in a delta trap that sends its photos through the hub (a Pi with no camera, always on). How it fits
 together, the Wi-Fi setup and adding cameras on the dashboard: [docs/esp32-traps.md](../../docs/esp32-traps.md).
 
 Each wake it photographs the liner and saves the photo to flash. It joins the hub's Wi-Fi, uploads

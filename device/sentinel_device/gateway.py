@@ -1,14 +1,16 @@
 """Hub for ESP32 camera traps: take their photos over the orchard Wi-Fi and relay them to the server.
 
-One Pi in the orchard is the hub. ESP32 traps in Wi-Fi range wake on the same schedule, photograph
+One Pi in the orchard is the hub. ESP32 traps in Wi-Fi range wake on the hub's schedule, photograph
 their liner, POST the JPEG here, get back the time and how long to sleep, and deep-sleep again.
 Each ESP32 is its own trap on the server with its own API key; the hub keeps a queue per trap
 (data_dir/nodes/<trap_id>/) and uploads it with that trap's key, so the server needs no changes.
 
-The cycle (cycle.py) keeps the gateway open for [hub] window_s each wake. On the bench, or to set up
-a new ESP32, run it standalone and it stays open:
+The hub is a Pi with no camera on mains power, and runs this standalone and always on
+(systemd/sentinel-gateway.service, installed by install-hub.sh):
 
-    sentinel-gateway --config config.toml --forward-every 60
+    sentinel-gateway --config /etc/sentinel/config.toml --forward-every 30
+
+A Pi camera trap can be a hub too: its cycle (cycle.py) keeps the gateway open for [hub] window_s each wake.
 
 Node protocol (all requests carry "Authorization: Bearer <that trap's server API key>"):
 
