@@ -48,6 +48,9 @@ class Trap(Base):
     hub_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     # Last time the device used its key (a hub asks for its camera list every minute or so).
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # "Take a photo now" from the dashboard (ESP32 cameras): the hub passes it on at the camera's next
+    # check-in, and it is cleared when a photo taken after it arrives.
+    photo_requested_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # Taken out of the orchard from the dashboard: hidden, and its key stops working. Photos are kept.
     retired_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     cards: Mapped[list["Card"]] = relationship(back_populates="trap", order_by="Card.installed_at")

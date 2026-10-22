@@ -17,6 +17,7 @@ times = ["07:00", "10:00", "13:00", "16:00", "19:30", "22:00"]
 enabled = true
 port = 8080                 # the ESP32's HUB_URL is http://<hub's address>:8080 (10.42.0.1 on the hub's own access point)
 node_offset_s = 60          # cameras wake this long after each slot; harmless on an always-on hub
+checkin_min = 30            # between photos, cameras check in this often for "Take a photo now" (0: never)
 
 # Only for a hub with no server to ask (bench): list cameras by hand with the key the dashboard showed.
 # [hub.nodes.T2]

@@ -48,6 +48,13 @@ A wake takes about 10 s: on the Oct 22 2026 bench run the photo reached the hub 
 and the camera asked for its next wake half a second later. Fewer slots means longer batteries: the
 example config has 6 a day. The bench hub uses every 15 min for testing.
 
+**Check-ins** (firmware 0.2.0): between photos each camera also wakes every `[hub] checkin_min` (30 min
+by default) just to ask whether **Take a photo now** was pressed on its dashboard page. A check-in takes
+no photo and gives up on the hub's Wi-Fi after 20 s. So a photo asked for arrives within about
+`checkin_min`, plus the server's processing. Its battery cost is not measured yet: 48 Wi-Fi-only
+wakes a day against 6 photo wakes. If it shows, raise `checkin_min`, or set it to 0 to turn
+check-ins off (then a photo asked for comes with the next scheduled photo).
+
 The ESP32's sleep clock is an RC oscillator that can be off by a few percent. The node never sets its
 clock. It measures the hub's time against its own on every contact, works out its drift from
 successive contacts, and corrects the next sleep. It also wakes early by `15 s + 0.3%` of the sleep
@@ -113,8 +120,16 @@ For each camera:
 2. Firmware: `cd device/esp32-node && cp include/node_config.example.h include/node_config.h`. Paste
    those two lines, fill in the hub's Wi-Fi name and password, `HUB_URL` and the LED pin, and flash it:
    `pio run -t upload` ([esp32-node/README.md](../device/esp32-node/README.md)).
-3. Hang it and power it. The hub accepts it within a minute. Once it points at its liner, press its
-   **BOOT** button: that takes a photo straight away and starts a fresh liner on the server.
+3. Hang it and power it. The hub accepts it within a minute. Powering it on starts **setup mode**: for
+   5 min it streams a live preview, with the LED on, so you can aim it. On a phone on the hub's Wi-Fi,
+   open the hub's page, `http://10.42.0.1:8080/` (or `http://<hub's address>:8080/` on other Wi-Fi), and
+   follow the camera's **live preview** link. It has a full-size photo for checking focus. When the
+   preview ends the camera takes its first photo.
+4. Once it points at its liner, **hold BOOT for 3 s**: another preview, then a photo that starts a fresh
+   liner on the server. A short press skips the preview and just starts the fresh liner.
+
+To see a camera's liner between scheduled photos, press **Take a photo now** on its page on the
+dashboard. It comes at the camera's next check-in (within `checkin_min`, see Timing).
 
 To take a camera out, press **Remove** on the same page. The hub stops taking its photos within a
 minute. Photos already queued on the hub still go up, and the server keeps all of them. A lost or

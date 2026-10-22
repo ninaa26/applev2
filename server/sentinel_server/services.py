@@ -101,6 +101,18 @@ def set_kind(db: Session, trap: Trap, kind: str) -> None:
         db.add(Event(trap_id=trap.id, kind="trap_changed", payload={"note": TRAP_KINDS[kind]}))
 
 
+def request_photo(trap: Trap) -> None:
+    if trap.kind != "esp32" or trap.retired_at is not None:
+        raise ValueError("only an ESP32 camera in the orchard can be asked for a photo")
+    trap.photo_requested_at = utcnow()
+
+
+def photo_requests(db: Session, hub_id: str) -> dict[str, str]:
+    """ESP32 traps on this hub with a photo asked for on the dashboard: {trap_id: when it was asked, UTC}."""
+    return {t.id: t.photo_requested_at.replace(tzinfo=timezone.utc).isoformat() for t in db.scalars(select(Trap).where(
+        Trap.hub_id == hub_id, Trap.kind == "esp32", Trap.retired_at.is_(None), Trap.photo_requested_at.is_not(None)))}
+
+
 def hub_nodes(db: Session, hub_id: str) -> dict[str, str]:
     """ESP32 traps that upload through this hub: {trap_id: api_key_hash}."""
     return {t.id: t.api_key_hash for t in db.scalars(select(Trap).where(

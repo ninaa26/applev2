@@ -11,10 +11,21 @@
       · <span class="pill {{ health.state }}">{% if health.state == 'never' %}No photos yet{% else %}{{ health.state|capitalize }} · last photo {{ health.last.received_at|ago }}{% endif %}</span></p>
     {% if health.device_error %}<p class="pill error">Trap reported: {{ health.device_error }}</p>{% endif %}
   </div>
-  <form method="post" action="/traps/{{ trap.id }}/new-card">
-    <input type="hidden" name="note" value="installed from dashboard">
-    <button class="primary" type="submit">New liner installed</button>
-  </form>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    {% if trap.kind == 'esp32' and not trap.retired_at %}
+    {% if trap.photo_requested_at %}
+    <span class="pill never" title="The camera checks in with its hub between photos and takes it then">Photo asked for {{ trap.photo_requested_at|ago }} · taken at the next check-in</span>
+    {% else %}
+    <form method="post" action="/traps/{{ trap.id }}/request-photo">
+      <button type="submit" title="The camera takes it at its next check-in with the hub (every 30 min by default)">Take a photo now</button>
+    </form>
+    {% endif %}
+    {% endif %}
+    <form method="post" action="/traps/{{ trap.id }}/new-card">
+      <input type="hidden" name="note" value="installed from dashboard">
+      <button class="primary" type="submit">New liner installed</button>
+    </form>
+  </div>
 </div>
 
 <div class="grid g2">
