@@ -71,15 +71,36 @@ class Pipeline:
     def version(self) -> str:
         return f"{self.detector.version}+{self.classifier.version}"
 
-    def process(self, db: Session, cap: Capture, check_liner: bool = True) -> None:
+    def _detect(self, db: Session, cap: Capture) -> dict:
+        """Detection and the photo checks' measurements. Reads only."""
         trap = db.get(Trap, cap.trap_id)
         path = get_settings().media_dir / cap.image_path
         boxes = self.detector.detect(path, key=(cap.trap_id, cap.card_id))
-        info = getattr(self.detector, "last", {})
-        before = [c.meta or {} for c in db.scalars(select(Capture).where(
-            Capture.card_id == cap.card_id, Capture.status == "processed", Capture.id != cap.id))]
+        info = dict(getattr(self.detector, "last", {}))
         bgr = cv2.imread(str(path))
         quality = photo_quality(bgr, info["card"] if "card" in info else card_outline(bgr))
+        with Image.open(path) as img:
+            w, h = img.size
+        boxes = [b for b in boxes if not in_mask(b, trap.mask, w, h)]
+        return {"path": path, "boxes": boxes, "info": info, "quality": quality, "size": (w, h), "probs": None}
+
+    def _classify(self, found: dict) -> list:
+        with Image.open(found["path"]) as img:
+            return self.classifier.classify([crop(img, b) for b in found["boxes"]])
+
+    def analyse(self, db: Session, cap: Capture) -> dict:
+        """Detection and classification, the slow part, ahead of process(). Reads only, so it can run
+        without holding the database's write lock."""
+        found = self._detect(db, cap)
+        found["probs"] = self._classify(found)
+        return found
+
+    def process(self, db: Session, cap: Capture, check_liner: bool = True, found: dict | None = None) -> None:
+        """`found` is analyse()'s result for this photo, if it was run ahead."""
+        found = found or self._detect(db, cap)
+        boxes, info, quality = found["boxes"], found["info"], found["quality"]
+        before = [c.meta or {} for c in db.scalars(select(Capture).where(
+            Capture.card_id == cap.card_id, Capture.status == "processed", Capture.id != cap.id))]
         problem = blur_problem([m["sharpness"] for m in before if m.get("sharpness")], quality["sharpness"])
         ppm = None
         if info.get("grid") is not None:  # detectors that measure the liner's grid
@@ -90,10 +111,8 @@ class Pipeline:
             cap.status, cap.processed_at, cap.model_version = "failed", utcnow(), self.version
             cap.error = f"photo not used: {problem}"
             return
-        with Image.open(path) as img:
-            w, h = img.size
-            boxes = [b for b in boxes if not in_mask(b, trap.mask, w, h)]
-            probs = self.classifier.classify([crop(img, b) for b in boxes])
+        w, h = found["size"]
+        probs = found["probs"] if found["probs"] is not None else self._classify(found)
 
         # Writes from here on. Nothing above may change the session: the first query after a change
         # autoflushes it and takes SQLite's write lock, and uploads would then wait out the busy timeout
@@ -167,8 +186,10 @@ class Pipeline:
         _card_full_check(db, cap, len(boxes))
 
     def reprocess_card(self, db: Session, card_id: int) -> int:
-        """Re-run every photo of a card from scratch (e.g. after a model upgrade)."""
+        """Re-run every photo of a card from scratch (e.g. after a model upgrade). Every photo is detected and
+        classified before anything is written, so uploads aren't locked out for the whole liner."""
         caps = list(db.scalars(select(Capture).where(Capture.card_id == card_id).order_by(Capture.captured_at)))
+        found = {c.id: self.analyse(db, c) for c in caps}
         for c in caps:  # detections first: they reference the tracks
             for d in list(c.detections):
                 db.delete(d)
@@ -179,7 +200,7 @@ class Pipeline:
                 db.delete(t)
         db.flush()
         for c in caps:
-            self.process(db, c, check_liner=False)  # which liner each photo is on was settled the first time
+            self.process(db, c, check_liner=False, found=found[c.id])  # which liner each photo is on was settled the first time
             db.flush()
         return len(caps)
 

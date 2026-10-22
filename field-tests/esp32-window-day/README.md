@@ -86,7 +86,8 @@ needed. `summary.md` has the same numbers as a list.
 | Awake time and power | An estimate (below) |
 
 **Power.** The ESP32 can't measure its own current. Each wake it reports how long it was awake, and the
-report multiplies that by assumed currents: `--photo-ma 180`, `--checkin-ma 120` and `--sleep-ma 5`.
+report multiplies that by assumed currents: `--photo-ma 180`, `--checkin-ma 120` (also used for `search` wakes,
+Wi-Fi only, firmware 0.2.2) and `--sleep-ma 5`.
 The sleep current of a dev board (USB chip, power LED) isn't known and probably dominates the total.
 For a real figure, put a logging USB power meter between the charger and the ESP32 for the day. Then
 re-run `python3 report.py runs/<start> --sleep-ma <measured>`, or compare the meter's own log.

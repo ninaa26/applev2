@@ -66,8 +66,8 @@ longer locked out of the database while BioCLIP runs on the Pi's CPU; a photo go
 the trap when it was taken, and a late one has its liner re-run in order; an ESP32 that loses the hub keeps
 to the hub's daily times, or looks for it every 30 min without photos (firmware 0.2.2); the built-in schedule
 is the example config's six wakes a day, so the trap's own sensor gives degree days (ESP32 traps have no
-sensor and need the NEWA import).
+sensor and need the NEWA import); re-running a liner (`sentinel-server reprocess`, or a late photo) classifies
+every photo before writing, so it doesn't lock uploads out either (Oct 22 2026).
 
-- `sentinel-server reprocess` still holds the database's write lock for the whole liner, so stop uploads (or expect retries) while it runs.
 - The scale check trusts a liner's first photos: a liner whose first photos are misread rejects its correct ones.
 - The grid finder still misreads our IMX219 photos with insects on the card: 5 of 10 calibrated photos with pinned specimens read 32–63 px/mm instead of 15.3 (Oct 10 2026; all 5 of the empty liner read right). See [hardware/CAMERAS.md](hardware/CAMERAS.md).

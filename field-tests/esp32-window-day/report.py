@@ -106,7 +106,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("run", type=Path)
     ap.add_argument("--photo-ma", type=float, default=180, help="assumed average current while awake for a photo (mA at 5 V)")
-    ap.add_argument("--checkin-ma", type=float, default=120, help="assumed average current during a Wi-Fi-only check-in")
+    ap.add_argument("--checkin-ma", type=float, default=120, help="assumed average current during a Wi-Fi-only wake (check-in, or a search for a lost hub)")
     ap.add_argument("--sleep-ma", type=float, default=5, help="assumed current asleep (dev board: measure it)")
     args = ap.parse_args()
     run = args.run.resolve()
@@ -133,8 +133,10 @@ def main() -> None:
     events = [(utc(r[0]), r[1] + (f": {r[2]}" if len(r) > 2 and r[2] else "")) for r in csv.reader((run / "events.csv").open())] \
         if (run / "events.csv").exists() else []
 
-    # 1. Reliability: a scheduled photo for every slot.
-    first = start.replace(second=0, microsecond=0)
+    # 1. Reliability: a scheduled photo for every slot, from the camera's first contact after the start
+    # (until then it doesn't know the test schedule).
+    contacts = sorted([s["t"] for s in statuses] + [c["hub_at"] for c in caps if c["hub_at"] and c["hub_at"] >= start])
+    first = (contacts[0] if contacts else start).replace(second=0, microsecond=0)
     first += timedelta(minutes=(-first.minute) % every)
     slots, t = [], first
     while t + timedelta(seconds=SLOT_OFFSET_S) <= end:
@@ -191,7 +193,7 @@ def main() -> None:
         wakes.append((statuses[-1]["t"], statuses[-1].get("wake", "?"), statuses[-1]["awake_ms"] / 1000, True))
     hours = (end - start).total_seconds() / 3600
     awake_s = sum(w[2] for w in wakes)
-    ma = lambda kind: args.checkin_ma if kind == "checkin" else args.photo_ma
+    ma = lambda kind: args.checkin_ma if kind in ("checkin", "search") else args.photo_ma  # search: Wi-Fi only, no photo
     awake_mah = sum(w[2] / 3600 * ma(w[1]) for w in wakes)
     sleep_mah = max(0.0, hours - awake_s / 3600) * args.sleep_ma
     by_kind = Counter(w[1] for w in wakes)
@@ -212,7 +214,8 @@ def main() -> None:
     med = lambda v: sorted(v)[len(v) // 2] if v else None
     off = [o for _, o in offsets]
     summary = [
-        ("Window", f"{fmt(start)} to {fmt(end)} ({hours:.1f} h), a photo every {every} min, check-ins every {cfg.get('CHECKIN_MIN')} min"),
+        ("Window", f"{fmt(start)} to {fmt(end)} ({hours:.1f} h), a photo every {every} min, check-ins every {cfg.get('CHECKIN_MIN')} min; "
+                   f"slots counted from the camera's first contact, {fmt(contacts[0]) if contacts else 'none yet'}"),
         ("Scheduled photos", f"{len(matched)} of {len(slots)} slots ({100 * len(matched) / max(1, len(slots)):.0f}%); "
                              f"{len(missing)} missing" + (f": {', '.join(fmt(s)[7:] for s in missing[:12])}{' …' if len(missing) > 12 else ''}" if missing else "")),
         ("All photos", f"{len(caps)}: " + ", ".join(f"{n} {k}" for k, n in Counter(c['wake_reason'] for c in caps).most_common())),
