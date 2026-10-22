@@ -7,11 +7,12 @@ and `hardware/CAMERAS.md`.
 
 ## Layout
 
-- `device/`: Raspberry Pi 5 package `sentinel_device` (capture, queue, upload, wake scheduling, bench tools, hub gateway for ESP32 traps); `device/esp32-node/` is the ESP32-S3 camera firmware (PlatformIO)
+- `device/`: Raspberry Pi package `sentinel_device`: the hub gateway for the ESP32 cameras (`gateway.py`, `install-hub.sh`), and the Pi camera trap (capture, queue, upload, wake scheduling, bench tools); `device/esp32-node/` is the ESP32-S3 camera firmware (PlatformIO)
 - `server/`: FastAPI + SQLite package `sentinel_server` (upload API, detect/track/classify pipeline, dashboard, `evaluate`)
 - `ml/`: standalone scripts run from inside `ml/` (fetch, build dataset, label, train, score); no package
 - `hardware/`: trap dimensions, camera notes, printable parts
-- `docs/`: bring-up, wiring, server on the Mac, camera bench, measuring accuracy
+- `field-tests/`: self-contained test runs on the real hardware, separate from the regular code (e.g. `esp32-window-day/`: scripts to start, check, fail, finish and report a day-long run; run output goes to its gitignored `runs/`)
+- `docs/`: ESP32 traps and the hub, server on Linux (the Pi 5) or the Mac, Pi camera bring-up, wiring, camera bench, measuring accuracy
 
 ## Environments and tests
 
@@ -37,4 +38,5 @@ The labeller and model playground are preview servers in `.claude/launch.json`
 - Measured results go in the READMEs with their date and what they were measured on.
 - Dataset, labelling and result-reporting rules for `ml/` are in `.claude/rules/ml.md`, loaded when files under `ml/` are in play.
 - Camera settings and the white-card correction (`flatfield.npz`) belong to one Pi, camera position and lighting setup. Redo the calibration when any of them changes.
+- How it runs (since Oct 22 2026): ESP32 cameras → hub Pi with no camera (`apple-pi-hub`, the bench Pi; gateway only) → server on a Pi 5 (`apple-pi-server`, a stand-in for a cloud server). Both are on the team Tailscale.
 - The bench Pi is shared. Ask before running anything on it, and do not run `device/install.sh` there.

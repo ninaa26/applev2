@@ -101,3 +101,75 @@ def test_cli_add_trap_esp32_needs_a_hub(capsys):
     assert "node_config.h" in capsys.readouterr().out
     with session_scope() as db:
         assert db.get(Trap, "T5").hub_id == "T1"
+
+
+def test_hub_without_a_camera_relays_esp32s_and_shows_when_it_last_checked_in():
+    with TestClient(create_app()) as client:
+        status, hub_key = _add(client, trap_id="T1", kind="hub", name="Fieldhouse")
+        assert status == 200 and hub_key
+        assert "/etc/sentinel/config.toml" in client.post("/manage/traps/T1/new-key").text
+        hub_key = re.search(r'api_key = "([^"]+)"', client.post("/manage/traps/T1/new-key").text).group(1)
+        status, cam_key = _add(client, trap_id="T2", kind="esp32", hub_id="T1", lure="OFM", name="Row 4")
+        assert status == 200
+
+        page = client.get("/").text
+        assert "Not heard from yet" in page
+        for url in ("/traps/T1", "/traps/T1/photos", "/manage"):  # a hub has no photos: every page still works
+            assert client.get(url).status_code == 200, url
+        table = page.split("Each trap")[1]
+        assert "/traps/T2" in table and "/traps/T1" not in table  # the hub has no row of counts
+        assert "0<small> / 1</small>" in page  # one camera in the orchard, not two
+
+        assert client.get("/api/v1/hub/nodes", headers={"Authorization": f"Bearer {hub_key}"}).status_code == 200
+        page = client.get("/").text
+        assert "checked in" in page and "1 camera" in page
+        hub_page = client.get("/traps/T1")
+        assert hub_page.status_code == 200 and "checked in" in hub_page.text and "/traps/T2" in hub_page.text
+        assert client.get("/manage").status_code == 200
+        with session_scope() as db:
+            seen = db.get(Trap, "T1").last_seen_at
+            assert seen is not None and services.trap_health(db, db.get(Trap, "T1"))["state"] == "online"
+        client.get("/api/v1/hub/nodes", headers={"Authorization": f"Bearer {hub_key}"})
+        with session_scope() as db:
+            assert db.get(Trap, "T1").last_seen_at == seen  # not rewritten on every request
+
+        with session_scope() as db:
+            db.get(Trap, "T1").last_seen_at = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=2)
+        assert "Offline" in client.get("/").text.split("Each trap")[0]
+        assert _upload(client, cam_key, "T2", "b1").status_code == 201
+
+
+def test_cli_hub_and_set_kind(capsys):
+    from sentinel_server.cli import main
+
+    assert main(["add-trap", "T1", "--kind", "hub", "--name", "Fieldhouse"]) == 0
+    assert "config.toml" in capsys.readouterr().out
+    assert main(["add-trap", "T2", "--kind", "esp32", "--hub", "T1"]) == 1  # a camera needs a lure
+    assert main(["add-trap", "T2", "--kind", "esp32", "--hub", "T1", "--lure", "CM"]) == 0
+    assert main(["add-trap", "T3", "--lure", "CM"]) == 0
+    assert main(["set-kind", "T3", "hub"]) == 0
+    assert main(["set-kind", "T2", "hub"]) == 1  # an ESP32 stays a camera
+    with session_scope() as db:
+        assert db.get(Trap, "T3").kind == "hub"
+
+
+def test_take_a_photo_now_reaches_the_hub_and_clears_when_a_newer_photo_arrives():
+    with TestClient(create_app()) as client:
+        _, hub_key = _add(client, trap_id="T1", kind="hub")
+        _, cam_key = _add(client, trap_id="T2", kind="esp32", hub_id="T1")
+        hub = {"Authorization": f"Bearer {hub_key}"}
+        assert client.get("/api/v1/hub/nodes", headers=hub).json()["photo_requests"] == {}
+        assert client.post("/traps/T1/request-photo").status_code == 422  # a hub has no camera
+        assert "Take a photo now" in client.get("/traps/T2").text
+
+        before = datetime.now(timezone.utc) - timedelta(minutes=5)
+        assert client.post("/traps/T2/request-photo", follow_redirects=False).status_code == 303
+        assert "taken at the next check-in" in client.get("/traps/T2").text
+        asked = client.get("/api/v1/hub/nodes", headers=hub).json()["photo_requests"]
+        assert list(asked) == ["T2"] and datetime.fromisoformat(asked["T2"]).tzinfo is not None
+
+        assert _upload(client, cam_key, "T2", "old", when=before).status_code == 201  # taken before the request
+        assert "T2" in client.get("/api/v1/hub/nodes", headers=hub).json()["photo_requests"]
+        assert _upload(client, cam_key, "T2", "new").status_code == 201
+        assert client.get("/api/v1/hub/nodes", headers=hub).json()["photo_requests"] == {}
+        assert "Take a photo now" in client.get("/traps/T2").text

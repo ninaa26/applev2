@@ -173,3 +173,48 @@ def test_standalone_gateway_refuses_a_config_without_a_key(tmp_path: Path, capsy
         gateway.main(["--config", str(empty)])
     assert e.value.code == 2
     assert "has no api_key" in capsys.readouterr().err
+
+
+def test_photo_asked_for_on_the_dashboard_goes_to_its_node_until_a_newer_photo_comes(tmp_path: Path, monkeypatch):
+    asked = {"T2": "2026-10-05T23:30:00+00:00"}  # a minute before _meta's photo
+    monkeypatch.setattr(gateway.requests, "get", lambda url, headers, timeout: _Reply(200, {"nodes": {}, "photo_requests": dict(asked)}))
+    gw = _gw(tmp_path, checkin_min=20)
+    assert gw.refresh_nodes()
+    status, reply = gw.schedule("Bearer key2")
+    assert status == 200 and reply["photo_now"] and reply["checkin_s"] == 1200
+    assert not gw.schedule("Bearer key3")[1]["photo_now"]  # only the camera it was asked of
+
+    old = _meta(node_capture_id="0123456789ab", captured_at="2026-10-05T23:29:00+00:00")
+    assert gw.capture("Bearer key2", old, JPEG)[1]["photo_now"]  # a queued photo from before the request
+    assert not gw.capture("Bearer key2", _meta(), JPEG)[1]["photo_now"]  # taken after it: done
+    assert not gw.schedule("Bearer key2")[1]["photo_now"]
+    gw.refresh_nodes()  # the server hasn't seen it yet and still lists it: the hub doesn't ask again
+    assert not gw.schedule("Bearer key2")[1]["photo_now"]
+
+    asked["T2"] = "2026-10-05T23:31:20+00:00"  # asked again later
+    gw.refresh_nodes()
+    assert gw.schedule("Bearer key2")[1]["photo_now"]
+    asked.clear()
+    gw.refresh_nodes()
+    assert not gw.schedule("Bearer key2")[1]["photo_now"]
+
+
+def test_live_preview_is_listed_on_the_hub_page_while_it_lasts(tmp_path: Path):
+    now = [NOW]
+    gw = _gw(tmp_path)
+    gw.clock = lambda: now[0]
+    assert gw.preview("Bearer nope", json.dumps({"url": "http://10.42.0.23/", "seconds": 300}))[0] == 401
+    assert gw.preview("Bearer key2", json.dumps({"url": "javascript:alert(1)", "seconds": 300}))[0] == 422
+    assert gw.preview("Bearer key2", json.dumps({"url": "http://10.42.0.23/", "seconds": 300}))[0] == 200
+    page = gw.status_page()
+    assert 'href="http://10.42.0.23/"' in page and "<b>T3</b>" in page
+    now[0] += 301
+    assert "10.42.0.23" not in gw.status_page()
+
+
+def test_end_of_wake_status_is_kept_for_power_and_signal_logs(tmp_path: Path):
+    gw = _gw(tmp_path)
+    gw.schedule("Bearer key2", json.dumps({"wake": "checkin", "awake_ms": 2900, "rssi": -60}))
+    gw.schedule("Bearer key2", "not json")
+    [line] = (tmp_path / "nodes" / "T2" / "status.jsonl").read_text().splitlines()
+    assert json.loads(line) == {"at": "2026-10-05T23:31:30+00:00", "wake": "checkin", "awake_ms": 2900, "rssi": -60}

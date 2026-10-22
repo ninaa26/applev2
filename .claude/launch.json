@@ -27,6 +27,15 @@
         "cd ml && exec .venv/bin/python model_playground.py --port 8770"
       ],
       "port": 8770
+    },
+    {
+      "name": "server-dashboard",
+      "runtimeExecutable": "/bin/sh",
+      "runtimeArgs": [
+        "-c",
+        "cd server && SENTINEL_DATA_DIR=data/dev SENTINEL_CLASSIFIER=none exec .venv/bin/sentinel-server serve --host 127.0.0.1 --port 8010"
+      ],
+      "port": 8010
     }
   ]
 }

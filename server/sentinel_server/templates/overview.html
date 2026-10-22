@@ -9,8 +9,9 @@
 </div>
 
 {% if not rows %}
-<div class="notice">No traps yet. <a href="/manage">Add one</a>, then point its Pi or ESP32 camera at it.</div>
+<div class="notice">No cameras yet. <a href="/manage">Add a hub and its ESP32 cameras</a>.</div>
 {% endif %}
+
 
 {% if rows %}
 {% set o = orchard %}
@@ -40,6 +41,23 @@
   <div class="axis"><span>{{ o.daily[0].date.strftime('%b %d') }}</span><span>peak {{ o.peak }}/day</span><span>{{ o.daily[-1].date.strftime('%b %d') }}</span></div>
 </div>
 
+{% if hubs %}
+<div class="card tbl">
+  <h2>Hubs</h2>
+  <p class="muted">Each hub takes the photos from the ESP32 cameras near it and sends them here. It checks in every minute or so.</p>
+  <table style="margin-top:8px"><tbody>
+  {% for r in hubs %}
+  {% set h = r.health %}
+  <tr>
+    <td><a href="/traps/{{ r.trap.id }}"><b>{{ r.trap.id }}</b></a> <span class="muted">{{ r.trap.name }}{% if r.trap.block %} · {{ r.trap.block }}{% endif %}</span></td>
+    <td><span class="pill {{ h.state }}">{% if h.state == 'never' %}Not heard from yet{% else %}{{ h.state|capitalize }} · checked in {{ h.seen_at|ago }}{% endif %}</span></td>
+    <td class="muted">{{ r.cameras }} camera{{ '' if r.cameras == 1 else 's' }}</td>
+  </tr>
+  {% endfor %}
+  </tbody></table>
+</div>
+{% endif %}
+
 <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap">
   <h2>Each trap</h2>
   <a href="/manage">Add or remove traps</a>
@@ -51,7 +69,7 @@
   {% for r in rows %}
   {% set h = r.health %}
   <tr>
-    <td><a href="/traps/{{ r.trap.id }}"><b>{{ r.trap.id }}</b></a> <span class="muted">{{ r.trap.name }} · {{ r.trap.lure }} lure{% if r.trap.kind == 'esp32' %} · ESP32 via {{ r.trap.hub_id }}{% endif %}</span></td>
+    <td><a href="/traps/{{ r.trap.id }}"><b>{{ r.trap.id }}</b></a> <span class="muted">{{ r.trap.name }} · {{ r.trap.lure }} lure{% if r.trap.kind == 'esp32' %} · ESP32 via {{ r.trap.hub_id }}{% else %} · Pi camera{% endif %}</span></td>
     <td><span class="pill {{ h.state }}">{% if h.state == 'never' %}No photos yet{% else %}{{ h.state|capitalize }} · {{ h.last.received_at|ago }}{% endif %}</span></td>
     {% for sp in PESTS %}<td class="n">{{ r.week.get(sp, 0) }}</td>{% endfor %}
     <td class="n">{{ r.week.get('other_moth', 0) + r.week.get('unclassified', 0) }}</td>

@@ -10,7 +10,7 @@ from PIL import Image, ImageDraw
 from sentinel_server import services
 from sentinel_server.app import create_app
 from sentinel_server.db import session_scope
-from sentinel_server.models import Capture, Track, Trap
+from sentinel_server.models import Capture, Event, Track, Trap
 from sentinel_server.pipeline import track as trk
 from sentinel_server.pipeline.worker import Pipeline, process_pending
 
@@ -421,3 +421,48 @@ def test_worker_thread_keeps_going_after_a_failed_pass(monkeypatch):
     monkeypatch.setattr(worker.time, "sleep", lambda s: None)
     worker.run_forever(stop)
     assert len(calls) == 2
+
+
+def test_upload_commits_while_classifier_runs(monkeypatch):
+    """A slow classifier (BioCLIP on the Pi's CPU takes minutes for a cluttered photo) must not hold the
+    database's write lock: uploads would wait out the 30 s busy timeout and fail with "database is locked"."""
+    import threading
+
+    from sentinel_server import settings as settings_mod
+
+    monkeypatch.setenv("SENTINEL_LINER_MAX_DAYS", "-1")  # every photo raises "card_old" before classifying
+    settings_mod.reset_settings()
+
+    class SlowClassifier:
+        version = "slow"
+
+        def __init__(self):
+            self.started, self.release = threading.Event(), threading.Event()
+
+        def classify(self, crops):
+            self.started.set()
+            assert self.release.wait(30)
+            return [{} for _ in crops]
+
+    key = add_trap()
+    now = datetime.now(timezone.utc)
+    with TestClient(create_app()) as client:
+        assert upload(client, key, now - timedelta(hours=1), MOTHS, "slow").status_code == 201
+        pipeline = Pipeline()
+        pipeline.classifier = SlowClassifier()
+        worker = threading.Thread(target=process_pending, args=(pipeline,), daemon=True)
+        worker.start()
+        try:
+            assert pipeline.classifier.started.wait(30)
+            result = {}
+            up = threading.Thread(target=lambda: result.update(r=upload(client, key, now, MOTHS, "during")))
+            up.start()
+            up.join(5)  # with the lock held, this waits for the busy timeout instead
+            assert not up.is_alive() and result["r"].status_code == 201
+        finally:
+            pipeline.classifier.release.set()
+            worker.join(30)
+            up.join(60)
+    with session_scope() as db:
+        assert {c.uid: c.status for c in db.query(Capture)} == {"slow": "processed", "during": "new"}
+        assert "card_old" in [e.kind for e in db.query(Event)]  # raised before classifying, as before
