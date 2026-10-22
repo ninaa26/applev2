@@ -19,6 +19,18 @@ health() {  # the morning/evening checks from the README, on one Pi
 }
 { health "$HUB"; health "$SERVER"; } | tee "$RUN/health-start.txt"
 
+# Wi-Fi power saving off on both Pis. With it on (the Pi default), the hub's Wi-Fi stopped taking incoming
+# connections 10 min into the first run (Oct 22 2026), so the ESP32 couldn't reach it. Takes a reconnect.
+for pi in "$HUB" "$SERVER"; do
+  ssh -o BatchMode=yes "$pi" 'c=$(nmcli -t -g GENERAL.CONNECTION dev show wlan0); [ -n "$c" ] || exit 0
+    if [ "$(nmcli -g 802-11-wireless.powersave con show "$c")" != disable ]; then
+      sudo nmcli con mod "$c" 802-11-wireless.powersave 2
+      sudo nohup sh -c "sleep 1; nmcli con up \"$c\"" >/tmp/window-test-reconnect.log 2>&1 &
+      echo "$(hostname): Wi-Fi power saving turned off; reconnecting $c"
+    fi'
+done
+sleep 20
+
 # Keep the journal across reboots (the hub-reboot test would otherwise lose the gateway's log so far).
 for pi in "$HUB" "$SERVER"; do
   ssh -o BatchMode=yes "$pi" '[ -d /var/log/journal ] || { sudo mkdir -p /var/log/journal && sudo systemd-tmpfiles --create --prefix /var/log/journal && sudo systemctl restart systemd-journald; }'

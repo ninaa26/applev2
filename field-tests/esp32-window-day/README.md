@@ -29,6 +29,8 @@ later, which reports its awake time.
      address, Tailscale, any out-of-memory or under-voltage messages) and saves them;
    - records the hub's RedRover address, since the ESP32 has it built in;
    - sets the hub to the test schedule, keeping its config as `hub.toml.before-window-test`;
+   - turns Wi-Fi power saving off on both Pis (with it on, the hub stopped taking the camera's connections
+     10 minutes into the first run);
    - makes both Pis keep their journals across reboots;
    - installs the loggers and records the camera's starting point (firmware, boots, signal, temperature).
 3. **Run `./check.sh` after the first photo from its final spot.** Signal (`rssi`) better than about
