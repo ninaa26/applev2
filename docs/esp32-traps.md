@@ -41,8 +41,10 @@ ESP32 cameras only, with an always-on hub.
 ## Timing
 
 The hub's `[schedule] times` sets when the cameras wake. Each reply from the hub carries the time and
-the next 12 wake times, so a camera that misses the hub once still wakes for the next slot. Cameras aim
-for `node_offset_s` (60 s) after each slot. With an always-on hub the offset isn't needed, but it does no harm.
+the next 12 wake times, so a camera that misses the hub once still wakes for the next slot. Once those
+have passed (the hub out of reach for days), the camera assumes the hub's schedule repeats daily and keeps
+waking at the same times. Cameras aim for `node_offset_s` (60 s) after each slot. With an always-on hub
+the offset isn't needed, but it does no harm.
 
 A wake takes about 10 s: on the Oct 22 2026 bench run the photo reached the hub 6 s after it was taken,
 and the camera asked for its next wake half a second later. Fewer slots means longer batteries: the
@@ -59,7 +61,9 @@ The ESP32's sleep clock is an RC oscillator that can be off by a few percent. Th
 clock. It measures the hub's time against its own on every contact, works out its drift from
 successive contacts, and corrects the next sleep. It also wakes early by `15 s + 0.3%` of the sleep
 (about 2.5 min before a 12 h slot) and keeps trying the hub's Wi-Fi for 2–5 min if it can't reach it.
-A node that has never reached the hub tries every 10 min.
+A node that has never reached the hub since power-on photographs once, then looks for the hub after
+10 min, 20 min and then every 30 min, for 2 min each time and without taking more photos, so it does not
+flatten its battery (firmware 0.2.2; these wakes report as `search`).
 
 ## Setting up a hub
 

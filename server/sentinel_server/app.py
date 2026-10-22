@@ -141,9 +141,14 @@ def create_app(start_worker: bool = False) -> FastAPI:
         except Exception:
             raise HTTPException(422, "image is not a readable picture")
 
-        card = services.open_card(db, trap.id)
-        if card is None or m.get("new_card"):
+        # A photo goes on the liner that was in the trap when it was taken, not the one there when it arrives:
+        # photos wait in the trap's (or hub's) queue while the server is out of reach, and a liner may have
+        # been changed on the dashboard meanwhile. A "new liner" photo only opens one if it is the newest.
+        current = services.open_card(db, trap.id)
+        if current is None or (m.get("new_card") and current.installed_at < captured):
             card = services.start_new_card(db, trap.id, at=captured, note="from trap" if m.get("new_card") else "first photo")
+        else:
+            card = services.card_at(db, trap.id, captured)
 
         rel = Path(trap.id) / captured.strftime("%Y/%m/%d") / f"{uid}.jpg"
         dest = settings.media_dir / rel

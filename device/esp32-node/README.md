@@ -54,7 +54,9 @@ A check-in wake prints `wake=checkin` and no `captured` line, unless the hub say
 `photo asked for on the dashboard`. Setup mode prints `wake=setup` and `live preview at http://10.42.0.23/ for 300 s`.
 
 If the hub's Wi-Fi is up but its gateway is not open yet (`upload ... -> -1`), the node tries again every
-5 s until the end of its connect window (2–5 min), then sleeps. `wifi ... failed status N mac ...`:
+5 s until the end of its connect window (2–5 min), then sleeps. A node with no schedule from the hub
+(never reached it since power-on) looks for it again after 10 min, 20 min, then every 30 min, without a
+photo on those wakes (`wake=search`, firmware 0.2.2); one that has a schedule keeps to the hub's times, repeated daily. `wifi ... failed status N mac ...`:
 1 means the network was not seen, 4 that it refused the node (the password, or a network that wants
 the MAC registered).
 
