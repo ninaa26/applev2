@@ -508,21 +508,53 @@ def _find_grid_1ch(v: np.ndarray, min_score: float) -> Grid:
         if s2 >= min_score:
             angles.append(a2)
 
-    pitches = [p for p in (_period(profile(a)) for a in angles) if p]
+    profiles = [profile(a) for a in angles]
+    pitches = [p for p in (_period(pr) for pr in profiles) if p]
     if not pitches:
         return Grid((), 0.0, 0.0)
-    return Grid(tuple(angles), float(np.median(pitches) * s), s1)
+    return Grid(tuple(angles), float(_agreed_pitch(pitches, profiles) * s), s1)
+
+
+def _agreed_pitch(pitches: list[float], profiles: list[np.ndarray], tol: float = 0.08) -> float:
+    """One spacing for both line families. The liner's grid is square, so the two should agree. When they
+    don't, a profile locked onto a multiple of the spacing (insects or the lure swamp it); averaging the two
+    would give a scale that is wrong for both. Seen on the fake camera's liner (Oct 10 2026): 290 px and
+    1160 px for a 290 px grid, averaged to 2.5 times the true scale.
+
+    Each measured spacing, and whole fractions of it (both can be multiples, e.g. 2x and 3x), is scored by
+    how far the profiles repeat at it above how they repeat at half of it: a grid line repeats at its
+    spacing and not halfway there. Plain correlation would favour any short lag, since lines and insects
+    are blurred; a multiple of the spacing repeats as well at its half as at itself."""
+    if len(pitches) < 2 or max(pitches) <= (1 + tol) * min(pitches):
+        return float(np.median(pitches))
+    acs = [_autocorr(pr) for pr in profiles]
+
+    def at(ac: np.ndarray, lag: float) -> float:
+        return float(np.interp(lag, np.arange(len(ac)), ac))
+
+    def prominence(lag: float) -> float:
+        vals = [at(ac, lag) - at(ac, lag / 2) for ac in acs if lag < 0.5 * len(ac)]
+        return float(np.mean(vals)) if vals else -1.0
+
+    cands = {p / k for p in pitches for k in range(1, 5) if p / k >= 12}
+    return max(cands, key=prominence)
+
+
+def _autocorr(p: np.ndarray) -> np.ndarray:
+    """Normalised, unbiased autocorrelation (long lags have fewer overlapping samples)."""
+    x = p - p.mean()
+    n = len(x)
+    ac = np.correlate(x, x, mode="full")[n - 1:]
+    ac /= ac[0] + 1e-9
+    return ac / ((n - np.arange(n)) / n)
 
 
 def _period(p: np.ndarray, min_lag: int = 6) -> float | None:
     """Spacing of a periodic profile: first clear peak of its autocorrelation."""
-    x = p - p.mean()
-    n = len(x)
+    n = len(p)
     if n < 3 * min_lag:
         return None
-    ac = np.correlate(x, x, mode="full")[n - 1:]
-    ac /= ac[0] + 1e-9
-    ac /= (n - np.arange(n)) / n  # unbiased: long lags have fewer overlapping samples
+    ac = _autocorr(p)
     for lag in range(min_lag, int(n * 0.7)):
         if ac[lag] > 0.25 and ac[lag] >= ac[lag - 1] and ac[lag] >= ac[lag + 1]:
             # sub-sample peak position

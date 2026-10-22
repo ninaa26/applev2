@@ -47,7 +47,7 @@ ESP32 cameras and the hub: [docs/esp32-traps.md](docs/esp32-traps.md). The serve
 - ESP32 camera traps through a hub ([docs/esp32-traps.md](docs/esp32-traps.md)): the hub, a Pi with no camera running the gateway always on (`install-hub.sh`), takes photos from ESP32-S3 camera boards in Wi-Fi range and uploads them under each camera's own trap, with each camera's own key. Hubs and cameras are added and removed on the dashboard (**Set up traps**); the hub learns its cameras from the server and checks in every 30 s, so the dashboard shows whether it is online. The firmware queues photos in flash, keeps its own time against the hub's and corrects for its clock drift. Setup mode streams a live preview from the camera for 5 min after power-on (or BOOT held 3 s), listed on the hub's page, for aiming it; **Take a photo now** on a camera's dashboard page reaches it at its next check-in with the hub (every 30 min between photos). Both compile and are tested in the gateway and server code, not yet on the board. Bench runs over real Wi-Fi: Oct 8 2026 (an ESP32-S3 with an OV3660 on RedRover, through the bench Pi, to a server on the Mac) and Oct 22 2026 (the same ESP32 through the bench Pi as a camera-less hub, `apple-pi-hub`, to the Pi 5 server, `apple-pi-server`, with the v1 classifier; about 10 s awake per wake). Not yet tested: the hub on cellular, the node on the hub's own access point, clock-drift correction over real sleeps, deep-sleep current, and range in an orchard.
 - Dashboard: an orchard view (traps reporting, this week's CM/OFM/OBLR across all traps, 30-day chart for the whole orchard, each hub and when it last checked in) above the per-trap table; each trap's page and a page of all its photos.
 - Review: the queue also shows one in ten labels the model was sure of (a spot check, scored on the trap page), and the trap page says when a biofix rests on catches nobody has confirmed.
-- Automated tests for device, server and ml, run on every pull request ([.github/workflows/tests.yml](.github/workflows/tests.yml)), plus an end-to-end run with the fake camera ([docs/server-on-mac.md](docs/server-on-mac.md#try-it-without-a-pi)). Re-run Oct 10 2026 (6 cycles, 6 moths on the fake liner), it no longer matches the fake camera's ground truth: the grid finder read the fake liner's faint grid as 11.6, 29 or 6.9 px/mm on identical photos (true: 11.6), the scale check then left out two correct photos and kept wrong ones, and only 1 moth was confirmed.
+- Automated tests for device, server and ml, run on every pull request ([.github/workflows/tests.yml](.github/workflows/tests.yml)), plus an end-to-end run with the fake camera ([docs/server-on-mac.md](docs/server-on-mac.md#try-it-without-a-pi)). Re-run Oct 10 2026 after fixing how the grid finder settles on one spacing (6 cycles, 3 moths on the fake liner): all 6 photos read 11.5–11.6 px/mm (true: 11.6) and were used, and 2 moths were confirmed; the third lies across one of them (centres 32 px apart) and is counted with it. Before the fix the same run read 6.9–29 px/mm and confirmed 1 of 6.
 
 ## Not done yet
 
@@ -60,10 +60,14 @@ What the insect-monitoring literature says works and fails, and what this repo d
 
 ## Known problems (audit, Oct 10 2026)
 
-- The biofix is worked out from every catch the trap has ever had, so from the second season on it stays on the first season's date.
-- An error while saving a processed photo (e.g. "database is locked") stops the server's worker thread without notice; photos then wait unprocessed until a restart.
-  Until Oct 22 2026 the worker held the database's write lock while classifying, so on the Pi 5 with BioCLIP on CPU uploads waited minutes and failed with "database is locked"; it now classifies before writing anything. `sentinel-server reprocess` still holds the lock for the whole liner, so stop uploads (or expect retries) while it runs.
-- A queued photo is filed under the liner that is current when it arrives, not when it was taken, so photos uploaded after "New liner installed" can count the old liner's moths again.
-- An ESP32 that loses the hub wakes, photographs and tries Wi-Fi for 2–5 min every 10 min, which will flatten its battery.
-- Degree days from the trap's own sensor need 4 readings a day; the built-in schedule has 3 (the example config has 6). ESP32 traps have no sensor, so they need the NEWA import.
-- The grid finder is unstable on the fake camera's liner (above), and the scale check trusts the first photos of a liner, so a liner whose first photos are misread rejects its correct ones.
+Fixed since the audit: the biofix now comes from the current season's catches only; the worker survives a
+failed save and a failed pass, and (since Oct 22 2026) classifies before writing anything, so uploads are no
+longer locked out of the database while BioCLIP runs on the Pi's CPU; a photo goes on the liner that was in
+the trap when it was taken, and a late one has its liner re-run in order; an ESP32 that loses the hub keeps
+to the hub's daily times, or looks for it every 30 min without photos (firmware 0.2.2); the built-in schedule
+is the example config's six wakes a day, so the trap's own sensor gives degree days (ESP32 traps have no
+sensor and need the NEWA import).
+
+- `sentinel-server reprocess` still holds the database's write lock for the whole liner, so stop uploads (or expect retries) while it runs.
+- The scale check trusts a liner's first photos: a liner whose first photos are misread rejects its correct ones.
+- The grid finder still misreads our IMX219 photos with insects on the card: 5 of 10 calibrated photos with pinned specimens read 32–63 px/mm instead of 15.3 (Oct 10 2026; all 5 of the empty liner read right). See [hardware/CAMERAS.md](hardware/CAMERAS.md).
