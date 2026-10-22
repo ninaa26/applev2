@@ -33,7 +33,7 @@
 #define SETUP_HOLD_MS 3000               // hold BUTTON_PIN this long on a button wake for setup mode
 #endif
 
-#define FW_VERSION "0.2.0"
+#define FW_VERSION "0.2.1"
 static const int CONNECT_MIN_S = 120;      // keep trying the hub at least this long per wake
 static const int CONNECT_MAX_S = 300;
 static const int UNSYNCED_SLEEP_S = 600;   // never heard from the hub: try again this often
@@ -54,6 +54,12 @@ RTC_DATA_ATTR char last_error[96] = "";
 RTC_DATA_ATTR int checkin_s = 0;           // from the hub: check in this often between photos (0: don't)
 RTC_DATA_ATTR bool checkin_next = false;   // the coming timer wake is a check-in, not a photo
 static bool photo_now = false;             // the hub's last reply: a photo was asked for on the dashboard
+// The previous wake, reported at the end of this one: how long it was awake (power) and whether it got through.
+RTC_DATA_ATTR uint32_t prev_awake_ms = 0;
+RTC_DATA_ATTR char prev_wake[12] = "";
+RTC_DATA_ATTR bool prev_reached_hub = false;
+static const char *wake_reason = "";
+static bool reached_hub = false;
 
 static double clockNow() {
   struct timeval tv;
@@ -263,6 +269,13 @@ static int askSchedule() {
   JsonDocument st, reply;
   st["last_error"] = last_error[0] ? last_error : nullptr;
   st["rssi"] = WiFi.RSSI();
+  // Awake time per wake, for estimating power: this one so far, and the whole of the previous one.
+  st["fw"] = FW_VERSION; st["boots"] = boots; st["wake"] = wake_reason; st["awake_ms"] = millis();
+  if (prev_wake[0]) {
+    st["prev_wake"] = prev_wake; st["prev_awake_ms"] = prev_awake_ms; st["prev_reached_hub"] = prev_reached_hub;
+  }
+  st["cpu_temp_c"] = temperatureRead(); st["drift_ppm"] = (rate - 1.0) * 1e6;
+  reached_hub = true;
   String status;
   serializeJson(st, status);
   return post("/node/v1/schedule", "GET", nullptr, status, reply);
@@ -393,7 +406,10 @@ static void sleepUntilNextWake() {
     }
   }
   if (sleep_clock < 30) sleep_clock = 30;
-  Serial.printf("sleeping %.0f s%s\n", sleep_clock, checkin_next ? " (check-in)" : "");
+  Serial.printf("sleeping %.0f s%s, awake %lu ms\n", sleep_clock, checkin_next ? " (check-in)" : "", (unsigned long)millis());
+  prev_awake_ms = millis();
+  strlcpy(prev_wake, wake_reason, sizeof(prev_wake));
+  prev_reached_hub = reached_hub;
   Serial.flush();
   esp_sleep_enable_timer_wakeup((uint64_t)(sleep_clock * 1e6));
   if (BUTTON_PIN >= 0) esp_sleep_enable_ext0_wakeup((gpio_num_t)BUTTON_PIN, 0);
@@ -410,6 +426,7 @@ void setup() {
   // Powered on (installing it) or BOOT held: live preview first. A button wake means a fresh liner either way.
   bool setup_mode = (cause != ESP_SLEEP_WAKEUP_TIMER && !button) || (button && buttonHeld());
   const char *reason = setup_mode ? "setup" : checkin ? "checkin" : cause == ESP_SLEEP_WAKEUP_TIMER ? "scheduled" : "manual";
+  wake_reason = reason;
   Serial.printf("\nsentinel node %s fw %s wake=%s boots=%lu synced=%d\n", TRAP_ID, FW_VERSION, reason, (unsigned long)boots, synced);
 
   if (!LittleFS.begin(true)) setError("flash filesystem failed");

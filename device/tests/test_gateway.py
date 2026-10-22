@@ -210,3 +210,11 @@ def test_live_preview_is_listed_on_the_hub_page_while_it_lasts(tmp_path: Path):
     assert 'href="http://10.42.0.23/"' in page and "<b>T3</b>" in page
     now[0] += 301
     assert "10.42.0.23" not in gw.status_page()
+
+
+def test_end_of_wake_status_is_kept_for_power_and_signal_logs(tmp_path: Path):
+    gw = _gw(tmp_path)
+    gw.schedule("Bearer key2", json.dumps({"wake": "checkin", "awake_ms": 2900, "rssi": -60}))
+    gw.schedule("Bearer key2", "not json")
+    [line] = (tmp_path / "nodes" / "T2" / "status.jsonl").read_text().splitlines()
+    assert json.loads(line) == {"at": "2026-10-05T23:31:30+00:00", "wake": "checkin", "awake_ms": 2900, "rssi": -60}
