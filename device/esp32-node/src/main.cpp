@@ -1,6 +1,10 @@
 // ESP32-S3 camera trap: wake, photograph the liner, queue the photo in flash, upload the queue to the
 // hub Pi, ask it when to wake next, deep-sleep. See device/esp32-node/README.md.
 //
+// Setup mode (after power-on, or BOOT held for 3 s): a live preview for aiming the camera, served by the
+// node itself and listed on the hub's page, then the normal photo. Between photos the node wakes every
+// checkin_s (from the hub) just to ask whether a photo was asked for on the dashboard.
+//
 // Timekeeping: the node never sets its clock. `clock` is seconds since power-on, which keeps counting
 // through deep sleep on the RTC timer, and `offset` (hub time - clock) is measured on every contact.
 // Comparing successive offsets gives the RTC's drift, which shortens or lengthens the next sleep.
@@ -13,15 +17,29 @@
 #include <algorithm>
 #include <sys/time.h>
 #include <vector>
+#include "driver/rtc_io.h"
 #include "esp_camera.h"
+#include "esp_http_server.h"
 #include "node_config.h"
 
-#define FW_VERSION "0.1.0"
+// Settings added after the first node_config.h files were written: defaults for those.
+#ifndef SETUP_PREVIEW_S
+#define SETUP_PREVIEW_S 300              // how long the live preview runs in setup mode
+#endif
+#ifndef PREVIEW_FRAMESIZE
+#define PREVIEW_FRAMESIZE FRAMESIZE_VGA  // live preview size; "full size" on the page uses CAM_FRAMESIZE
+#endif
+#ifndef SETUP_HOLD_MS
+#define SETUP_HOLD_MS 3000               // hold BUTTON_PIN this long on a button wake for setup mode
+#endif
+
+#define FW_VERSION "0.2.0"
 static const int CONNECT_MIN_S = 120;      // keep trying the hub at least this long per wake
 static const int CONNECT_MAX_S = 300;
 static const int UNSYNCED_SLEEP_S = 600;   // never heard from the hub: try again this often
 static const size_t FS_RESERVE = 600000;   // drop the oldest photos to keep this much flash free
 static const int MAX_WAKES = 12;
+static const int CHECKIN_CONNECT_S = 20;   // a check-in that can't reach the hub gives up quickly
 
 // Survives deep sleep, lost on power loss.
 RTC_DATA_ATTR uint32_t session = 0;        // random per power-on: photos from an older session have no usable clock
@@ -33,6 +51,9 @@ RTC_DATA_ATTR int64_t wakes[MAX_WAKES];    // upcoming wake times (hub unix seco
 RTC_DATA_ATTR int n_wakes = 0;
 RTC_DATA_ATTR uint32_t boots = 0;
 RTC_DATA_ATTR char last_error[96] = "";
+RTC_DATA_ATTR int checkin_s = 0;           // from the hub: check in this often between photos (0: don't)
+RTC_DATA_ATTR bool checkin_next = false;   // the coming timer wake is a check-in, not a photo
+static bool photo_now = false;             // the hub's last reply: a photo was asked for on the dashboard
 
 static double clockNow() {
   struct timeval tv;
@@ -131,6 +152,7 @@ static bool captureToQueue(const char *wake_reason, bool new_card) {
 // ------------------------------------------------------------------ hub
 
 static bool connectWifi(int max_s) {
+  if (WiFi.status() == WL_CONNECTED) return true;
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);
   uint32_t until = millis() + max_s * 1000UL;
@@ -152,6 +174,8 @@ static bool connectWifi(int max_s) {
 
 // Everything the hub's reply says about time: measure the offset, update the drift, store the wakes.
 static void takeTime(JsonDocument &reply, double sent_clock) {
+  if (reply["checkin_s"].is<int>()) checkin_s = reply["checkin_s"].as<int>();
+  photo_now = reply["photo_now"] | false;
   if (!reply["now"].is<double>()) return;
   double now_clock = clockNow();
   double new_offset = reply["now"].as<double>() - (sent_clock + now_clock) / 2;
@@ -234,16 +258,134 @@ static int uploadQueue() {
   return 0;
 }
 
+// The last call of a wake: report status, get the schedule. Tells the hub this node is done.
+static int askSchedule() {
+  JsonDocument st, reply;
+  st["last_error"] = last_error[0] ? last_error : nullptr;
+  st["rssi"] = WiFi.RSSI();
+  String status;
+  serializeJson(st, status);
+  return post("/node/v1/schedule", "GET", nullptr, status, reply);
+}
+
+// ------------------------------------------------------------------ setup mode: live preview
+
+static volatile uint32_t preview_until = 0;  // millis()
+static volatile bool still_busy = false;     // the full-size photo has the camera: the stream waits
+
+static esp_err_t indexHandler(httpd_req_t *req) {
+  static const char page[] =
+      "<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width'>"
+      "<title>" TRAP_ID " preview</title><body style='font:16px system-ui;margin:12px;background:#111;color:#eee'>"
+      "<h1 style='font-size:20px'>" TRAP_ID " live preview</h1>"
+      "<p>Aim the camera so the liner fills the picture and is sharp. The preview stops by itself, then the "
+      "camera takes its photo. <a style='color:#9cf' href='/still' target=_blank>Full-size photo</a> to check focus.</p>"
+      "<img id=v style='width:100%;max-width:800px' alt='live preview'>"
+      "<script>document.getElementById('v').src='http://'+location.hostname+':81/stream'</script>";
+  httpd_resp_set_type(req, "text/html");
+  return httpd_resp_send(req, page, sizeof(page) - 1);
+}
+
+static esp_err_t stillHandler(httpd_req_t *req) {
+  still_busy = true;
+  sensor_t *s = esp_camera_sensor_get();
+  s->set_framesize(s, CAM_FRAMESIZE);
+  for (int i = 0; i < 3; i++) { camera_fb_t *f = esp_camera_fb_get(); if (f) esp_camera_fb_return(f); }
+  camera_fb_t *fb = esp_camera_fb_get();
+  esp_err_t r = ESP_FAIL;
+  if (fb) {
+    httpd_resp_set_type(req, "image/jpeg");
+    r = httpd_resp_send(req, (const char *)fb->buf, fb->len);
+    esp_camera_fb_return(fb);
+  } else {
+    httpd_resp_send_500(req);
+  }
+  s->set_framesize(s, PREVIEW_FRAMESIZE);
+  still_busy = false;
+  return r;
+}
+
+static esp_err_t streamHandler(httpd_req_t *req) {
+  httpd_resp_set_type(req, "multipart/x-mixed-replace;boundary=frame");
+  while ((int32_t)(preview_until - millis()) > 0) {
+    if (still_busy) { delay(50); continue; }
+    camera_fb_t *fb = esp_camera_fb_get();
+    if (!fb) { delay(50); continue; }
+    char head[96];
+    int n = snprintf(head, sizeof(head), "\r\n--frame\r\nContent-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n", fb->len);
+    esp_err_t r = httpd_resp_send_chunk(req, head, n);
+    if (r == ESP_OK) r = httpd_resp_send_chunk(req, (const char *)fb->buf, fb->len);
+    esp_camera_fb_return(fb);
+    if (r != ESP_OK) return ESP_FAIL;  // the viewer went away
+  }
+  httpd_resp_send_chunk(req, nullptr, 0);
+  return ESP_OK;
+}
+
+// Serve a live preview on the hub's Wi-Fi for SETUP_PREVIEW_S: the page on port 80, the stream on 81
+// (one server can't serve the page while it streams). The hub lists it on its own page.
+static void runPreview() {
+  if (!connectWifi(60)) { setError("setup: hub Wi-Fi not reachable"); return; }
+  if (!cameraInit()) { setError("camera not found"); return; }
+  sensor_t *s = esp_camera_sensor_get();
+  s->set_framesize(s, PREVIEW_FRAMESIZE);
+  if (LED_PIN >= 0) { pinMode(LED_PIN, OUTPUT); digitalWrite(LED_PIN, HIGH); }
+
+  httpd_handle_t web = nullptr, stream = nullptr;
+  httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
+  httpd_uri_t index = {"/", HTTP_GET, indexHandler, nullptr}, still = {"/still", HTTP_GET, stillHandler, nullptr};
+  if (httpd_start(&web, &cfg) == ESP_OK) { httpd_register_uri_handler(web, &index); httpd_register_uri_handler(web, &still); }
+  cfg.server_port = 81; cfg.ctrl_port += 1;
+  httpd_uri_t live = {"/stream", HTTP_GET, streamHandler, nullptr};
+  if (httpd_start(&stream, &cfg) == ESP_OK) httpd_register_uri_handler(stream, &live);
+
+  preview_until = millis() + SETUP_PREVIEW_S * 1000UL;
+  String url = "http://" + WiFi.localIP().toString() + "/";
+  Serial.printf("live preview at %s for %d s\n", url.c_str(), SETUP_PREVIEW_S);
+  JsonDocument m, reply;
+  m["url"] = url; m["seconds"] = SETUP_PREVIEW_S;
+  String meta;
+  serializeJson(m, meta);
+  post("/node/v1/preview", "POST", nullptr, meta, reply);  // the hub lists it on its page (and gives the time)
+
+  while ((int32_t)(preview_until - millis()) > 0) delay(200);
+  delay(500);  // let an open stream see the deadline and end
+  if (stream) httpd_stop(stream);
+  if (web) httpd_stop(web);
+  if (LED_PIN >= 0) digitalWrite(LED_PIN, LOW);
+  esp_camera_deinit();
+}
+
+// On a button wake: still held after SETUP_HOLD_MS means setup mode, released sooner means a new liner.
+static bool buttonHeld() {
+  if (BUTTON_PIN < 0) return false;
+  rtc_gpio_deinit((gpio_num_t)BUTTON_PIN);
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
+  uint32_t start = millis();
+  while (millis() - start < SETUP_HOLD_MS) {
+    if (digitalRead(BUTTON_PIN) == HIGH) return false;
+    delay(20);
+  }
+  return true;
+}
+
 // ------------------------------------------------------------------ sleep
 
 static void sleepUntilNextWake() {
   double now = clockNow();
   double sleep_clock = UNSYNCED_SLEEP_S;
+  checkin_next = false;
   if (synced) {
     double hub_now = now + offset;
     for (int i = 0; i < n_wakes; i++) {
       double real = wakes[i] - hub_now;
       if (real < 60) continue;
+      if (checkin_s > 0 && real > checkin_s + 120) {
+        // Check in before then, in case a photo is asked for on the dashboard. Timing needn't be exact.
+        sleep_clock = checkin_s / rate;
+        checkin_next = true;
+        break;
+      }
       // Wake early by a margin that grows with the sleep, then convert hub seconds to RTC seconds.
       double margin = 15 + 0.003 * real;
       sleep_clock = (real - margin) / rate;
@@ -251,7 +393,7 @@ static void sleepUntilNextWake() {
     }
   }
   if (sleep_clock < 30) sleep_clock = 30;
-  Serial.printf("sleeping %.0f s\n", sleep_clock);
+  Serial.printf("sleeping %.0f s%s\n", sleep_clock, checkin_next ? " (check-in)" : "");
   Serial.flush();
   esp_sleep_enable_timer_wakeup((uint64_t)(sleep_clock * 1e6));
   if (BUTTON_PIN >= 0) esp_sleep_enable_ext0_wakeup((gpio_num_t)BUTTON_PIN, 0);
@@ -263,37 +405,40 @@ void setup() {
   boots++;
   esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
   if (session == 0) session = esp_random() | 1;
-  const char *reason = cause == ESP_SLEEP_WAKEUP_TIMER ? "scheduled" : cause == ESP_SLEEP_WAKEUP_EXT0 ? "manual" : "first";
-  bool new_card = cause == ESP_SLEEP_WAKEUP_EXT0;
+  bool checkin = cause == ESP_SLEEP_WAKEUP_TIMER && checkin_next;
+  bool button = cause == ESP_SLEEP_WAKEUP_EXT0;
+  // Powered on (installing it) or BOOT held: live preview first. A button wake means a fresh liner either way.
+  bool setup_mode = (cause != ESP_SLEEP_WAKEUP_TIMER && !button) || (button && buttonHeld());
+  const char *reason = setup_mode ? "setup" : checkin ? "checkin" : cause == ESP_SLEEP_WAKEUP_TIMER ? "scheduled" : "manual";
   Serial.printf("\nsentinel node %s fw %s wake=%s boots=%lu synced=%d\n", TRAP_ID, FW_VERSION, reason, (unsigned long)boots, synced);
 
   if (!LittleFS.begin(true)) setError("flash filesystem failed");
   LittleFS.mkdir("/q");
-  captureToQueue(reason, new_card);
+  if (setup_mode) runPreview();
+  if (!checkin) captureToQueue(reason, button);  // a check-in takes no photo unless one was asked for
 
   double real_margin = n_wakes ? 15 + 0.003 * 43200 : 0;  // as early as we might have woken
-  int connect_s = std::min(CONNECT_MAX_S, CONNECT_MIN_S + (int)(2 * real_margin));
+  int connect_s = checkin ? CHECKIN_CONNECT_S : std::min(CONNECT_MAX_S, CONNECT_MIN_S + (int)(2 * real_margin));
   uint32_t until = millis() + connect_s * 1000UL;
   if (connectWifi(connect_s)) {
     // The hub's Wi-Fi can be up before its gateway opens (it is still booting or photographing its
-    // own liner), so keep trying it for the rest of this wake's window.
-    int code = -1;
-    while ((code = uploadQueue()) != 0 && code != 401 && (int32_t)(until - millis()) > 5000) {
+    // own liner), so keep trying it for the rest of this wake's window. A check-in tries once.
+    int code = uploadQueue();
+    while (!checkin && code != 0 && code != 401 && (int32_t)(until - millis()) > 5000) {
       delay(5000);
       if (WiFi.status() != WL_CONNECTED) connectWifi(std::max(10, (int)((int32_t)(until - millis()) / 1000)));
+      code = uploadQueue();
     }
     if (code == 0) {
-      JsonDocument reply;
-      String status;
-      JsonDocument st;
-      st["last_error"] = last_error[0] ? last_error : nullptr;
-      st["rssi"] = WiFi.RSSI();
-      serializeJson(st, status);
-      post("/node/v1/schedule", "GET", nullptr, status, reply);  // tells the hub this node is done
-    } else if (code != 401) {
+      askSchedule();
+      if (photo_now) {  // asked for on the dashboard since this node's last photo
+        Serial.println("photo asked for on the dashboard");
+        if (captureToQueue("requested", false) && uploadQueue() == 0) askSchedule();
+      }
+    } else if (code != 401 && !checkin) {
       setError("hub not answering");
     }
-  } else {
+  } else if (!checkin) {
     setError("hub not reachable");
   }
   WiFi.disconnect(true);

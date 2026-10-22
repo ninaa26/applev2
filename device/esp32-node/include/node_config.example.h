@@ -36,4 +36,10 @@
 #define LED_SETTLE_MS 300
 
 // Button that wakes the trap to mean "fresh liner installed" (GPIO0 is the BOOT button), or -1.
+// Held for SETUP_HOLD_MS it also starts setup mode: a live preview before the photo.
 #define BUTTON_PIN 0
+
+// Setup mode (after power-on, or the button held): a live preview on the hub's Wi-Fi, for aiming the camera.
+#define SETUP_PREVIEW_S 300               // how long the preview runs before the camera takes its photo
+#define PREVIEW_FRAMESIZE FRAMESIZE_VGA   // preview size (640x480); the page's full-size photo uses CAM_FRAMESIZE
+#define SETUP_HOLD_MS 3000

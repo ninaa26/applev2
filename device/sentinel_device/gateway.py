@@ -18,15 +18,19 @@ Node protocol (all requests carry "Authorization: Bearer <that trap's server API
                              (random hex, the same on every retry), captured_at + clock_synced, or
                              age_s, new_card, camera, device
     GET  /node/v1/schedule   last call of a wake; marks the node done for this window
+    POST /node/v1/preview    header X-Sentinel-Meta: {"url": "http://<node ip>/", "seconds": n}: the node is
+                             streaming a live preview for setting it up, listed on the hub's page (GET /)
 
-Both reply with {"now": unix seconds, "sleep_s": seconds until the node's next wake, "wakes": the next
-12 wake times in unix seconds, ...}.
+All reply with {"now": unix seconds, "sleep_s": seconds until the node's next wake, "wakes": the next
+12 wake times in unix seconds, "checkin_s": how often to check in between photos (0: don't),
+"photo_now": true when a photo was asked for on the dashboard and this node hasn't sent one since}.
 """
 
 from __future__ import annotations
 
 import argparse
 import hashlib
+import html
 import json
 import os
 import logging
@@ -48,6 +52,7 @@ from .uploader import Queue, drain
 log = logging.getLogger(__name__)
 
 NODE_ID = re.compile(r"[0-9a-fA-F]{8,32}")
+PREVIEW_URL = re.compile(r"http://[0-9.]{7,15}(:[0-9]{1,5})?/")
 TRAP_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,31}")
 
 
@@ -80,6 +85,9 @@ class Gateway:
             server = {}
         self._set_nodes(server)
         self.done: set[str] = set()  # nodes that asked for their schedule since the window opened
+        self.requests: dict[str, datetime] = {}  # photo asked for on the dashboard: trap_id -> when (from the server)
+        self.served: dict[str, datetime] = {}    # requests a node has already sent a newer photo for
+        self.previews: dict[str, tuple[str, float]] = {}  # trap_id -> (live preview url, until clock())
         self.lock = threading.Lock()
 
     def _set_nodes(self, server: dict[str, str]) -> None:
@@ -95,7 +103,9 @@ class Gateway:
             r.raise_for_status()
             nodes = r.json()["nodes"]
             assert isinstance(nodes, dict)
-        except (requests.RequestException, ValueError, KeyError, AssertionError) as e:
+            asked = {t: datetime.fromisoformat(w).astimezone(timezone.utc)
+                     for t, w in (r.json().get("photo_requests") or {}).items()}
+        except (requests.RequestException, ValueError, KeyError, AssertionError, TypeError, AttributeError) as e:
             log.warning("node list not refreshed (%s); using the last one: %s", e.__class__.__name__, ", ".join(self.hashes) or "none")
             return False
         tmp = self.cache.with_suffix(".tmp")
@@ -103,6 +113,12 @@ class Gateway:
         os.replace(tmp, self.cache)
         before = set(self.hashes)
         self._set_nodes(nodes)
+        with self.lock:
+            new = sorted(t for t, w in asked.items() if self.requests.get(t) != w)
+            self.requests = asked
+            self.served = {t: w for t, w in self.served.items() if asked.get(t) == w}
+        if new:
+            log.info("photo asked for on the dashboard: %s", ", ".join(new))
         if set(self.hashes) != before:
             log.info("nodes for this hub: %s", ", ".join(sorted(self.hashes)) or "none")
         return True
@@ -135,7 +151,12 @@ class Gateway:
             path.write_text(key)
         return found
 
-    def schedule_reply(self) -> dict:
+    def photo_wanted(self, trap_id: str | None) -> bool:
+        with self.lock:
+            asked = self.requests.get(trap_id) if trap_id else None
+            return asked is not None and self.served.get(trap_id) != asked
+
+    def schedule_reply(self, trap_id: str | None = None) -> dict:
         now = datetime.fromtimestamp(self.clock(), timezone.utc)
         offset = timedelta(seconds=self.hub["node_offset_s"])
         # The node wakes node_offset_s after the hub's slot, once the hub has booted and opened the window.
@@ -144,7 +165,8 @@ class Gateway:
             t = next_wake(t, self.cfg["schedule"]["times"], self.cfg["timezone"], min_gap=timedelta(minutes=2))
             wakes.append(t + offset)
         return {"now": now.timestamp(), "next_wake": wakes[0].isoformat(), "sleep_s": round((wakes[0] - now).total_seconds()),
-                "wakes": [round(w.timestamp()) for w in wakes]}
+                "wakes": [round(w.timestamp()) for w in wakes], "checkin_s": round(float(self.hub["checkin_min"]) * 60),
+                "photo_now": self.photo_wanted(trap_id)}
 
     def capture(self, authorization: str, meta_header: str, body: bytes) -> tuple[int, dict]:
         trap_id = self.trap_for(authorization)
@@ -175,20 +197,23 @@ class Gateway:
             return 422, {"error": "bad captured_at or age_s"}
 
         queue = self.queue(trap_id)
+        uid = None
         with self.lock:
+            if self.requests.get(trap_id) is not None and captured >= self.requests[trap_id]:
+                self.served[trap_id] = self.requests[trap_id]  # this photo answers the dashboard's request
             # A retry after a lost reply: same node_capture_id, already queued or already sent.
-            for d in (queue.queue_dir, queue.sent_dir):
-                if any(d.glob(f"*_{node_id}.jpg")):
-                    return 200, {**self.schedule_reply(), "duplicate": True}
-            uid = f"{captured.strftime('%Y%m%dT%H%M%SZ')}_{trap_id}_{node_id}"
-            meta.update(capture_uid=uid, trap_id=trap_id, captured_at=captured.isoformat(),
-                        wake_reason=meta.get("wake_reason", "scheduled"),
-                        hub={"received_at": now.isoformat(), "hub_trap_id": self.cfg["trap_id"]})
-            tmp = queue.queue_dir / f".{uid}.part"
-            tmp.write_bytes(body)
-            queue.add(tmp.rename(tmp.with_name(f"{uid}.jpg")), meta)
+            if not any(any(d.glob(f"*_{node_id}.jpg")) for d in (queue.queue_dir, queue.sent_dir)):
+                uid = f"{captured.strftime('%Y%m%dT%H%M%SZ')}_{trap_id}_{node_id}"
+                meta.update(capture_uid=uid, trap_id=trap_id, captured_at=captured.isoformat(),
+                            wake_reason=meta.get("wake_reason", "scheduled"),
+                            hub={"received_at": now.isoformat(), "hub_trap_id": self.cfg["trap_id"]})
+                tmp = queue.queue_dir / f".{uid}.part"
+                tmp.write_bytes(body)
+                queue.add(tmp.rename(tmp.with_name(f"{uid}.jpg")), meta)
+        if uid is None:
+            return 200, {**self.schedule_reply(trap_id), "duplicate": True}
         log.info("node %s: queued %s (%d kB)", trap_id, uid, len(body) // 1000)
-        return 201, {**self.schedule_reply(), "uid": uid}
+        return 201, {**self.schedule_reply(trap_id), "uid": uid}
 
     def schedule(self, authorization: str, meta_header: str = "") -> tuple[int, dict]:
         trap_id = self.trap_for(authorization)
@@ -198,7 +223,44 @@ class Gateway:
             self.done.add(trap_id)
         if meta_header:
             log.info("node %s status: %s", trap_id, meta_header[:300])
-        return 200, self.schedule_reply()
+        return 200, self.schedule_reply(trap_id)
+
+    def preview(self, authorization: str, meta_header: str) -> tuple[int, dict]:
+        """A node in setup mode streams a live preview; list it on the hub's page while it lasts."""
+        trap_id = self.trap_for(authorization)
+        if trap_id is None:
+            return 401, {"error": "unknown or missing trap API key"}
+        try:
+            meta = json.loads(meta_header or "{}")
+            url, seconds = str(meta["url"]), float(meta["seconds"])
+            assert PREVIEW_URL.fullmatch(url) and 0 < seconds <= 3600
+        except (ValueError, KeyError, TypeError, AssertionError):
+            return 422, {"error": 'meta must be {"url": "http://<ip>/", "seconds": 1-3600}'}
+        with self.lock:
+            self.previews[trap_id] = (url, self.clock() + seconds)
+        log.info("node %s: live preview at %s for %.0f s", trap_id, url, seconds)
+        return 200, self.schedule_reply(trap_id)
+
+    def status_page(self) -> str:
+        """The hub's own page (GET /): each camera, and a link to any live preview. Open it on a phone on
+        the hub's Wi-Fi while setting a camera up."""
+        now = self.clock()
+        with self.lock:
+            previews = {t: u for t, (u, until) in self.previews.items() if until > now}
+            asked = {t for t in self.requests if self.served.get(t) != self.requests[t]}
+        rows = []
+        for t in sorted(set(self.hashes) | set(previews)):
+            cells = [f"<b>{html.escape(t)}</b>"]
+            if t in previews:
+                cells.append(f'<a href="{html.escape(previews[t])}">live preview</a>')
+            if t in asked:
+                cells.append("photo asked for")
+            rows.append("<li>" + " · ".join(cells) + "</li>")
+        return ("<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width'>"
+                "<meta http-equiv=refresh content=10><title>Hub " + html.escape(self.cfg["trap_id"]) + "</title>"
+                "<body style='font:16px system-ui;margin:16px'><h1>Hub " + html.escape(self.cfg["trap_id"]) + "</h1>"
+                "<p>Cameras on this hub. A camera streams a live preview for a few minutes after it is powered on, "
+                "or after its BOOT button is held for 3 s.</p><ul>" + ("".join(rows) or "<li>No cameras yet</li>") + "</ul>")
 
     def all_done(self) -> bool:
         with self.lock:
@@ -235,6 +297,8 @@ def make_server(gw: Gateway, host: str, port: int) -> ThreadingHTTPServer:
             self.wfile.write(data)
 
         def do_POST(self):
+            if self.path == "/node/v1/preview":
+                return self._reply(*gw.preview(self.headers.get("Authorization", ""), self.headers.get("X-Sentinel-Meta", "")))
             if self.path != "/node/v1/captures":
                 return self._reply(404, {"error": "not found"})
             length = int(self.headers.get("Content-Length") or 0)
@@ -246,6 +310,13 @@ def make_server(gw: Gateway, host: str, port: int) -> ThreadingHTTPServer:
         def do_GET(self):
             if self.path == "/healthz":
                 return self._reply(200, {"ok": True})
+            if self.path == "/":
+                data = gw.status_page().encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                return self.wfile.write(data)
             if self.path != "/node/v1/schedule":
                 return self._reply(404, {"error": "not found"})
             self._reply(*gw.schedule(self.headers.get("Authorization", ""), self.headers.get("X-Sentinel-Meta", "")))
