@@ -24,7 +24,8 @@ device/     Raspberry Pi software: the hub for the ESP32 cameras (gateway.py, in
             firmware (esp32-node/), and the earlier Pi camera trap (wake → LED → photo → upload → power off)
 server/     FastAPI + SQLite (Postgres later): upload API, detection/tracking/counting worker, dashboard
 ml/         training photos (AMI, iNaturalist, trap-style synthetic), labelling tool, detector and classifier training and scoring
-hardware/   trap dimensions (TRAP.md), mockup trap template, 3D-printable camera mount + liner tray, calibration prints
+hardware/   trap dimensions (TRAP.md), weatherproof camera head that retrofits onto the stock trap (HOUSING.md),
+            mockup trap template, liner tray, calibration prints
 docs/       ESP32 traps and the hub, the server on Linux or the Mac, Pi camera bring-up and wiring, camera bench test, measuring accuracy
 ```
 
@@ -51,6 +52,7 @@ ESP32 cameras and the hub: [docs/esp32-traps.md](docs/esp32-traps.md). The serve
 
 ## Not done yet
 
+printing and fitting the trap housing (designed Oct 14 2026, not yet printed: a sealed head with the Pi 5, a swappable 72 Wh battery cartridge, diffused LED strips and a glass window, clamped over one slot cut in the stock trap's roof; [hardware/HOUSING.md](hardware/HOUSING.md)) ·
 ArUco alignment in the pipeline · white-card calibration for the LED's new position · a diffuser for the LED (10–13% of the card is blown out) · finishing the OFM liner labels (454 boxes) ·
 accuracy on our own trap's photos, on locked test cards ([docs/evaluation.md](docs/evaluation.md)) · an entomologist's check of the field-card species and of the 454 pass-1 labels Claude added · a second source of OFM on glue (every CNN learnt the one trap camera's OFM) ·
 the hub on cellular, and its own access point for the cameras · a cloud server (8 GB; [docs/server-on-linux.md](docs/server-on-linux.md)) with a domain and HTTPS ·
