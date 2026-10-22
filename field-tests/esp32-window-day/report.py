@@ -106,7 +106,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("run", type=Path)
     ap.add_argument("--photo-ma", type=float, default=180, help="assumed average current while awake for a photo (mA at 5 V)")
-    ap.add_argument("--checkin-ma", type=float, default=120, help="assumed average current during a Wi-Fi-only check-in")
+    ap.add_argument("--checkin-ma", type=float, default=120, help="assumed average current during a Wi-Fi-only wake (check-in, or a search for a lost hub)")
     ap.add_argument("--sleep-ma", type=float, default=5, help="assumed current asleep (dev board: measure it)")
     args = ap.parse_args()
     run = args.run.resolve()
@@ -193,7 +193,7 @@ def main() -> None:
         wakes.append((statuses[-1]["t"], statuses[-1].get("wake", "?"), statuses[-1]["awake_ms"] / 1000, True))
     hours = (end - start).total_seconds() / 3600
     awake_s = sum(w[2] for w in wakes)
-    ma = lambda kind: args.checkin_ma if kind == "checkin" else args.photo_ma
+    ma = lambda kind: args.checkin_ma if kind in ("checkin", "search") else args.photo_ma  # search: Wi-Fi only, no photo
     awake_mah = sum(w[2] / 3600 * ma(w[1]) for w in wakes)
     sleep_mah = max(0.0, hours - awake_s / 3600) * args.sleep_ma
     by_kind = Counter(w[1] for w in wakes)

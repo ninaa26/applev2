@@ -466,3 +466,52 @@ def test_upload_commits_while_classifier_runs(monkeypatch):
     with session_scope() as db:
         assert {c.uid: c.status for c in db.query(Capture)} == {"slow": "processed", "during": "new"}
         assert "card_old" in [e.kind for e in db.query(Event)]  # raised before classifying, as before
+
+
+def test_upload_commits_while_a_liner_is_reprocessed():
+    """Re-running a liner (the CLI, or the worker when a photo arrives late) classifies every photo before
+    deleting or writing anything, so it doesn't hold the write lock for the whole liner either."""
+    import threading
+
+    class SlowClassifier:
+        version = "slow"
+
+        def __init__(self):
+            self.started, self.release = threading.Event(), threading.Event()
+
+        def classify(self, crops):
+            self.started.set()
+            assert self.release.wait(30)
+            return [{} for _ in crops]
+
+    key = add_trap()
+    now = datetime.now(timezone.utc)
+    with TestClient(create_app()) as client:
+        for i in range(2):
+            assert upload(client, key, now - timedelta(hours=3 - i), MOTHS, f"r{i}").status_code == 201
+        assert process_pending(Pipeline()) == 2
+        with session_scope() as db:
+            card_id = db.query(Capture).first().card_id
+        pipeline = Pipeline()
+        pipeline.classifier = SlowClassifier()
+        result = {}
+
+        def rerun():
+            with session_scope() as db:
+                result["n"] = pipeline.reprocess_card(db, card_id)
+
+        worker = threading.Thread(target=rerun, daemon=True)
+        worker.start()
+        try:
+            assert pipeline.classifier.started.wait(30)
+            up = threading.Thread(target=lambda: result.update(r=upload(client, key, now, MOTHS, "during")))
+            up.start()
+            up.join(5)
+            assert not up.is_alive() and result["r"].status_code == 201
+        finally:
+            pipeline.classifier.release.set()
+            worker.join(30)
+            up.join(60)
+    assert result["n"] == 2
+    with session_scope() as db:
+        assert {c.uid: c.status for c in db.query(Capture)} == {"r0": "processed", "r1": "processed", "during": "new"}
