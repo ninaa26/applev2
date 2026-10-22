@@ -2,6 +2,8 @@
 
 The Mac runs the API, the dashboard, and the worker that detects and counts insects, all in one process.
 Moving to a real server later means copying the `data/` folder and running the same commands there.
+Since Oct 22 2026 the server for the ESP32 traps runs on a Raspberry Pi 5 instead: [server-on-linux.md](server-on-linux.md).
+The Mac setup below is still the quickest way to develop and test.
 
 ## Setup (once)
 
