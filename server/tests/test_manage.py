@@ -114,6 +114,8 @@ def test_hub_without_a_camera_relays_esp32s_and_shows_when_it_last_checked_in():
 
         page = client.get("/").text
         assert "Not heard from yet" in page
+        for url in ("/traps/T1", "/traps/T1/photos", "/manage"):  # a hub has no photos: every page still works
+            assert client.get(url).status_code == 200, url
         table = page.split("Each trap")[1]
         assert "/traps/T2" in table and "/traps/T1" not in table  # the hub has no row of counts
         assert "0<small> / 1</small>" in page  # one camera in the orchard, not two
@@ -121,6 +123,9 @@ def test_hub_without_a_camera_relays_esp32s_and_shows_when_it_last_checked_in():
         assert client.get("/api/v1/hub/nodes", headers={"Authorization": f"Bearer {hub_key}"}).status_code == 200
         page = client.get("/").text
         assert "checked in" in page and "1 camera" in page
+        hub_page = client.get("/traps/T1")
+        assert hub_page.status_code == 200 and "checked in" in hub_page.text and "/traps/T2" in hub_page.text
+        assert client.get("/manage").status_code == 200
         with session_scope() as db:
             seen = db.get(Trap, "T1").last_seen_at
             assert seen is not None and services.trap_health(db, db.get(Trap, "T1"))["state"] == "online"

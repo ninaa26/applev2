@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% set nav = 'overview' %}
+{% block title %}{{ trap.id }} · Orchard Sentinel{% endblock %}
+{% block head %}<meta http-equiv="refresh" content="60">{% endblock %}
+{% block main %}
+<div>
+  <h1>{{ trap.id }} <span class="muted" style="font-size:18px">{{ trap.name }}</span></h1>
+  {% if trap.retired_at %}<p class="pill offline">Removed from the orchard {{ trap.retired_at|local('%b %d, %Y') }}. <a href="/manage">Set up traps</a> to bring it back.</p>{% endif %}
+  <p class="muted">Hub, no camera{% if trap.block %} · {{ trap.block }}{% endif %} ·
+    <span class="pill {{ health.state }}">{% if health.state == 'never' %}Not heard from yet{% else %}{{ health.state|capitalize }} · checked in {{ health.seen_at|ago }}{% endif %}</span></p>
+  <p class="muted">It takes the photos from the ESP32 cameras below and sends them here, and checks in every minute or so.</p>
+</div>
+
+<div class="card tbl">
+  <h2>Its cameras</h2>
+  {% if cameras %}
+  <table style="margin-top:8px"><tbody>
+  {% for c in cameras %}
+  {% set h = c.health %}
+  <tr>
+    <td><a href="/traps/{{ c.trap.id }}"><b>{{ c.trap.id }}</b></a> <span class="muted">{{ c.trap.name }} · {{ c.trap.lure }} lure</span></td>
+    <td><span class="pill {{ h.state }}">{% if h.state == 'never' %}No photos yet{% else %}{{ h.state|capitalize }} · last photo {{ h.last.received_at|ago }}{% endif %}</span></td>
+  </tr>
+  {% endfor %}
+  </tbody></table>
+  {% else %}<p class="muted">No cameras use this hub yet. <a href="/manage">Add one</a>.</p>{% endif %}
+</div>
+{% endblock %}
