@@ -151,3 +151,25 @@ def test_cli_hub_and_set_kind(capsys):
     assert main(["set-kind", "T2", "hub"]) == 1  # an ESP32 stays a camera
     with session_scope() as db:
         assert db.get(Trap, "T3").kind == "hub"
+
+
+def test_take_a_photo_now_reaches_the_hub_and_clears_when_a_newer_photo_arrives():
+    with TestClient(create_app()) as client:
+        _, hub_key = _add(client, trap_id="T1", kind="hub")
+        _, cam_key = _add(client, trap_id="T2", kind="esp32", hub_id="T1")
+        hub = {"Authorization": f"Bearer {hub_key}"}
+        assert client.get("/api/v1/hub/nodes", headers=hub).json()["photo_requests"] == {}
+        assert client.post("/traps/T1/request-photo").status_code == 422  # a hub has no camera
+        assert "Take a photo now" in client.get("/traps/T2").text
+
+        before = datetime.now(timezone.utc) - timedelta(minutes=5)
+        assert client.post("/traps/T2/request-photo", follow_redirects=False).status_code == 303
+        assert "taken at the next check-in" in client.get("/traps/T2").text
+        asked = client.get("/api/v1/hub/nodes", headers=hub).json()["photo_requests"]
+        assert list(asked) == ["T2"] and datetime.fromisoformat(asked["T2"]).tzinfo is not None
+
+        assert _upload(client, cam_key, "T2", "old", when=before).status_code == 201  # taken before the request
+        assert "T2" in client.get("/api/v1/hub/nodes", headers=hub).json()["photo_requests"]
+        assert _upload(client, cam_key, "T2", "new").status_code == 201
+        assert client.get("/api/v1/hub/nodes", headers=hub).json()["photo_requests"] == {}
+        assert "Take a photo now" in client.get("/traps/T2").text
