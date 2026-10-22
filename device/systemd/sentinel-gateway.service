@@ -1,0 +1,15 @@
+[Unit]
+Description=Orchard Sentinel hub: take photos from the ESP32 cameras and send them to the server
+Wants=network-online.target tailscaled.service
+After=network-online.target tailscaled.service
+
+[Service]
+User=sentinel
+# Always on: cameras can reach it at any time, and it forwards their photos every 30 s. It also asks the
+# server for its camera list every 30 s, which is how the dashboard knows the hub is online.
+ExecStart=/opt/sentinel/venv/bin/sentinel-gateway --config /etc/sentinel/config.toml --forward-every 30
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
