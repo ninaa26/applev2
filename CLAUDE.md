@@ -11,6 +11,7 @@ and `hardware/CAMERAS.md`.
 - `server/`: FastAPI + SQLite package `sentinel_server` (upload API, detect/track/classify pipeline, dashboard, `evaluate`)
 - `ml/`: standalone scripts run from inside `ml/` (fetch, build dataset, label, train, score); no package
 - `hardware/`: trap dimensions, camera notes, printable parts
+- `field-tests/`: self-contained test runs on the real hardware, separate from the regular code (e.g. `esp32-window-day/`: scripts to start, check, fail, finish and report a day-long run; run output goes to its gitignored `runs/`)
 - `docs/`: ESP32 traps and the hub, server on Linux (the Pi 5) or the Mac, Pi camera bring-up, wiring, camera bench, measuring accuracy
 
 ## Environments and tests
