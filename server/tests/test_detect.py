@@ -265,6 +265,17 @@ def test_grid_scale_on_the_fake_camera_liner():
     assert ppm == pytest.approx(290 / 25, rel=0.03)
 
 
+def test_dark_frame_with_fine_banding_has_no_grid():
+    """A night photo from an ESP32 with no light (T2, Oct 23 2026): dark, with faint fine banding that reads as
+    two line families both closer than any real grid. It used to raise inside _agreed_pitch instead of
+    coming back as no grid, so the capture got a traceback rather than "no liner grid found"."""
+    img = np.full((1200, 1600), 30, np.uint8)
+    img[::28, :] = 10
+    img[:, ::44] = 10
+    assert find_grid(img).pitch_px == 0.0
+    assert find_grid(np.zeros((1200, 1600, 3), np.uint8)).pitch_px == 0.0  # all black
+
+
 def test_line_families_agree_on_one_spacing():
     from sentinel_server.pipeline.detect import _agreed_pitch
 
@@ -279,3 +290,4 @@ def test_line_families_agree_on_one_spacing():
     assert _agreed_pitch([50.0, 51.0], [across, down]) == pytest.approx(50.5)  # agree: as before
     assert _agreed_pitch([200.0, 50.0], [across, down]) == pytest.approx(50)    # one a multiple
     assert _agreed_pitch([150.0, 100.0], [across, down]) == pytest.approx(50)   # both multiples
+    assert _agreed_pitch([7.0, 11.0], [across, down]) == pytest.approx(9)      # all too fine: no raise

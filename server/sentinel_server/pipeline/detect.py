@@ -537,6 +537,8 @@ def _agreed_pitch(pitches: list[float], profiles: list[np.ndarray], tol: float =
         return float(np.mean(vals)) if vals else -1.0
 
     cands = {p / k for p in pitches for k in range(1, 5) if p / k >= 12}
+    if not cands:  # every spacing too fine for a real grid (noise on a dark frame): find_grid drops it
+        return float(np.median(pitches))
     return max(cands, key=prominence)
 
 
