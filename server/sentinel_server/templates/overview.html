@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_status.html" import camera_status %}
 {% set nav = 'overview' %}
 {% block title %}Orchard · Orchard Sentinel{% endblock %}
 {% block head %}<meta http-equiv="refresh" content="60">{% endblock %}
@@ -70,7 +71,7 @@
   {% set h = r.health %}
   <tr>
     <td><a href="/traps/{{ r.trap.id }}"><b>{{ r.trap.id }}</b></a> <span class="muted">{{ r.trap.name }} · {{ r.trap.lure }} lure{% if r.trap.kind == 'esp32' %} · ESP32 via {{ r.trap.hub_id }}{% else %} · Pi camera{% endif %}</span></td>
-    <td><span class="pill {{ h.state }}">{% if h.state == 'never' %}No photos yet{% else %}{{ h.state|capitalize }} · {{ h.last.received_at|ago }}{% endif %}</span></td>
+    <td>{{ camera_status(h) }}</td>
     {% for sp in PESTS %}<td class="n">{{ r.week.get(sp, 0) }}</td>{% endfor %}
     <td class="n">{{ r.week.get('other_moth', 0) + r.week.get('unclassified', 0) }}</td>
     <td class="n">{% if r.pending %}<a href="/review">{{ r.pending }}</a>{% else %}0{% endif %}</td>

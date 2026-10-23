@@ -278,11 +278,17 @@ def trap_health(db: Session, trap: Trap) -> dict:
     age_h = (utcnow() - last.received_at).total_seconds() / 3600
     state = "online" if age_h <= get_settings().offline_after_h else "offline"
     err = (last.meta or {}).get("device", {}).get("last_error")
+    failed = last.status == "failed"
+    # Shown when the dashboard's "Error" is hovered; clicking it opens the photo, or the trap's page.
+    reason = "; ".join(r for r in (f"Camera reported: {err}" if err else "",
+                                   f"Newest photo failed: {last.error or 'no reason saved'}" if failed else "") if r)
     return {
-        "state": "error" if (state == "online" and (err or last.status == "failed")) else state,
+        "state": "error" if (state == "online" and (err or failed)) else state,
         "age_h": age_h,
         "last": last,
         "device_error": err,
+        "reason": reason,
+        "reason_url": f"/captures/{last.id}" if failed else f"/traps/{trap.id}",
     }
 
 

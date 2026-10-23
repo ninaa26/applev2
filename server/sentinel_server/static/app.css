@@ -38,6 +38,7 @@ th,td{text-align:left;padding:8px 10px;border-top:1px solid var(--rule);vertical
 thead th{border-top:0;font:500 11px var(--mono);letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
 td.n{font-family:var(--mono);text-align:right}
 .pill{display:inline-block;font:500 11.5px var(--mono);padding:2px 8px;border-radius:99px;white-space:nowrap}
+a.pill{text-decoration:none}a.pill:hover{text-decoration:underline}
 .pill.online{background:color-mix(in srgb,var(--ok) 16%,transparent);color:var(--ok)}
 .pill.offline,.pill.failed{background:color-mix(in srgb,var(--crit) 16%,transparent);color:var(--crit)}
 .pill.error,.pill.review,.pill.unknown,.pill.new{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
