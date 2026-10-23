@@ -24,7 +24,7 @@
 
 // Settings added after the first node_config.h files were written: defaults for those.
 #ifndef SETUP_PREVIEW_S
-#define SETUP_PREVIEW_S 300              // how long the live preview runs in setup mode
+#define SETUP_PREVIEW_S 120              // how long the live preview runs in setup mode
 #endif
 #ifndef PREVIEW_FRAMESIZE
 #define PREVIEW_FRAMESIZE FRAMESIZE_VGA  // live preview size; "full size" on the page uses CAM_FRAMESIZE
@@ -33,7 +33,7 @@
 #define SETUP_HOLD_MS 3000               // hold BUTTON_PIN this long on a button wake for setup mode
 #endif
 
-#define FW_VERSION "0.2.2"
+#define FW_VERSION "0.2.5"
 static const int CONNECT_MIN_S = 120;      // keep trying the hub at least this long per wake
 static const int CONNECT_MAX_S = 300;
 static const int UNSYNCED_SLEEP_S = 600;   // never heard from the hub: first retry after this long,
@@ -61,6 +61,11 @@ static bool photo_now = false;             // the hub's last reply: a photo was 
 RTC_DATA_ATTR uint32_t prev_awake_ms = 0;
 RTC_DATA_ATTR char prev_wake[12] = "";
 RTC_DATA_ATTR bool prev_reached_hub = false;
+// A wake that used the camera restarts in a short deep sleep and uploads in the fresh boot (restartForUpload).
+RTC_DATA_ATTR bool upload_next = false;    // the coming timer wake is the second half of this wake
+RTC_DATA_ATTR char upload_reason[12] = ""; // the first half's wake reason
+RTC_DATA_ATTR uint32_t upload_before_ms = 0;  // how long the first half was awake
+static uint32_t awake_before_ms = 0;       // the same, in the second half: counted in this wake's awake time
 static const char *wake_reason = "";
 static bool reached_hub = false;
 
@@ -273,7 +278,7 @@ static int askSchedule() {
   st["last_error"] = last_error[0] ? last_error : nullptr;
   st["rssi"] = WiFi.RSSI();
   // Awake time per wake, for estimating power: this one so far, and the whole of the previous one.
-  st["fw"] = FW_VERSION; st["boots"] = boots; st["wake"] = wake_reason; st["awake_ms"] = millis();
+  st["fw"] = FW_VERSION; st["boots"] = boots; st["wake"] = wake_reason; st["awake_ms"] = awake_before_ms + millis();
   if (prev_wake[0]) {
     st["prev_wake"] = prev_wake; st["prev_awake_ms"] = prev_awake_ms; st["prev_reached_hub"] = prev_reached_hub;
   }
@@ -372,6 +377,21 @@ static void runPreview() {
   esp_camera_deinit();
 }
 
+// After the camera has run, uploads from the same boot crawl or fail for the rest of the wake (Oct 22 2026,
+// RedRover: every wake with a photo or the preview, while the check-ins between them, which don't use the
+// camera, sent 3 photos in a second). A deep sleep resets the chip, so upload from a fresh boot.
+static void restartForUpload(const char *reason) {
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_OFF);
+  upload_next = true;
+  strlcpy(upload_reason, reason, sizeof(upload_reason));
+  upload_before_ms = millis();
+  Serial.println("restarting to upload");
+  Serial.flush();
+  esp_sleep_enable_timer_wakeup(200000);
+  esp_deep_sleep_start();
+}
+
 // On a button wake: still held after SETUP_HOLD_MS means setup mode, released sooner means a new liner.
 static bool buttonHeld() {
   if (BUTTON_PIN < 0) return false;
@@ -427,7 +447,7 @@ static void sleepUntilNextWake() {
   }
   if (sleep_clock < 30) sleep_clock = 30;
   Serial.printf("sleeping %.0f s%s, awake %lu ms\n", sleep_clock, checkin_next ? " (check-in)" : "", (unsigned long)millis());
-  prev_awake_ms = millis();
+  prev_awake_ms = awake_before_ms + millis();
   strlcpy(prev_wake, wake_reason, sizeof(prev_wake));
   prev_reached_hub = reached_hub;
   Serial.flush();
@@ -438,25 +458,32 @@ static void sleepUntilNextWake() {
 
 void setup() {
   Serial.begin(115200);
-  boots++;
   esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
+  bool upload = cause == ESP_SLEEP_WAKEUP_TIMER && upload_next;  // the photo is taken: just upload it
+  upload_next = false;
+  if (upload) awake_before_ms = upload_before_ms;
+  else boots++;
   if (session == 0) session = esp_random() | 1;
-  bool checkin = cause == ESP_SLEEP_WAKEUP_TIMER && checkin_next;
+  bool checkin = cause == ESP_SLEEP_WAKEUP_TIMER && checkin_next && !upload;
   bool button = cause == ESP_SLEEP_WAKEUP_EXT0;
   // A timer wake without a schedule is only a search for the hub (see sleepUntilNextWake).
-  bool search = cause == ESP_SLEEP_WAKEUP_TIMER && !checkin && retries > 0;
+  bool search = cause == ESP_SLEEP_WAKEUP_TIMER && !checkin && !upload && retries > 0;
   // Powered on (installing it) or BOOT held: live preview first. A button wake means a fresh liner either way.
   bool setup_mode = (cause != ESP_SLEEP_WAKEUP_TIMER && !button) || (button && buttonHeld());
-  const char *reason = setup_mode ? "setup" : checkin ? "checkin" : search ? "search" : cause == ESP_SLEEP_WAKEUP_TIMER ? "scheduled" : "manual";
+  const char *reason = upload ? upload_reason : setup_mode ? "setup" : checkin ? "checkin" : search ? "search" : cause == ESP_SLEEP_WAKEUP_TIMER ? "scheduled" : "manual";
   wake_reason = reason;
-  Serial.printf("\nsentinel node %s fw %s wake=%s boots=%lu synced=%d\n", TRAP_ID, FW_VERSION, reason, (unsigned long)boots, synced);
+  Serial.printf("\nsentinel node %s fw %s wake=%s%s boots=%lu synced=%d\n", TRAP_ID, FW_VERSION, reason,
+                upload ? " (upload)" : "", (unsigned long)boots, synced);
 
   if (!LittleFS.begin(true)) setError("flash filesystem failed");
   LittleFS.mkdir("/q");
   if (setup_mode) runPreview();
   // A check-in takes no photo unless one was asked for. A search wake (no schedule) takes none either,
   // or the queue fills with them.
-  if (!checkin && !search) captureToQueue(reason, button);
+  if (!upload && !checkin && !search) {
+    captureToQueue(reason, button);
+    restartForUpload(reason);
+  }
 
   double real_margin = haveSchedule() ? 15 + 0.003 * 43200 : 0;  // as early as we might have woken
   int connect_s = checkin ? CHECKIN_CONNECT_S : search ? RETRY_CONNECT_S
@@ -466,8 +493,12 @@ void setup() {
     // The hub's Wi-Fi can be up before its gateway opens (it is still booting or photographing its
     // own liner), so keep trying it for the rest of this wake's window. A check-in tries once.
     int code = uploadQueue();
-    while (!checkin && code != 0 && code != 401 && (int32_t)(until - millis()) > 5000) {
+    for (int tries = 1; !checkin && code != 0 && code != 401 && (int32_t)(until - millis()) > 5000; tries++) {
       delay(5000);
+      if (tries % 3 == 0) {  // still failing on a connection that reads as up: it may be stale, so make a new one
+        WiFi.disconnect(true);
+        delay(200);
+      }
       if (WiFi.status() != WL_CONNECTED) connectWifi(std::max(10, (int)((int32_t)(until - millis()) / 1000)));
       code = uploadQueue();
     }
@@ -475,7 +506,7 @@ void setup() {
       askSchedule();
       if (photo_now) {  // asked for on the dashboard since this node's last photo
         Serial.println("photo asked for on the dashboard");
-        if (captureToQueue("requested", false) && uploadQueue() == 0) askSchedule();
+        if (captureToQueue("requested", false)) restartForUpload("requested");
       }
     } else if (code != 401 && !checkin) {
       setError("hub not answering");

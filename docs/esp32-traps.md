@@ -125,7 +125,7 @@ For each camera:
    those two lines, fill in the hub's Wi-Fi name and password, `HUB_URL` and the LED pin, and flash it:
    `pio run -t upload` ([esp32-node/README.md](../device/esp32-node/README.md)).
 3. Hang it and power it. The hub accepts it within a minute. Powering it on starts **setup mode**: for
-   5 min it streams a live preview, with the LED on, so you can aim it. On a phone on the hub's Wi-Fi,
+   2 min it streams a live preview, with the LED on, so you can aim it. On a phone on the hub's Wi-Fi,
    open the hub's page, `http://10.42.0.1:8080/` (or `http://<hub's address>:8080/` on other Wi-Fi), and
    follow the camera's **live preview** link. It has a full-size photo for checking focus. When the
    preview ends the camera takes its first photo.

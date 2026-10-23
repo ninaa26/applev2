@@ -300,8 +300,12 @@ class Gateway:
         return error
 
 
-def make_server(gw: Gateway, host: str, port: int) -> ThreadingHTTPServer:
+def make_server(gw: Gateway, host: str, port: int, socket_timeout: float = 60) -> ThreadingHTTPServer:
     class Handler(BaseHTTPRequestHandler):
+        # A node that gives up mid-upload (or sleeps) never closes its connection: without a socket timeout
+        # the thread waits on its body for good (11 of them on Oct 22 2026).
+        timeout = socket_timeout
+
         def _reply(self, status: int, body: dict) -> None:
             data = json.dumps(body).encode()
             self.send_response(status)
