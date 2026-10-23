@@ -1,0 +1,6 @@
+{# A camera trap's status pill. "Error" says why on hover and links to the photo (or trap) that explains it. #}
+{% macro camera_status(h, photo='') -%}
+{% if h.state == 'never' %}<span class="pill never">No photos yet</span>
+{%- elif h.state == 'error' %}<a class="pill error" href="{{ h.reason_url }}" title="{{ h.reason }}">Error · {{ photo }}{{ h.last.received_at|ago }}</a>
+{%- else %}<span class="pill {{ h.state }}">{{ h.state|capitalize }} · {{ photo }}{{ h.last.received_at|ago }}</span>{% endif %}
+{%- endmacro %}

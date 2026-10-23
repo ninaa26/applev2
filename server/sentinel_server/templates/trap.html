@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_status.html" import camera_status %}
 {% set nav = 'overview' %}
 {% block title %}{{ trap.id }} · Orchard Sentinel{% endblock %}
 {% block head %}<meta http-equiv="refresh" content="120">{% endblock %}
@@ -8,7 +9,7 @@
     <h1>{{ trap.id }} <span class="muted" style="font-size:18px">{{ trap.name }}</span></h1>
     {% if trap.retired_at %}<p class="pill offline">Removed from the orchard {{ trap.retired_at|local('%b %d, %Y') }}. <a href="/manage">Set up traps</a> to bring it back.</p>{% endif %}
     <p class="muted">{{ trap.lure }} lure · {% if trap.kind == 'esp32' %}ESP32 camera via <a href="/traps/{{ trap.hub_id }}">{{ trap.hub_id }}</a>{% else %}Raspberry Pi{% endif %}{% if trap.block %} · {{ trap.block }}{% endif %} · liner {% if card %}#{{ card.id }} {% endif %}installed {{ card.installed_at|local if card else '—' }}
-      · <span class="pill {{ health.state }}">{% if health.state == 'never' %}No photos yet{% else %}{{ health.state|capitalize }} · last photo {{ health.last.received_at|ago }}{% endif %}</span></p>
+      · {{ camera_status(health, 'last photo ') }}</p>
     {% if health.device_error %}<p class="pill error">Trap reported: {{ health.device_error }}</p>{% endif %}
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">

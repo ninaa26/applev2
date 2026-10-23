@@ -173,3 +173,17 @@ def test_take_a_photo_now_reaches_the_hub_and_clears_when_a_newer_photo_arrives(
         assert _upload(client, cam_key, "T2", "new").status_code == 201
         assert client.get("/api/v1/hub/nodes", headers=hub).json()["photo_requests"] == {}
         assert "Take a photo now" in client.get("/traps/T2").text
+
+
+def test_error_status_says_why_on_hover_and_links_to_the_photo():
+    from sentinel_server.models import Capture
+    with TestClient(create_app()) as client:
+        _add(client, trap_id="T1", kind="hub", name="Fieldhouse")
+        _, cam_key = _add(client, trap_id="T2", kind="esp32", hub_id="T1")
+        assert _upload(client, cam_key, "T2", "e1").status_code == 201
+        with session_scope() as db:
+            cap = db.query(Capture).filter_by(trap_id="T2").one()
+            cap.status, cap.error, cap_id = "failed", "photo not used: no liner grid found", cap.id
+        link = f'<a class="pill error" href="/captures/{cap_id}" title="Newest photo failed: photo not used: no liner grid found">Error'
+        for url in ("/", "/traps/T2", "/traps/T1", "/manage"):
+            assert link in client.get(url).text, url
