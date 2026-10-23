@@ -24,7 +24,7 @@
 
 // Settings added after the first node_config.h files were written: defaults for those.
 #ifndef SETUP_PREVIEW_S
-#define SETUP_PREVIEW_S 300              // how long the live preview runs in setup mode
+#define SETUP_PREVIEW_S 120              // how long the live preview runs in setup mode
 #endif
 #ifndef PREVIEW_FRAMESIZE
 #define PREVIEW_FRAMESIZE FRAMESIZE_VGA  // live preview size; "full size" on the page uses CAM_FRAMESIZE
@@ -33,7 +33,7 @@
 #define SETUP_HOLD_MS 3000               // hold BUTTON_PIN this long on a button wake for setup mode
 #endif
 
-#define FW_VERSION "0.2.4"
+#define FW_VERSION "0.2.5"
 static const int CONNECT_MIN_S = 120;      // keep trying the hub at least this long per wake
 static const int CONNECT_MAX_S = 300;
 static const int UNSYNCED_SLEEP_S = 600;   // never heard from the hub: first retry after this long,

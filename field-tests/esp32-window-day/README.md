@@ -22,7 +22,7 @@ later, which reports its awake time.
 
 1. **Power and place the ESP32.** Use a USB wall charger (not a power bank, which may switch off while
    it sleeps), or this laptop's USB if you want its serial log (set `ESP32_PORT` in `test.env`). Put
-   it at its final spot and plug it in. It starts with a 5-minute live preview (setup mode), then takes
+   it at its final spot and plug it in. It starts with a 2-minute live preview (setup mode), then takes
    its first photo.
 2. **Run `./start.sh`.** It:
    - runs the health checks on both Pis (clock synchronised, throttling, temperature, disk, memory,
@@ -54,7 +54,7 @@ effects don't overlap. Each command logs its time, so the report marks it on eve
 | Server down for an hour | `./event.sh server-stop`, about an hour later `./event.sh server-start` | The hub queues the photos, then uploads them all: none lost, no duplicates |
 | Hub gateway down across two slots | `./event.sh gateway-stop`, an hour later `./event.sh gateway-start` | The ESP32 keeps its photos in flash and uploads them all at the next contact |
 | Hub reboot | `./event.sh hub-reboot` (waits for the gateway to come back) | The gateway starts by itself; the hub shows online again within a minute |
-| Power cut on the ESP32 | unplug it for 10 s, then `./event.sh note "ESP32 unplugged 10 s"` | Its next photos are dated by the hub on arrival (`clock_lost`); it runs a 5-minute preview first |
+| Power cut on the ESP32 | unplug it for 10 s, then `./event.sh note "ESP32 unplugged 10 s"` | Its next photos are dated by the hub on arrival (`clock_lost`); it runs a 2-minute preview first |
 | BOOT pressed once | press it, then `./event.sh note "BOOT pressed"` | An immediate photo with `wake_reason` `manual`, and a fresh liner on the server |
 | Take a photo now | `./event.sh photo-now` (or the button on T2's page) | A photo with `wake_reason` `requested` within about 10 min (the check-in interval) |
 

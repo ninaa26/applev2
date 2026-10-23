@@ -40,6 +40,6 @@
 #define BUTTON_PIN 0
 
 // Setup mode (after power-on, or the button held): a live preview on the hub's Wi-Fi, for aiming the camera.
-#define SETUP_PREVIEW_S 300               // how long the preview runs before the camera takes its photo
+#define SETUP_PREVIEW_S 120               // how long the preview runs before the camera takes its photo
 #define PREVIEW_FRAMESIZE FRAMESIZE_VGA   // preview size (640x480); the page's full-size photo uses CAM_FRAMESIZE
 #define SETUP_HOLD_MS 3000

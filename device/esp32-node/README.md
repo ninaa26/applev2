@@ -9,12 +9,12 @@ Then it deep-sleeps. Pressing the button wired to `BUTTON_PIN` (the BOOT button 
 and marks the photo as a fresh liner.
 
 - **Setup mode, for aiming the camera:** after it is powered on, or when the button is **held for 3 s**,
-  the node joins the hub's Wi-Fi and serves a live preview for 5 min (`SETUP_PREVIEW_S`) with the LED
+  the node joins the hub's Wi-Fi and serves a live preview for 2 min (`SETUP_PREVIEW_S`) with the LED
   on: a page at `http://<node's address>/` (640×480 video, and a full-size photo for checking focus).
   The hub lists it on its own page, `http://<hub>:8080/` (`http://10.42.0.1:8080/` on the hub's access
   point), so open that on a phone on the same Wi-Fi. When the preview ends the node takes its photo
   (a fresh liner if the button started it) and carries on as normal. Each power-on runs it once, so a
-  power cut in the field costs one 5-minute preview.
+  power cut in the field costs one 2-minute preview.
 - **Check-ins:** between photos the node wakes every `checkin_s` (from the hub's `[hub] checkin_min`,
   default 30 min) just to ask the hub whether **Take a photo now** was pressed on the dashboard. A
   check-in takes no photo, tries the hub's Wi-Fi for at most 20 s, and is a few seconds awake; if a
@@ -43,11 +43,11 @@ camera pins in `node_config.h` and maybe `board_build.arduino.memory_type` in `p
 What a normal wake looks like (format, not a recorded run):
 
 ```
-sentinel node T2 fw 0.2.4 wake=scheduled boots=14 synced=1
+sentinel node T2 fw 0.2.5 wake=scheduled boots=14 synced=1
 captured /q/00000014-3f9a0c2e71b4d580 1600x1200 142311 bytes
 restarting to upload
 ...
-sentinel node T2 fw 0.2.4 wake=scheduled (upload) boots=14 synced=1
+sentinel node T2 fw 0.2.5 wake=scheduled (upload) boots=14 synced=1
 wifi sentinel-hub ip 10.42.0.23 rssi -64
 upload /q/00000014-3f9a0c2e71b4d580 -> 201
 sleeping 1800 s (check-in)
@@ -59,7 +59,7 @@ same boot as the camera crawled and failed on Oct 22 2026 (`-> -3`, `-> -1` for 
 while the check-ins between them sent 3 photos in a second.
 
 A check-in wake prints `wake=checkin` and no `captured` line, unless the hub says
-`photo asked for on the dashboard`. Setup mode prints `wake=setup` and `live preview at http://10.42.0.23/ for 300 s`.
+`photo asked for on the dashboard`. Setup mode prints `wake=setup` and `live preview at http://10.42.0.23/ for 120 s`.
 
 If the hub's Wi-Fi is up but its gateway is not open yet (`upload ... -> -1`), the node tries again every
 5 s until the end of its connect window (2–5 min), then sleeps. A node with no schedule from the hub
