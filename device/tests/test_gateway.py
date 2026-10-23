@@ -218,3 +218,17 @@ def test_end_of_wake_status_is_kept_for_power_and_signal_logs(tmp_path: Path):
     gw.schedule("Bearer key2", "not json")
     [line] = (tmp_path / "nodes" / "T2" / "status.jsonl").read_text().splitlines()
     assert json.loads(line) == {"at": "2026-10-05T23:31:30+00:00", "wake": "checkin", "awake_ms": 2900, "rssi": -60}
+
+
+def test_upload_that_stops_mid_body_does_not_hold_its_connection(tmp_path: Path):
+    server = gateway.make_server(_gw(tmp_path), "127.0.0.1", 0, socket_timeout=0.5)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        with socket.create_connection(server.server_address, timeout=5) as s:
+            s.sendall(b"POST /node/v1/captures HTTP/1.1\r\nHost: hub\r\nContent-Length: 1000\r\n\r\n" + JPEG[:10])
+            t0 = time.monotonic()
+            assert s.recv(1024) == b""  # the hub hangs up instead of waiting for the rest
+            assert time.monotonic() - t0 < 3
+    finally:
+        server.shutdown()
+        server.server_close()
