@@ -43,12 +43,20 @@ camera pins in `node_config.h` and maybe `board_build.arduino.memory_type` in `p
 What a normal wake looks like (format, not a recorded run):
 
 ```
-sentinel node T2 fw 0.2.0 wake=scheduled boots=14 synced=1
+sentinel node T2 fw 0.2.4 wake=scheduled boots=14 synced=1
 captured /q/00000014-3f9a0c2e71b4d580 1600x1200 142311 bytes
+restarting to upload
+...
+sentinel node T2 fw 0.2.4 wake=scheduled (upload) boots=14 synced=1
 wifi sentinel-hub ip 10.42.0.23 rssi -64
 upload /q/00000014-3f9a0c2e71b4d580 -> 201
 sleeping 1800 s (check-in)
 ```
+
+Since firmware 0.2.4 a wake that used the camera (a photo, or the setup preview) restarts the chip in a
+0.2 s deep sleep after it and uploads from the fresh boot (`(upload)`, same boot count). Uploads in the
+same boot as the camera crawled and failed on Oct 22 2026 (`-> -3`, `-> -1` for the rest of the wake),
+while the check-ins between them sent 3 photos in a second.
 
 A check-in wake prints `wake=checkin` and no `captured` line, unless the hub says
 `photo asked for on the dashboard`. Setup mode prints `wake=setup` and `live preview at http://10.42.0.23/ for 300 s`.
