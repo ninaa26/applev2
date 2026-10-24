@@ -42,6 +42,7 @@ static const int RETRY_CONNECT_S = 120;    // Wi-Fi tries on a retry wake (no sc
 static const size_t FS_RESERVE = 600000;   // drop the oldest photos to keep this much flash free
 static const int MAX_WAKES = 12;
 static const int CHECKIN_CONNECT_S = 20;   // a check-in that can't reach the hub gives up quickly
+static const int HUB_DOWN_CONNECT_S = 45;  // photo wakes after one that couldn't reach the hub, until it answers
 
 // Survives deep sleep, lost on power loss.
 RTC_DATA_ATTR uint32_t session = 0;        // random per power-on: photos from an older session have no usable clock
@@ -56,6 +57,7 @@ RTC_DATA_ATTR char last_error[96] = "";
 RTC_DATA_ATTR int retries = 0;             // wakes in a row spent looking for a hub we have no schedule from
 RTC_DATA_ATTR int checkin_s = 0;           // from the hub: check in this often between photos (0: don't)
 RTC_DATA_ATTR bool checkin_next = false;   // the coming timer wake is a check-in, not a photo
+RTC_DATA_ATTR int hub_misses = 0;          // photo wakes in a row that couldn't reach the hub
 static bool photo_now = false;             // the hub's last reply: a photo was asked for on the dashboard
 // The previous wake, reported at the end of this one: how long it was awake (power) and whether it got through.
 RTC_DATA_ATTR uint32_t prev_awake_ms = 0;
@@ -486,8 +488,11 @@ void setup() {
   }
 
   double real_margin = haveSchedule() ? 15 + 0.003 * 43200 : 0;  // as early as we might have woken
+  // A photo wake waits up to 5 min for the hub. With the hub down, that is 5 min of Wi-Fi on every photo
+  // wake, so after one miss it tries briefly until the hub answers again (a check-in resets it too).
   int connect_s = checkin ? CHECKIN_CONNECT_S : search ? RETRY_CONNECT_S
-                          : std::min(CONNECT_MAX_S, CONNECT_MIN_S + (int)(2 * real_margin));
+                  : hub_misses > 0 ? HUB_DOWN_CONNECT_S
+                  : std::min(CONNECT_MAX_S, CONNECT_MIN_S + (int)(2 * real_margin));
   uint32_t until = millis() + connect_s * 1000UL;
   if (connectWifi(connect_s)) {
     // The hub's Wi-Fi can be up before its gateway opens (it is still booting or photographing its
@@ -503,6 +508,7 @@ void setup() {
       code = uploadQueue();
     }
     if (code == 0) {
+      hub_misses = 0;
       askSchedule();
       if (photo_now) {  // asked for on the dashboard since this node's last photo
         Serial.println("photo asked for on the dashboard");
@@ -510,9 +516,11 @@ void setup() {
       }
     } else if (code != 401 && !checkin) {
       setError("hub not answering");
+      if (!search) hub_misses++;
     }
   } else if (!checkin) {
     setError("hub not reachable");
+    if (!search) hub_misses++;
   }
   WiFi.disconnect(true);
   WiFi.mode(WIFI_OFF);
