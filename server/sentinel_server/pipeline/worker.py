@@ -117,6 +117,8 @@ class Pipeline:
         # Writes from here on. Nothing above may change the session: the first query after a change
         # autoflushes it and takes SQLite's write lock, and uploads would then wait out the busy timeout
         # while the classifier (minutes for a cluttered photo on the Pi's CPU) runs.
+        if check_liner:  # first: it can move this photo back onto the liner before, which its age is counted on
+            _keep_liner_if_unchanged(db, cap, [trk.Rect(b.x1, b.y1, b.x2, b.y2) for b in boxes])
         card = db.get(Card, cap.card_id)
         liner_days = round((cap.captured_at - card.installed_at).total_seconds() / 86400, 1)
         cap.meta = {**(cap.meta or {}), **quality, **({"px_per_mm": round(ppm, 2)} if ppm else {}),
@@ -126,8 +128,6 @@ class Pipeline:
         if liner_days > get_settings().liner_max_days:
             _event_once(db, cap, "card_old", {"days": liner_days})
         cap.width, cap.height = w, h
-        if check_liner:
-            _keep_liner_if_unchanged(db, cap, [trk.Rect(b.x1, b.y1, b.x2, b.y2) for b in boxes])
 
         # Tracks on this card that are still alive.
         live = list(
