@@ -51,7 +51,22 @@
         <dt>Base temp</dt><dd class="mono">{{ '%.0f'|format(pheno.model.base_f) }} °F (BE method)</dd>
         <dt>Clock starts</dt><dd>{{ pheno.model.start }}</dd>
         <dt>Biofix</dt><dd>{{ pheno.biofix.strftime('%b %d, %Y') if pheno.biofix else 'Not yet: needs more than 1 moth two weeks in a row' }}</dd>
-        {% if pheno.biofix and pheno.biofix != pheno.biofix_sure %}
+        {% if pheno.biofix_set %}
+        <dt></dt><dd class="muted">{% if pheno.biofix == pheno.biofix_auto %}Confirmed by a person.{% else %}Set by a person; from the catches it would be {{ pheno.biofix_auto.strftime('%b %d') if pheno.biofix_auto else 'not yet' }}.{% endif %}</dd>
+        {% endif %}
+        <dt></dt><dd>
+          <form method="post" action="/traps/{{ trap.id }}/biofix" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+            <input type="date" name="date" value="{{ pheno.biofix.isoformat() if pheno.biofix else '' }}" required>
+            <button type="submit" title="The degree-day clock starts on this date this season">{{ 'Confirm' if pheno.biofix and not pheno.biofix_set else 'Set' }} biofix</button>
+          </form>
+          {% if pheno.biofix_set %}
+          <form method="post" action="/traps/{{ trap.id }}/biofix" style="margin-top:4px">
+            <input type="hidden" name="date" value="">
+            <button type="submit">Use the catches again</button>
+          </form>
+          {% endif %}
+        </dd>
+        {% if pheno.biofix and pheno.biofix != pheno.biofix_sure and not pheno.biofix_set %}
         <dt></dt><dd class="muted">Provisional: it rests on {{ pheno.unsure_catches }} catch{{ 'es' if pheno.unsure_catches != 1 }} the model was unsure of. <a href="/review">Confirm them</a>{% if pheno.biofix_sure %}; from confirmed catches alone it is {{ pheno.biofix_sure.strftime('%b %d') }}{% endif %}.</dd>
         {% endif %}
         {% if pheno.biofix %}

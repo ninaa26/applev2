@@ -73,3 +73,43 @@ def test_biofix_comes_from_this_seasons_catches_only():
     with session_scope() as db:
         s = services.phenology_status(db, db.get(Trap, "T1"))
         assert s["biofix"] is None and s["catches"] == 0 and "dd" not in s
+
+
+def test_a_person_confirms_or_changes_the_biofix(monkeypatch):
+    """One false catch can start the season's clock, so a person can confirm the biofix or set another date
+    on the trap page. It holds for this season only, and clearing it goes back to the catches."""
+    from datetime import date
+
+    now = datetime(2026, 6, 17, 16)
+    monkeypatch.setattr(services, "utcnow", lambda: now)
+    trap_with_tracks([("CM", 0.6, "review", 12), ("CM", 0.4, "unknown", 11),
+                      ("CM", 0.95, "auto", 5), ("CM", 0.95, "auto", 4)], now=now)
+    with session_scope() as db:
+        auto = services.phenology_status(db, db.get(Trap, "T1"))["biofix"]
+    with TestClient(create_app()) as client:
+        assert client.post("/traps/T1/biofix", data={"date": auto.isoformat()}).status_code == 200  # confirm
+        page = client.get("/traps/T1").text
+        assert "Provisional" not in page and "Confirmed by a person" in page
+        with session_scope() as db:
+            s = services.phenology_status(db, db.get(Trap, "T1"))
+            assert s["biofix"] == auto and s["biofix_set"] and s["biofix_auto"] == auto
+
+        client.post("/traps/T1/biofix", data={"date": "2026-06-10"})  # the first catch was a false one
+        with session_scope() as db:
+            s = services.phenology_status(db, db.get(Trap, "T1"))
+            assert s["biofix"] == date(2026, 6, 10) and s["biofix_auto"] == auto
+        assert "Set by a person" in client.get("/traps/T1").text
+
+        assert client.post("/traps/T1/biofix", data={"date": "June 10"}).status_code == 422
+        assert client.post("/traps/T1/biofix", data={"date": "2026-07-01"}).status_code == 422  # in the future
+
+        client.post("/traps/T1/biofix", data={"date": ""})  # clear
+        with session_scope() as db:
+            s = services.phenology_status(db, db.get(Trap, "T1"))
+            assert s["biofix"] == auto and not s["biofix_set"]
+
+    with session_scope() as db:  # last season's date doesn't start this season's clock
+        db.get(Trap, "T1").biofix_date = date(2025, 5, 20)
+    with session_scope() as db:
+        s = services.phenology_status(db, db.get(Trap, "T1"))
+        assert s["biofix"] == auto and not s["biofix_set"]
