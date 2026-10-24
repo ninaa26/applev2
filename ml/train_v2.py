@@ -5,7 +5,7 @@
     python train_v2.py --arch convnext_tiny --epochs 20 --batch 64   # on a CUDA machine (RUN_ON_CUDA.md)
     python train_v2.py --final                      # also report on our locked test cards (once, at the end)
 
-Grew out of Patti's MobileNetV3 script (CM vs not-CM on an ImageFolder, repo root "Patti's code"):
+Grew out of Patti's MobileNetV3 script (CM vs not-CM on an ImageFolder, mobilenet_cm_patti.py):
 same idea (any rotation, flips), but on all six trap classes and the group-aware train/val/test
 split from build_dataset.py, so photos of the same moth never sit on both sides. Classes are
 balanced by sampling, since there are ~100 OFM photos and ~2,000 of each of the others. The epoch
