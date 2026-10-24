@@ -12,7 +12,29 @@ file (`python3 code-review/build_ledger.py`).
 
 **Effort:** S is under a day, M is 2–5 days, L is over a week.
 
-Last updated: **Oct 24 2026, round 2 (camera corrected: 130° OV5640).**
+Last updated: **Oct 24 2026, round 2 (camera corrected; L-02 and L-06 fixed by PRs #27 and #28).**
+
+## How to work from this ledger (for the Claude session that does the fixes)
+
+This file is the list of fixes to make. Every row was checked by a reviewer against the code, the live
+system or a source. The **Unverified** list (`UNVERIFIED.md`) is not: don't fix anything from it without
+checking it yourself first.
+
+1. **Order:** P0, then P1, then P2. Within a table, go top to bottom. Skip rows whose Status starts with `done`.
+2. **One fix per branch and PR.** Subject lines start with the area (`Server:`, `Device:`, `ML:`, `Docs:`), as
+   in `CLAUDE.md`. Name the ledger id in the PR body (e.g. "Fixes L-10").
+3. **Test first.** For each bug, write a test that fails on `master` because of the bug, then fix it, then
+   run that folder's whole suite (`CLAUDE.md` has the commands). Firmware (`device/esp32-node/`) has no unit
+   tests: build it with PlatformIO, and say what you couldn't test without the board.
+4. **Use the fix written in the row,** not the one in `gemini-raw/`. Several of Gemini's own fixes were wrong
+   or incomplete; the row says so where it matters (L-02, L-04, L-10, L-17, L-35).
+5. **Hardware and field rows** (L-03, L-08, L-20 to L-23) need a person with the parts. Write down what to
+   measure and leave them open.
+6. **Never run anything on the bench Pi (`apple-pi-hub`) without asking,** and don't run `device/install.sh` there.
+7. **When a row is done,** set its Status to `done <date> (PR #n)`. Then rebuild the page:
+   `python3 code-review/make_unverified.py && python3 code-review/build_ledger.py`.
+8. **If you check an Unverified item,** move it here (as a to-do, a fact, or a wrong claim) and delete it from
+   `make_unverified.py`'s lists, or add its title to `CHECKED` there.
 
 ## Rounds
 
@@ -39,11 +61,11 @@ Ordered by priority. Each item carries the evidence for it. Tick items off by ch
 | ID | What to do | Why (evidence) | Area | Effort | Status |
 |---|---|---|---|---|---|
 | L-01 | **Fix the grid scale.** Stop a liner's first photos from fixing its scale for good (`scale_problem`, `worker.py:48-62`). Clamp readings to the range the camera can actually give, measured per camera. The 130° OV5640 at 110 mm reads **10.3 px/mm** at the centre at 2048 × 1536, not the 15.3 of the old Pi camera. Through a fisheye, the grid pitch shrinks toward the edges, so the check has to work on the straightened grid. Later, use ArUco markers on a tray instead of the printed grid. **Lead on the ⅓ misreads:** `_agreed_pitch` also tries ½, ⅓ and ¼ of each spacing (`detect.py:537`), and choosing ⅓ gives exactly the live 3.4–3.8 px/mm. Log which fraction won on the failing photos. | ✅ **Live:** **21 of T2's last 25 photos failed**: 17 for scale, 3 for the `max()` error (L-02), 1 with no grid found. The scale misreads were 2.5–3.8 px/mm (about ⅓ of the true value) or 32.5–32.8 (about 3×), against 10.3. Right now the pipeline uses almost no photos. README already lists this as a known problem. | Server CV | S (clamp) / M (ArUco) | open |
-| L-02 | **Fix the grid finder's crash: `ValueError: max() iterable argument is empty`.** In `_agreed_pitch` (`detect.py:538`), when the two measured line spacings disagree and all are under 12 px, `cands` is empty and `max()` fails. Fix: return "no grid found" (score 0) in that case. ❌ Don't use Flash's fix (return the median spacing): it stores a nonsense scale that a liner's first photos then lock in (L-01). | ✅ **Reproduced:** `_agreed_pitch([7.0, 10.0], …)` raises exactly the live error. **Live:** 15 failures in 3 days. ❌ Argon's diagnosis (NoClassifier) was wrong. Found by Flash. | Server CV | S | open |
+| L-02 | **Fix the grid finder's crash: `ValueError: max() iterable argument is empty`.** In `_agreed_pitch` (`detect.py:538`), when the two measured line spacings disagree and all are under 12 px, `cands` is empty and `max()` fails. Fix: return "no grid found" (score 0) in that case. ❌ Don't use Flash's fix (return the median spacing): it stores a nonsense scale that a liner's first photos then lock in (L-01). | ✅ **Reproduced:** `_agreed_pitch([7.0, 10.0], …)` raises exactly the live error. **Live:** 15 failures in 3 days. ❌ Argon's diagnosis (NoClassifier) was wrong. Found by Flash. | Server CV | S | done Oct 24 (PR #27) |
 | L-03 | **Measure the ESP32 board's sleep current, then cut it.** A USB power meter or multimeter on the battery lead gives the number. Fixes: a timer/load switch that cuts power between photos (e.g. TPL5110), removing the power LED, or a bare-module board. Then redo the battery size. | ✅ **Source** (McDaid 2024, this exact Freenove ESP32-S3-WROOM CAM board): about **17.5 mA in deep sleep**, against about 8 µA for the chip alone. At 17.5 mA, 2×18650 (about 6,000 mAh) lasts **about 2 weeks**. ❌ Argon's "78 days" assumed 5 mA. | Hardware / firmware | S (measure), M (fix) | open |
 | L-04 | **Fix the firmware's clock-drift correction.** It only updates after more than an hour between hub contacts, but nodes check in every 10–30 min. Keep a separate reference point, **a clock reading together with the offset at that moment**, and move both only when the rate is updated (`main.cpp:196-201`). ❌ Flash's fix moves only the clock reading and keeps overwriting the offset on every contact, so the drift it measures is only the drift since the last contact: wrong. | ✅ **Live:** `drift_ppm` is **0 in 255 of 255** camera reports; the correction never ran. | Firmware | S | open |
 | L-05 | **Back up the server.** Litestream to cheap object storage, or a nightly `sqlite3 .backup` plus `rsync` of `data/media` to the team Mac. | ✅ No backup exists in the code or docs. One dead SD card loses the season. | Ops | S | open |
-| L-06 | **Fix the date-dependent biofix test.** Pin `utcnow` to a fixed mid-season date in the test (e.g. Wednesday 2026-06-17) instead of "N days ago". A fixed Monday alone isn't enough. | ✅ It fails on Fridays and Saturdays (`test_review_policy.py:55`), so CI fails on those days. ✅ It also fails in early January, when "12 days ago" falls in the previous season (Flash). | Tests | S | open |
+| L-06 | **Fix the date-dependent biofix test.** Pin `utcnow` to a fixed mid-season date in the test (e.g. Wednesday 2026-06-17) instead of "N days ago". A fixed Monday alone isn't enough. | ✅ It fails on Fridays and Saturdays (`test_review_policy.py:55`), so CI fails on those days. ✅ It also fails in early January, when "12 days ago" falls in the previous season (Flash). | Tests | S | done Oct 24 (PR #28) |
 | L-07 | **Fix `train_v1.py --final`.** `T` (the text embeddings) gets overwritten by the scalar temperature at line 209, then line 215 crashes. Rename the temperature. | ✅ Read the code. The locked-test evaluation can't run until this is fixed. | ML | S | open |
 | L-08 | **Cool the server Pi.** Fit the official Active Cooler or a heatsink and fan. | ✅ **Live:** `throttled=0xe0000` (thermal limiting and CPU-frequency capping have happened) at 49.9 °C. ❌ Argon called it under-voltage, but that flag (0x10000) is not set. | Ops | S | open |
 | L-09 | **Put field settings back before deploying.** `checkin_min = 10` and 48 photo slots a day are the window-day test settings in `hub.toml`. | ✅ **Live config.** Check-ins are cheap (0.21 s awake each), but each one is still a Wi-Fi connection. | Ops | S | open |
