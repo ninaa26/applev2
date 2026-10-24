@@ -65,6 +65,7 @@ def hash_key(key: str) -> str:
 # 10:01 photo. The node drops wakes under 60 s away itself (untilNextWake in main.cpp), so this matches it.
 NODE_MIN_GAP = timedelta(seconds=60)
 
+
 class Gateway:
     """Which ESP32 traps belong to this hub comes from the server (added and removed on the dashboard's
     "Set up traps" page) as {trap_id: key hash}, cached in data_dir/hub_nodes.json for wakes without
