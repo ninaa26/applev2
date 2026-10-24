@@ -155,6 +155,14 @@ def _liners_after(third_photo_moths, **meta):
                 "ignored": db.query(Event).filter(Event.kind == "new_card_ignored").count()}
 
 
+def test_liner_age_counts_from_the_liner_the_photo_turned_out_to_be_on():
+    """The age used to be worked out before the false-new-liner check, from the new liner that was then
+    folded away: 0 days, and no "card_old" warning for an old liner."""
+    _liners_after(MOTHS)
+    with session_scope() as db:
+        assert db.query(Capture).filter(Capture.uid == "c3").one().meta["liner_days"] == 0.2  # 4 h after c1
+
+
 def test_battery_swap_is_not_a_new_liner():
     # the trap woke off schedule and called it a new liner, but the same three moths are still there
     got = _liners_after(MOTHS)
@@ -295,6 +303,32 @@ def test_rejection_sticks_on_later_photos_and_reprocess():
             assert db.get(Track, ids[0]).review_status == "rejected"
 
 
+def test_reprocess_replays_a_reviewed_insect_from_where_it_landed():
+    """A reviewed track is kept through a reprocess. Its counters start over (they were added on top of the
+    first run's), and photos from before it landed don't count as misses: they used to drop a reviewed
+    candidate, and a fresh track then counted the same insect again."""
+    key = add_trap()
+    t0 = datetime.now(timezone.utc) - timedelta(hours=4)
+    with TestClient(create_app(start_worker=False)) as client:
+        upload(client, key, t0, MOTHS[:2], "r1")
+        upload(client, key, t0 + timedelta(hours=1), MOTHS[:2], "r2")
+        upload(client, key, t0 + timedelta(hours=2), MOTHS, "r3")  # the third moth lands
+        process_pending(Pipeline())
+    landed = (t0 + timedelta(hours=2)).replace(tzinfo=None)
+    with session_scope() as db:
+        new = db.query(Track).filter(Track.first_seen_at == landed).one()
+        assert new.status == "candidate" and new.n_seen == 1
+        new.reviewed_label, new.review_status = "OFM", "relabelled"
+        tid, card_id, n_classified = new.id, new.card_id, new.n_classified
+    with session_scope() as db:
+        assert Pipeline().reprocess_card(db, card_id) == 3
+    with session_scope() as db:
+        t = db.get(Track, tid)
+        assert t.status == "candidate" and t.n_seen == 1 and t.misses == 0, (t.status, t.n_seen, t.misses)
+        assert t.n_classified == n_classified
+        assert db.query(Track).filter(Track.status != "dropped").count() == 3, "the third moth counted once"
+
+
 def test_capture_uid_cannot_leave_the_media_folder():
     key = add_trap()
     with TestClient(create_app()) as client:
@@ -323,6 +357,36 @@ def test_photo_with_a_different_scale_is_left_out():
     assert scale_problem([7.0, 7.1, 7.2], 7.4) is None
     assert "scale reads 30.0" in scale_problem([7.0, 7.1, 7.2], 30.0)
     assert "no liner grid" in scale_problem([7.0, 7.1], None)
+
+
+def test_camera_scale_overrides_the_liners_first_photos():
+    """T2, Oct 2026: a liner's first photos misread the grid at about a third of the camera's 10.3 px/mm,
+    then every right reading after them was rejected for disagreeing. With the camera's measured scale the
+    first photos are checked too, and they can't outvote it."""
+    from sentinel_server.pipeline.worker import scale_problem
+
+    assert "scale reads 3.5" in scale_problem([], 3.5, camera=10.3)          # first photo of a liner
+    assert "camera reads 10.3" in scale_problem([], 32.6, camera=10.3)
+    assert scale_problem([3.5, 3.6, 3.4], 10.4, camera=10.3) is None          # the liner's misreads don't count
+    assert scale_problem([], 11.5, camera=10.3) is None                       # fisheye and focus: within 20%
+    assert "no liner grid" in scale_problem([], None, camera=10.3)
+
+
+def test_photo_off_the_cameras_scale_is_left_out():
+    key = add_trap()
+    with session_scope() as db:
+        db.get(Trap, "T1").px_per_mm = 15.3  # the synthetic liner reads ~6.4
+    with TestClient(create_app(start_worker=False)) as client:
+        upload(client, key, datetime(2026, 6, 1, 12, tzinfo=timezone.utc), MOTHS, "a")
+        process_pending(Pipeline())
+        with session_scope() as db:
+            cap = db.get(Capture, 1)
+            assert cap.status == "failed" and "camera reads 15.3" in cap.error
+            db.get(Trap, "T1").px_per_mm = 6.4
+            cap.status = "new"
+        process_pending(Pipeline())
+    with session_scope() as db:
+        assert db.get(Capture, 1).status == "processed"
 
 
 def test_blurred_photo_is_left_out_and_context_is_logged():
@@ -452,6 +516,7 @@ def test_upload_commits_while_classifier_runs(monkeypatch):
         pipeline.classifier = SlowClassifier()
         worker = threading.Thread(target=process_pending, args=(pipeline,), daemon=True)
         worker.start()
+        up = None  # so a failed wait below is reported, not an UnboundLocalError from the finally
         try:
             assert pipeline.classifier.started.wait(30)
             result = {}
@@ -462,7 +527,8 @@ def test_upload_commits_while_classifier_runs(monkeypatch):
         finally:
             pipeline.classifier.release.set()
             worker.join(30)
-            up.join(60)
+            if up is not None:
+                up.join(60)
     with session_scope() as db:
         assert {c.uid: c.status for c in db.query(Capture)} == {"slow": "processed", "during": "new"}
         assert "card_old" in [e.kind for e in db.query(Event)]  # raised before classifying, as before
@@ -502,6 +568,7 @@ def test_upload_commits_while_a_liner_is_reprocessed():
 
         worker = threading.Thread(target=rerun, daemon=True)
         worker.start()
+        up = None  # so a failed wait below is reported, not an UnboundLocalError from the finally
         try:
             assert pipeline.classifier.started.wait(30)
             up = threading.Thread(target=lambda: result.update(r=upload(client, key, now, MOTHS, "during")))
@@ -511,7 +578,49 @@ def test_upload_commits_while_a_liner_is_reprocessed():
         finally:
             pipeline.classifier.release.set()
             worker.join(30)
-            up.join(60)
+            if up is not None:
+                up.join(60)
     assert result["n"] == 2
     with session_scope() as db:
         assert {c.uid: c.status for c in db.query(Capture)} == {"r0": "processed", "r1": "processed", "during": "new"}
+
+
+def test_a_slow_upload_does_not_hold_up_other_requests(monkeypatch):
+    """upload_capture was `async def` doing blocking database and file work, so while one upload saved,
+    the event loop (every other request) waited for it."""
+    import threading
+    import time
+
+    key = add_trap()
+    real = services.open_card
+
+    def slow_open_card(db, trap_id):
+        time.sleep(1.5)
+        return real(db, trap_id)
+
+    monkeypatch.setattr(services, "open_card", slow_open_card)
+    with TestClient(create_app(start_worker=False)) as client:
+        t = threading.Thread(target=lambda: upload(client, key, datetime.now(timezone.utc), MOTHS, "slow"))
+        t.start()
+        time.sleep(0.3)
+        start = time.monotonic()
+        assert client.get("/healthz").status_code == 200
+        waited = time.monotonic() - start
+        t.join(10)
+    assert waited < 0.8, f"healthz waited {waited:.1f} s for the upload"
+
+
+def test_upload_size_is_capped(monkeypatch):
+    from sentinel_server.settings import reset_settings
+
+    size = len(liner(MOTHS))
+    monkeypatch.setenv("SENTINEL_MAX_UPLOAD_MB", str((size + 1000) / 1e6))
+    reset_settings()
+    key = add_trap()
+    with TestClient(create_app(start_worker=False)) as client:
+        meta = {"capture_uid": "big", "trap_id": "T1", "captured_at": datetime.now(timezone.utc).isoformat()}
+        r = client.post("/api/v1/captures", headers={"Authorization": f"Bearer {key}"},
+                        files={"image": ("big.jpg", b"\xff\xd8" + b"\0" * (size + 2000) + b"\xff\xd9", "image/jpeg")},
+                        data={"meta": json.dumps(meta)})
+        assert r.status_code == 413
+        assert upload(client, key, datetime.now(timezone.utc), MOTHS, "ok").status_code == 201  # just under the cap

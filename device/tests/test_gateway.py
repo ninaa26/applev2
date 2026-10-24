@@ -42,6 +42,23 @@ def test_node_photo_is_queued_under_its_own_trap(tmp_path: Path):
     assert meta["hub"]["hub_trap_id"] == "T1" and gw.queue("T3").pending() == []
 
 
+
+def test_a_check_in_just_before_a_slot_keeps_that_slot(tmp_path: Path):
+    """Replies to cameras used the hub's own 2-minute boot margin, so a check-in at 09:59:10 got "next wake
+    14:01" and the 10:01 photo was skipped. The node itself only drops wakes under 60 s away."""
+    def reply_at(local: str) -> dict:
+        when = datetime.fromisoformat(f"2026-10-05T{local}-04:00").timestamp()  # New York, EDT
+        gw = gateway.Gateway(config_mod.deep_merge(config_mod.DEFAULTS, {
+            "trap_id": "T1", "api_key": "hubkey", "server_url": "http://server",
+            "schedule": {"times": ["10:00", "14:00"]},
+            "hub": {"listen": "127.0.0.1", "nodes": {"T2": {"api_key": "key2"}}},
+        }), tmp_path, clock=lambda: when)
+        return gw.schedule("Bearer key2")[1]
+
+    assert reply_at("09:59:10")["next_wake"] == "2026-10-05T14:01:00+00:00"  # 10:01 EDT
+    assert reply_at("09:59:10")["sleep_s"] == 110
+    assert reply_at("10:00:30")["next_wake"] == "2026-10-05T18:01:00+00:00"  # 10:01 is under 60 s away
+
 def test_retry_after_a_lost_reply_is_not_queued_twice(tmp_path: Path):
     gw = _gw(tmp_path)
     assert gw.capture("Bearer key2", _meta(), JPEG)[0] == 201
@@ -198,6 +215,19 @@ def test_photo_asked_for_on_the_dashboard_goes_to_its_node_until_a_newer_photo_c
     gw.refresh_nodes()
     assert not gw.schedule("Bearer key2")[1]["photo_now"]
 
+
+
+def test_a_requested_photo_answers_the_request_even_from_a_clock_that_runs_behind(tmp_path: Path, monkeypatch):
+    """The photo a node took because it was asked answers the request, whatever its clock says. Judged by
+    time alone, a node whose clock is a few minutes behind sent a photo "from before the request", was told
+    photo_now again, and took photo after photo."""
+    asked = {"T2": "2026-10-05T23:30:00+00:00"}
+    monkeypatch.setattr(gateway.requests, "get", lambda url, headers, timeout: _Reply(200, {"nodes": {}, "photo_requests": asked}))
+    gw = _gw(tmp_path)
+    assert gw.refresh_nodes() and gw.schedule("Bearer key2")[1]["photo_now"]
+    behind = _meta(captured_at="2026-10-05T23:28:00+00:00", wake_reason="requested")
+    assert not gw.capture("Bearer key2", behind, JPEG)[1]["photo_now"]
+    assert not gw.schedule("Bearer key2")[1]["photo_now"]
 
 def test_live_preview_is_listed_on_the_hub_page_while_it_lasts(tmp_path: Path):
     now = [NOW]

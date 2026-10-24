@@ -45,12 +45,23 @@ def blur_problem(earlier: list[float], now: float) -> str | None:
     return None
 
 
-def scale_problem(earlier: list[float], now: float | None) -> str | None:
+def scale_problem(earlier: list[float], now: float | None, camera: float | None = None) -> str | None:
     """Why this photo's scale can't be right, or None. The camera and liner don't move, so every photo of
     a liner has the same px/mm; one that reads differently (or shows no grid at all, when the others did)
     is blurred, mis-exposed, knocked, or had its grid misread, and its boxes would be sized wrongly. Such a
-    photo is left out rather than allowed to drop real insects and add false ones. A new liner starts afresh,
-    so a camera that really was changed is believed from the next liner on."""
+    photo is left out rather than allowed to drop real insects and add false ones.
+
+    `camera` is the trap's measured px/mm (Trap.px_per_mm). With it, every photo is checked against the
+    camera, from a liner's first photo on. Without it, photos are checked against the liner's others, so
+    the first ones set the scale: if they misread the grid (T2, Oct 2026: a third of the true scale), every
+    right reading after them is rejected. A new liner starts afresh, so a camera that really was changed is
+    believed from the next liner on."""
+    if camera:
+        if now is None:
+            return f"no liner grid found (the camera reads {camera:.1f} px/mm)"
+        if abs(now / camera - 1) > SCALE_TOLERANCE:
+            return f"scale reads {now:.1f} px/mm, the camera reads {camera:.1f}"
+        return None
     if len(earlier) < 2:  # one photo is not enough to say which of two is the odd one
         return None
     usual = sorted(earlier)[len(earlier) // 2]
@@ -105,7 +116,11 @@ class Pipeline:
         ppm = None
         if info.get("grid") is not None:  # detectors that measure the liner's grid
             ppm = float(info["px_per_mm"]) if info["grid"].score > 0 and info.get("px_per_mm") else None
-            problem = scale_problem([m["px_per_mm"] for m in before if m.get("px_per_mm")], ppm) or problem
+            scale = scale_problem([m["px_per_mm"] for m in before if m.get("px_per_mm")], ppm,
+                                  db.get(Trap, cap.trap_id).px_per_mm)
+            if scale and getattr(info["grid"], "fraction", 1) > 1:  # the lead on the ⅓-scale misreads (L-01)
+                scale += f" (grid spacing taken as 1/{info['grid'].fraction} of a measured one)"
+            problem = scale or problem
         if problem:
             log.warning("capture %s left out: %s", cap.id, problem)
             cap.status, cap.processed_at, cap.model_version = "failed", utcnow(), self.version
@@ -117,6 +132,8 @@ class Pipeline:
         # Writes from here on. Nothing above may change the session: the first query after a change
         # autoflushes it and takes SQLite's write lock, and uploads would then wait out the busy timeout
         # while the classifier (minutes for a cluttered photo on the Pi's CPU) runs.
+        if check_liner:  # first: it can move this photo back onto the liner before, which its age is counted on
+            _keep_liner_if_unchanged(db, cap, [trk.Rect(b.x1, b.y1, b.x2, b.y2) for b in boxes])
         card = db.get(Card, cap.card_id)
         liner_days = round((cap.captured_at - card.installed_at).total_seconds() / 86400, 1)
         cap.meta = {**(cap.meta or {}), **quality, **({"px_per_mm": round(ppm, 2)} if ppm else {}),
@@ -126,8 +143,6 @@ class Pipeline:
         if liner_days > get_settings().liner_max_days:
             _event_once(db, cap, "card_old", {"days": liner_days})
         cap.width, cap.height = w, h
-        if check_liner:
-            _keep_liner_if_unchanged(db, cap, [trk.Rect(b.x1, b.y1, b.x2, b.y2) for b in boxes])
 
         # Tracks on this card that are still alive.
         live = list(
@@ -177,7 +192,8 @@ class Pipeline:
             ))
 
         for t in live:
-            if t.id not in seen_tracks:
+            # A photo from before it landed (a reprocess replays them all) isn't a miss.
+            if t.id not in seen_tracks and cap.captured_at >= t.first_seen_at:
                 t.misses += 1
                 if t.status == "candidate" and t.misses >= trk.DROP_CANDIDATE_AFTER:
                     t.status = "dropped"
@@ -198,6 +214,8 @@ class Pipeline:
         for t in db.scalars(select(Track).where(Track.card_id == card_id)):
             if not t.reviewed:  # people's labels and rejections are kept (and reviews point at them)
                 db.delete(t)
+            else:  # ... and replayed from scratch like the rest, not counted on top of the first run
+                t.n_seen, t.misses, t.prob_sum, t.n_classified = 0, 0, {}, 0
         db.flush()
         for c in caps:
             self.process(db, c, check_liner=False, found=found[c.id])  # which liner each photo is on was settled the first time

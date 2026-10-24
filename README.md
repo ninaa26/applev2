@@ -69,5 +69,5 @@ is the example config's six wakes a day, so the trap's own sensor gives degree d
 sensor and need the NEWA import); re-running a liner (`sentinel-server reprocess`, or a late photo) classifies
 every photo before writing, so it doesn't lock uploads out either (Oct 22 2026).
 
-- The scale check trusts a liner's first photos: a liner whose first photos are misread rejects its correct ones.
+- The scale check trusts a liner's first photos: a liner whose first photos are misread rejects its correct ones. Fixed for cameras whose scale is set (`sentinel-server set-scale T2 10.3`, Oct 24 2026): their photos are checked against the camera instead. A camera without one still has the problem.
 - The grid finder still misreads our IMX219 photos with insects on the card: 5 of 10 calibrated photos with pinned specimens read 32–63 px/mm instead of 15.3 (Oct 10 2026; all 5 of the empty liner read right). See [hardware/CAMERAS.md](hardware/CAMERAS.md).

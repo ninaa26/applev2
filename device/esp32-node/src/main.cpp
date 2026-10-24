@@ -7,7 +7,8 @@
 //
 // Timekeeping: the node never sets its clock. `clock` is seconds since power-on, which keeps counting
 // through deep sleep on the RTC timer, and `offset` (hub time - clock) is measured on every contact.
-// Comparing successive offsets gives the RTC's drift, which shortens or lengthens the next sleep.
+// Comparing offsets an hour or more apart gives the RTC's drift (drift.h), which shortens or lengthens
+// the next sleep.
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
@@ -19,6 +20,7 @@
 #include <vector>
 #include "driver/rtc_io.h"
 #include "esp_camera.h"
+#include "drift.h"
 #include "esp_http_server.h"
 #include "node_config.h"
 
@@ -33,7 +35,7 @@
 #define SETUP_HOLD_MS 3000               // hold BUTTON_PIN this long on a button wake for setup mode
 #endif
 
-#define FW_VERSION "0.2.5"
+#define FW_VERSION "0.2.6"
 static const int CONNECT_MIN_S = 120;      // keep trying the hub at least this long per wake
 static const int CONNECT_MAX_S = 300;
 static const int UNSYNCED_SLEEP_S = 600;   // never heard from the hub: first retry after this long,
@@ -42,6 +44,7 @@ static const int RETRY_CONNECT_S = 120;    // Wi-Fi tries on a retry wake (no sc
 static const size_t FS_RESERVE = 600000;   // drop the oldest photos to keep this much flash free
 static const int MAX_WAKES = 12;
 static const int CHECKIN_CONNECT_S = 20;   // a check-in that can't reach the hub gives up quickly
+static const int HUB_DOWN_CONNECT_S = 45;  // photo wakes after one that couldn't reach the hub, until it answers
 
 // Survives deep sleep, lost on power loss.
 RTC_DATA_ATTR uint32_t session = 0;        // random per power-on: photos from an older session have no usable clock
@@ -49,6 +52,7 @@ RTC_DATA_ATTR bool synced = false;
 RTC_DATA_ATTR double offset = 0;           // hub unix time - clock
 RTC_DATA_ATTR double sync_clock = 0;       // clock at that measurement
 RTC_DATA_ATTR double rate = 1.0;           // real seconds per clock second while asleep
+RTC_DATA_ATTR DriftRef drift_ref = {0, 0, false};  // the contact the next rate update measures from
 RTC_DATA_ATTR int64_t wakes[MAX_WAKES];    // upcoming wake times (hub unix seconds)
 RTC_DATA_ATTR int n_wakes = 0;
 RTC_DATA_ATTR uint32_t boots = 0;
@@ -56,6 +60,7 @@ RTC_DATA_ATTR char last_error[96] = "";
 RTC_DATA_ATTR int retries = 0;             // wakes in a row spent looking for a hub we have no schedule from
 RTC_DATA_ATTR int checkin_s = 0;           // from the hub: check in this often between photos (0: don't)
 RTC_DATA_ATTR bool checkin_next = false;   // the coming timer wake is a check-in, not a photo
+RTC_DATA_ATTR int hub_misses = 0;          // photo wakes in a row that couldn't reach the hub
 static bool photo_now = false;             // the hub's last reply: a photo was asked for on the dashboard
 // The previous wake, reported at the end of this one: how long it was awake (power) and whether it got through.
 RTC_DATA_ATTR uint32_t prev_awake_ms = 0;
@@ -193,11 +198,7 @@ static void takeTime(JsonDocument &reply, double sent_clock) {
   if (!reply["now"].is<double>()) return;
   double now_clock = clockNow();
   double new_offset = reply["now"].as<double>() - (sent_clock + now_clock) / 2;
-  if (synced && now_clock - sync_clock > 3600) {
-    // Over the last stretch the hub's time moved (now_clock - sync_clock) + (new_offset - offset) seconds.
-    double r = ((now_clock - sync_clock) + (new_offset - offset)) / (now_clock - sync_clock);
-    if (r > 0.9 && r < 1.1) rate = 0.7 * rate + 0.3 * r;
-  }
+  updateDrift(drift_ref, rate, now_clock, new_offset);
   offset = new_offset; sync_clock = now_clock; synced = true;
   JsonArray w = reply["wakes"].as<JsonArray>();
   if (!w.isNull()) {
@@ -486,8 +487,11 @@ void setup() {
   }
 
   double real_margin = haveSchedule() ? 15 + 0.003 * 43200 : 0;  // as early as we might have woken
+  // A photo wake waits up to 5 min for the hub. With the hub down, that is 5 min of Wi-Fi on every photo
+  // wake, so after one miss it tries briefly until the hub answers again (a check-in resets it too).
   int connect_s = checkin ? CHECKIN_CONNECT_S : search ? RETRY_CONNECT_S
-                          : std::min(CONNECT_MAX_S, CONNECT_MIN_S + (int)(2 * real_margin));
+                  : hub_misses > 0 ? HUB_DOWN_CONNECT_S
+                  : std::min(CONNECT_MAX_S, CONNECT_MIN_S + (int)(2 * real_margin));
   uint32_t until = millis() + connect_s * 1000UL;
   if (connectWifi(connect_s)) {
     // The hub's Wi-Fi can be up before its gateway opens (it is still booting or photographing its
@@ -503,6 +507,7 @@ void setup() {
       code = uploadQueue();
     }
     if (code == 0) {
+      hub_misses = 0;
       askSchedule();
       if (photo_now) {  // asked for on the dashboard since this node's last photo
         Serial.println("photo asked for on the dashboard");
@@ -510,9 +515,11 @@ void setup() {
       }
     } else if (code != 401 && !checkin) {
       setError("hub not answering");
+      if (!search) hub_misses++;
     }
   } else if (!checkin) {
     setError("hub not reachable");
+    if (!search) hub_misses++;
   }
   WiFi.disconnect(true);
   WiFi.mode(WIFI_OFF);

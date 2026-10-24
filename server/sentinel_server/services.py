@@ -160,12 +160,20 @@ def card_at(db: Session, trap_id: str, at: datetime) -> Card | None:
     ) or db.scalar(select(Card).where(Card.trap_id == trap_id).order_by(Card.installed_at, Card.id))
 
 
-def start_new_card(db: Session, trap_id: str, at: datetime | None = None, note: str = "") -> Card:
+def start_new_card(db: Session, trap_id: str, at: datetime | None = None, note: str = "",
+                   lure: str | None = None) -> Card:
+    """`lure`: a new lure went in with the liner (the trap's lure changes from this liner on)."""
     at = at or utcnow()
+    trap = db.get(Trap, trap_id)
+    if lure is not None and lure not in phenology.MODELS:
+        raise ValueError(f"unknown lure {lure!r}")
     current = open_card(db, trap_id)
     if current is not None:
         current.removed_at = at
-    card = Card(trap_id=trap_id, installed_at=at, note=note)
+        current.lure = current.lure or trap.lure
+    if lure:
+        trap.lure = lure
+    card = Card(trap_id=trap_id, installed_at=at, note=note, lure=trap.lure)
     db.add(card)
     db.add(Event(trap_id=trap_id, kind="new_card", payload={"note": note}, at=at))
     db.flush()
@@ -306,11 +314,13 @@ def weather_days(db: Session, trap_id: str) -> tuple[dict[date, tuple[float, flo
 
 def lure_catch_dates(db: Session, trap: Trap, card_ids: set[int] | None = None, sure_only: bool = False,
                      season: int | None = None) -> list[date]:
-    """Local date of each catch of the trap's lure species, one entry per insect. `sure_only` leaves out
-    catches whose species is still the model's unsure guess (waiting in the review queue); `season` keeps
-    only catches from that calendar year."""
+    """Local date of each catch of the trap's lure species, one entry per insect: the lure in the trap
+    when it was caught (its liner's), so catches from before a lure change keep their meaning. `sure_only`
+    leaves out catches whose species is still the model's unsure guess (waiting in the review queue);
+    `season` keeps only catches from that calendar year."""
+    lure_of = {c.id: c.lure or trap.lure for c in db.scalars(select(Card).where(Card.trap_id == trap.id))}
     return sorted(d for t in counted_tracks(db, trap.id)
-                  if t.label == trap.lure and (card_ids is None or t.card_id in card_ids)
+                  if t.label == trap.lure == lure_of[t.card_id] and (card_ids is None or t.card_id in card_ids)
                   and (not sure_only or t.reviewed or t.review_status == "auto")
                   for d in [local_date(t.first_seen_at)] if season is None or d.year == season
                   for _ in range(t.n_insects))
@@ -323,9 +333,13 @@ def phenology_status(db: Session, trap: Trap) -> dict | None:
     today = local_date(utcnow())
     # A biofix belongs to one season: last year's catches must not start this year's clock.
     catch_dates = lure_catch_dates(db, trap, season=today.year)
-    biofix = phenology.sustained_biofix(catch_dates)
+    auto = phenology.sustained_biofix(catch_dates)
+    # A person's date wins (one false catch can start the clock early), for the season it was set in.
+    by_person = trap.biofix_date if trap.biofix_date and trap.biofix_date.year == today.year else None
+    biofix = by_person or auto
     days, source = weather_days(db, trap.id)
-    out = {"model": model, "biofix": biofix, "catches": len(catch_dates), "weather_source": source}
+    out = {"model": model, "biofix": biofix, "biofix_auto": auto, "biofix_set": by_person is not None,
+           "catches": len(catch_dates), "weather_source": source}
     # The biofix starts the season's clock, so say when it rests on catches nobody has confirmed.
     sure = lure_catch_dates(db, trap, sure_only=True, season=today.year)
     out["unsure_catches"] = len(catch_dates) - len(sure)

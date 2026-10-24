@@ -1,0 +1,11 @@
+# Runs sentinel-backup.service every night (and at the next boot if the Pi was off then).
+[Unit]
+Description=Nightly Orchard Sentinel backup
+
+[Timer]
+OnCalendar=*-*-* 03:30
+Persistent=true
+RandomizedDelaySec=10min
+
+[Install]
+WantedBy=timers.target

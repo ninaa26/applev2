@@ -108,8 +108,10 @@ def create_app(start_worker: bool = False) -> FastAPI:
         services.note_seen(trap)
         return trap
 
+    # A plain def: FastAPI runs it in a worker thread. As `async def`, its database and file work blocked the
+    # event loop, and with it every other request, for as long as an upload took.
     @app.post("/api/v1/captures", status_code=201)
-    async def upload_capture(
+    def upload_capture(
         image: UploadFile = File(...),
         meta: str = Form(...),
         trap: Trap = Depends(device_trap),
@@ -134,7 +136,10 @@ def create_app(start_worker: bool = False) -> FastAPI:
                 status_code=409,
             )
 
-        data = await image.read()
+        limit = int(settings.max_upload_mb * 1_000_000)
+        data = image.file.read(limit + 1)
+        if len(data) > limit:
+            raise HTTPException(413, f"photo larger than {settings.max_upload_mb:g} MB")
         try:
             with Image.open(io.BytesIO(data)) as im:
                 im.verify()
@@ -199,10 +204,32 @@ def create_app(start_worker: bool = False) -> FastAPI:
     # ---------------------------------------------------------------- dashboard actions
 
     @app.post("/traps/{trap_id}/new-card")
-    def new_card(trap_id: str, note: str = Form(default="installed from dashboard"), db: Session = Depends(get_session)):
+    def new_card(trap_id: str, note: str = Form(default="installed from dashboard"), lure: str = Form(default=""),
+                 db: Session = Depends(get_session)):
         if db.get(Trap, trap_id) is None:
             raise HTTPException(404, "no such trap")
-        services.start_new_card(db, trap_id, note=note)
+        try:
+            services.start_new_card(db, trap_id, note=note, lure=lure or None)
+        except ValueError as e:
+            raise HTTPException(422, str(e))
+        return RedirectResponse(f"/traps/{trap_id}", status_code=303)
+
+    @app.post("/traps/{trap_id}/biofix")
+    def set_biofix(trap_id: str, date: str = Form(default=""), db: Session = Depends(get_session)):
+        """Confirm the biofix, or set another date (YYYY-MM-DD); empty goes back to the one from the catches."""
+        trap = db.get(Trap, trap_id)
+        if trap is None:
+            raise HTTPException(404, "no such trap")
+        if not date.strip():
+            trap.biofix_date = None
+        else:
+            try:
+                when = datetime.strptime(date.strip(), "%Y-%m-%d").date()
+            except ValueError:
+                raise HTTPException(422, "biofix date must be YYYY-MM-DD")
+            if when > services.local_date(services.utcnow()):
+                raise HTTPException(422, "the biofix can't be in the future")
+            trap.biofix_date = when
         return RedirectResponse(f"/traps/{trap_id}", status_code=303)
 
     @app.post("/traps/{trap_id}/request-photo")

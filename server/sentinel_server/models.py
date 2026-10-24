@@ -41,6 +41,10 @@ class Trap(Base):
     device_config: Mapped[dict] = mapped_column(JSON, default=dict)
     # Areas to ignore, as [x1, y1, x2, y2] fractions of the image (the lure spot).
     mask: Mapped[list] = mapped_column(JSON, default=lambda: [[0.45, 0.46, 0.55, 0.54]])
+    # The camera's measured scale at the card centre (px/mm on the straightened photo), e.g. 10.3 for the
+    # 130° OV5640 110 mm over the card at 2048 × 1536. Photos whose grid reads far from it are left out.
+    # None: each liner's photos are checked against each other instead.
+    px_per_mm: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     # "esp32" is an ESP32 camera that uploads through hub_id's gateway; "hub" is a Pi with no camera that
     # only relays ESP32 photos; "pi" is a Pi camera trap that uploads by itself (and can also be a hub)
@@ -53,6 +57,9 @@ class Trap(Base):
     photo_requested_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # Taken out of the orchard from the dashboard: hidden, and its key stops working. Photos are kept.
     retired_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Biofix confirmed or set by a person on the trap page, in place of the one from the catches. It counts
+    # for its own season only.
+    biofix_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     cards: Mapped[list["Card"]] = relationship(back_populates="trap", order_by="Card.installed_at")
 
 
@@ -65,6 +72,9 @@ class Card(Base):
     installed_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     removed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     note: Mapped[str] = mapped_column(String(200), default="")
+    # The lure in the trap while this liner was in: its catches are read against it, so changing a trap's
+    # lure doesn't reinterpret earlier liners. None only on a liner made outside start_new_card.
+    lure: Mapped[str | None] = mapped_column(String(16), nullable=True)
     trap: Mapped[Trap] = relationship(back_populates="cards")
 
 

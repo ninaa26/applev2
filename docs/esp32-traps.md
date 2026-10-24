@@ -20,6 +20,9 @@ ESP32 trap T4 ─┘  or the fieldhouse Wi-Fi)        gateway.py, always on:    
   Hubs and cameras are added and removed on the dashboard's **Set up traps** page (or
   `sentinel-server add-trap T1 --kind hub` and `sentinel-server add-trap T2 --kind esp32 --hub T1 --lure CM`).
   Removing one hides it and stops its key, and keeps its photos and counts. **Put back** undoes it.
+  Once a camera is in its trap, set its measured scale (`sentinel-server set-scale T2 10.3`, the px/mm its
+  photos read at the card centre when the grid is found right): photos whose grid reads more than 20% off
+  it are left out, from a liner's first photo on.
 - **Hub:** `sentinel_device/gateway.py`, run always on by `systemd/sentinel-gateway.service`. Every 30 s
   it asks the server which ESP32 traps are its own (`GET /api/v1/hub/nodes`: their ids and key hashes,
   cached for when the server can't be reached), so the hub needs no change when cameras are added or
@@ -59,11 +62,14 @@ check-ins off (then a photo asked for comes with the next scheduled photo).
 
 The ESP32's sleep clock is an RC oscillator that can be off by a few percent. The node never sets its
 clock. It measures the hub's time against its own on every contact, works out its drift from
-successive contacts, and corrects the next sleep. It also wakes early by `15 s + 0.3%` of the sleep
+contacts at least an hour apart (fw 0.2.6; before that it never updated, since nodes check in
+every 10–30 min), and corrects the next sleep. It also wakes early by `15 s + 0.3%` of the sleep
 (about 2.5 min before a 12 h slot) and keeps trying the hub's Wi-Fi for 2–5 min if it can't reach it.
 A node that has never reached the hub since power-on photographs once, then looks for the hub after
 10 min, 20 min and then every 30 min, for 2 min each time and without taking more photos, so it does not
-flatten its battery (firmware 0.2.2; these wakes report as `search`).
+flatten its battery (firmware 0.2.2; these wakes report as `search`). After a photo wake that couldn't
+reach the hub, later photo wakes try for 45 s only, until the hub answers again (a check-in that gets
+through resets it), so a hub outage doesn't keep Wi-Fi on for 5 min every photo.
 
 ## Setting up a hub
 

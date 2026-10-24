@@ -7,6 +7,8 @@ Three results, each with a pass/fail target:
 
 1. Count accuracy per card, 1 - |automatic - manual| / manual, for each pest and for all moths.
    Target >= 0.80: Suto (2022) found no standard metric but says forecasting tolerates ~20% error.
+   A card with no moths by hand has no accuracy (it would divide by 0): every moth found on it is a
+   false positive, reported per empty card, and it passes only with none.
    Also per trap-day (new moths that day, automatic vs manual), since a liner's total can be right
    while its days are wrong, and the days are what the biofix is made of.
 2. Detection, from boxes drawn on some photos: a detection matches a drawn insect when
@@ -117,6 +119,7 @@ class Report:
     confirmation: list[dict] = field(default_factory=list)
     detection: dict | None = None
     biofix: list[dict] = field(default_factory=list)
+    empty_cards: list[dict] = field(default_factory=list)  # cards with no moths by hand: what was found on them
 
 
 def card_tracks(db: Session, card_id: int) -> list[Track]:
@@ -162,9 +165,13 @@ def evaluate(db: Session, counts: dict | None = None, boxes: dict | None = None,
                 acc = count_accuracy(a, m)
                 rep.counts.append({
                     "card": cid, "trap": card.trap_id, "label": label, "manual": m, "auto": a,
-                    "accuracy": acc, "pass": acc is not None and acc >= rep.targets.count,
+                    "accuracy": acc, "pass": acc >= rep.targets.count if acc is not None else a == 0,
+                    "false_positives": a if m == 0 else None,
                     "auto_without_confirmation": a_all, "accuracy_without_confirmation": count_accuracy(a_all, m),
                 })
+            if moths(manual) == 0:
+                rep.empty_cards.append({"card": cid, "trap": card.trap_id, "false_positives": moths(confirmed),
+                                        "without_confirmation": moths(everything)})
             manual_day: Counter = Counter()
             for d, label, n in counts[cid]:
                 if label in MOTHS:
@@ -192,7 +199,9 @@ def evaluate(db: Session, counts: dict | None = None, boxes: dict | None = None,
                 by_trap[card.trap_id].append(cid)
         for trap_id, cids in sorted(by_trap.items()):
             trap = db.get(Trap, trap_id)
-            manual_dates = sorted(d for cid in cids for d, label, n in counts[cid] if label == trap.lure for _ in range(n))
+            lure_of = {cid: db.get(Card, cid).lure or trap.lure for cid in cids}  # as lure_catch_dates reads them
+            manual_dates = sorted(d for cid in cids for d, label, n in counts[cid]
+                                  if label == trap.lure == lure_of[cid] for _ in range(n))
             m = phenology.sustained_biofix(manual_dates)
             a = phenology.sustained_biofix(services.lure_catch_dates(db, trap, set(cids)))
             if m is None and a is None:
@@ -315,6 +324,15 @@ def to_markdown(rep: Report) -> str:
                        f"{'PASS' if r['pass'] else 'FAIL'} | {r['auto_without_confirmation']} | "
                        f"{_pct(r['accuracy_without_confirmation'])} |")
         out += [f"| {r['card']} | | {r['error']} | | | | | | |" for r in rep.counts if "error" in r]
+        out.append("")
+    if rep.empty_cards:
+        fp = sum(r["false_positives"] for r in rep.empty_cards)
+        n = len(rep.empty_cards)
+        out += ["### Empty liners", "",
+                f"**{fp} moths found on {n} liners with none** by hand ({fp / n:.1f} per liner): all false positives. "
+                "A liner with no moths has no count accuracy, so these are scored here.", "",
+                "| liner | trap | moths found | without confirmation |", "|---|---|---|---|"]
+        out += [f"| {r['card']} | {r['trap']} | {r['false_positives']} | {r['without_confirmation']} |" for r in rep.empty_cards]
         out.append("")
     if rep.days:
         n, ok = len(rep.days), sum(r["ok"] for r in rep.days)

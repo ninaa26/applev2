@@ -7,10 +7,12 @@
     sentinel-server serve                  # API + dashboard + worker in one process (Mac dev setup)
     sentinel-server serve --no-worker      # API only; run `sentinel-server worker` separately
     sentinel-server worker
+    sentinel-server backup ~/sentinel-backup --push nina@team-mac:sentinel-backup   # database + photos
     sentinel-server reprocess --card 3     # re-run a liner's photos with the current models
     sentinel-server import-weather newa.csv --source newa:Ithaca
     sentinel-server detect photo.jpg --out overlays/   # try the detector on photos, draw what it found
     sentinel-server set-mask T1 --none     # lure not in view: don't ignore any area
+    sentinel-server set-scale T2 10.3      # the camera's measured px/mm: photos far from it are left out
 """
 
 from __future__ import annotations
@@ -114,6 +116,21 @@ def cmd_worker(args) -> int:
     return 0
 
 
+def cmd_backup(args) -> int:
+    import subprocess
+
+    from . import backup
+
+    try:
+        done = backup.run(args.dest, keep=args.keep, target=args.push)
+    except (ValueError, subprocess.CalledProcessError, OSError) as e:
+        print(f"backup failed: {e}", file=sys.stderr)
+        return 1
+    print(f"backed up {done['database'].name} and {done['photos']} new photos to {args.dest}"
+          + (f", pushed to {args.push}" if args.push else ""))
+    return 0
+
+
 def cmd_reprocess(args) -> int:
     from .pipeline.worker import Pipeline
 
@@ -170,6 +187,24 @@ def cmd_set_mask(args) -> int:
         elif args.box:
             trap.mask = [list(b) for b in args.box]
         print(f"{trap.id} mask: {trap.mask or 'none'}")
+    return 0
+
+
+def cmd_set_scale(args) -> int:
+    """The camera's measured px/mm at the card centre: photos whose grid reads far from it are left out."""
+    with session_scope() as db:
+        trap = db.get(Trap, args.trap_id)
+        if trap is None:
+            print(f"no trap {args.trap_id}", file=sys.stderr)
+            return 1
+        if args.none:
+            trap.px_per_mm = None
+        elif args.px_per_mm is not None:
+            if args.px_per_mm <= 0:
+                print("px/mm must be above 0", file=sys.stderr)
+                return 1
+            trap.px_per_mm = args.px_per_mm
+        print(f"{trap.id} scale: {f'{trap.px_per_mm} px/mm' if trap.px_per_mm else 'not set (checked per liner)'}")
     return 0
 
 
@@ -242,6 +277,12 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("worker", help="process new photos forever").set_defaults(fn=cmd_worker)
 
+    p = sub.add_parser("backup", help="snapshot the database and copy new photos to a folder (and push it elsewhere)")
+    p.add_argument("dest", type=Path, help="backup folder, outside the data folder")
+    p.add_argument("--keep", type=int, default=14, help="database snapshots to keep (default 14)")
+    p.add_argument("--push", metavar="TARGET", help="then rsync the folder here: a path or user@host:path")
+    p.set_defaults(fn=cmd_backup)
+
     p = sub.add_parser("reprocess", help="re-run detection/tracking for one liner")
     p.add_argument("--card", type=int, required=True)
     p.set_defaults(fn=cmd_reprocess)
@@ -258,6 +299,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--box", type=float, nargs=4, action="append", metavar=("X1", "Y1", "X2", "Y2"))
     p.add_argument("--none", action="store_true")
     p.set_defaults(fn=cmd_set_mask)
+
+    p = sub.add_parser("set-scale", help="set (or show) a camera's measured px/mm, which photos are checked against")
+    p.add_argument("trap_id")
+    p.add_argument("px_per_mm", type=float, nargs="?")
+    p.add_argument("--none", action="store_true", help="forget it: check each liner's photos against each other")
+    p.set_defaults(fn=cmd_set_scale)
 
     p = sub.add_parser("import-weather", help="import daily max/min temperatures (°F)")
     p.add_argument("csv", type=Path)
