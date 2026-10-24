@@ -41,8 +41,9 @@
   </div>
   <div class="axis"><span>{{ o.daily[0].date.strftime('%b %d') }}</span><span>peak {{ o.peak }}/day</span><span>{{ o.daily[-1].date.strftime('%b %d') }}</span></div>
 </div>
+{% endif %}
 
-{% if hubs %}
+{% if hubs %}{# outside the rows block: a new hub shows before its cameras are added #}
 <div class="card tbl">
   <h2>Hubs</h2>
   <p class="muted">Each hub takes the photos from the ESP32 cameras near it and sends them here. It checks in every minute or so.</p>
@@ -59,6 +60,7 @@
 </div>
 {% endif %}
 
+{% if rows %}
 <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap">
   <h2>Each trap</h2>
   <a href="/manage">Add or remove traps</a>
