@@ -100,4 +100,3 @@ def test_biofix_comes_from_this_seasons_catches_only():
     with session_scope() as db:
         s = services.phenology_status(db, db.get(Trap, "T1"))
         assert s["biofix"] is None and s["catches"] == 0 and "dd" not in s
-
