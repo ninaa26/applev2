@@ -155,6 +155,14 @@ def _liners_after(third_photo_moths, **meta):
                 "ignored": db.query(Event).filter(Event.kind == "new_card_ignored").count()}
 
 
+def test_liner_age_counts_from_the_liner_the_photo_turned_out_to_be_on():
+    """The age used to be worked out before the false-new-liner check, from the new liner that was then
+    folded away: 0 days, and no "card_old" warning for an old liner."""
+    _liners_after(MOTHS)
+    with session_scope() as db:
+        assert db.query(Capture).filter(Capture.uid == "c3").one().meta["liner_days"] == 0.2  # 4 h after c1
+
+
 def test_battery_swap_is_not_a_new_liner():
     # the trap woke off schedule and called it a new liner, but the same three moths are still there
     got = _liners_after(MOTHS)
