@@ -516,6 +516,7 @@ def test_upload_commits_while_classifier_runs(monkeypatch):
         pipeline.classifier = SlowClassifier()
         worker = threading.Thread(target=process_pending, args=(pipeline,), daemon=True)
         worker.start()
+        up = None  # so a failed wait below is reported, not an UnboundLocalError from the finally
         try:
             assert pipeline.classifier.started.wait(30)
             result = {}
@@ -526,7 +527,8 @@ def test_upload_commits_while_classifier_runs(monkeypatch):
         finally:
             pipeline.classifier.release.set()
             worker.join(30)
-            up.join(60)
+            if up is not None:
+                up.join(60)
     with session_scope() as db:
         assert {c.uid: c.status for c in db.query(Capture)} == {"slow": "processed", "during": "new"}
         assert "card_old" in [e.kind for e in db.query(Event)]  # raised before classifying, as before
@@ -566,6 +568,7 @@ def test_upload_commits_while_a_liner_is_reprocessed():
 
         worker = threading.Thread(target=rerun, daemon=True)
         worker.start()
+        up = None  # so a failed wait below is reported, not an UnboundLocalError from the finally
         try:
             assert pipeline.classifier.started.wait(30)
             up = threading.Thread(target=lambda: result.update(r=upload(client, key, now, MOTHS, "during")))
@@ -575,7 +578,8 @@ def test_upload_commits_while_a_liner_is_reprocessed():
         finally:
             pipeline.classifier.release.set()
             worker.join(30)
-            up.join(60)
+            if up is not None:
+                up.join(60)
     assert result["n"] == 2
     with session_scope() as db:
         assert {c.uid: c.status for c in db.query(Capture)} == {"r0": "processed", "r1": "processed", "during": "new"}
