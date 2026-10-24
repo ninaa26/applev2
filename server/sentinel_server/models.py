@@ -53,6 +53,9 @@ class Trap(Base):
     photo_requested_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # Taken out of the orchard from the dashboard: hidden, and its key stops working. Photos are kept.
     retired_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Biofix confirmed or set by a person on the trap page, in place of the one from the catches. It counts
+    # for its own season only.
+    biofix_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     cards: Mapped[list["Card"]] = relationship(back_populates="trap", order_by="Card.installed_at")
 
 

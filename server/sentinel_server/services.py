@@ -323,9 +323,13 @@ def phenology_status(db: Session, trap: Trap) -> dict | None:
     today = local_date(utcnow())
     # A biofix belongs to one season: last year's catches must not start this year's clock.
     catch_dates = lure_catch_dates(db, trap, season=today.year)
-    biofix = phenology.sustained_biofix(catch_dates)
+    auto = phenology.sustained_biofix(catch_dates)
+    # A person's date wins (one false catch can start the clock early), for the season it was set in.
+    by_person = trap.biofix_date if trap.biofix_date and trap.biofix_date.year == today.year else None
+    biofix = by_person or auto
     days, source = weather_days(db, trap.id)
-    out = {"model": model, "biofix": biofix, "catches": len(catch_dates), "weather_source": source}
+    out = {"model": model, "biofix": biofix, "biofix_auto": auto, "biofix_set": by_person is not None,
+           "catches": len(catch_dates), "weather_source": source}
     # The biofix starts the season's clock, so say when it rests on catches nobody has confirmed.
     sure = lure_catch_dates(db, trap, sure_only=True, season=today.year)
     out["unsure_catches"] = len(catch_dates) - len(sure)

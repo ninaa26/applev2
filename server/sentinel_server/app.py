@@ -205,6 +205,24 @@ def create_app(start_worker: bool = False) -> FastAPI:
         services.start_new_card(db, trap_id, note=note)
         return RedirectResponse(f"/traps/{trap_id}", status_code=303)
 
+    @app.post("/traps/{trap_id}/biofix")
+    def set_biofix(trap_id: str, date: str = Form(default=""), db: Session = Depends(get_session)):
+        """Confirm the biofix, or set another date (YYYY-MM-DD); empty goes back to the one from the catches."""
+        trap = db.get(Trap, trap_id)
+        if trap is None:
+            raise HTTPException(404, "no such trap")
+        if not date.strip():
+            trap.biofix_date = None
+        else:
+            try:
+                when = datetime.strptime(date.strip(), "%Y-%m-%d").date()
+            except ValueError:
+                raise HTTPException(422, "biofix date must be YYYY-MM-DD")
+            if when > services.local_date(services.utcnow()):
+                raise HTTPException(422, "the biofix can't be in the future")
+            trap.biofix_date = when
+        return RedirectResponse(f"/traps/{trap_id}", status_code=303)
+
     @app.post("/traps/{trap_id}/request-photo")
     def request_photo(trap_id: str, db: Session = Depends(get_session)):
         trap = db.get(Trap, trap_id)
