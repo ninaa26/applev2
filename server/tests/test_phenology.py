@@ -49,3 +49,11 @@ def test_daily_extremes_requires_enough_readings():
     d = date(2026, 10, 5)
     out = ph.daily_extremes_f([(d, 10.0), (d, 20.0), (d, 15.0), (d, 12.0), (date(2026, 10, 6), 5.0)])
     assert out == {d: (68.0, 50.0)}
+
+
+def test_label_matches_the_biofix_rule_the_code_applies():
+    """Every lure's clock starts at sustained_biofix(), so the page must say so (L-12: OBLR said "first catch").
+    Cornell (Jentsch, 2019): OBLR caught "over two to three successive days (sustained flight)" sets the biofix."""
+    for code in ("CM", "OFM", "OBLR"):
+        assert "first sustained catch" in ph.MODELS[code].start, code
+    assert ph.MODELS["OBLR"].base_f == 43  # NEWA's OBLR tool: base 43 °F BE degree days
