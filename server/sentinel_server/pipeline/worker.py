@@ -177,7 +177,8 @@ class Pipeline:
             ))
 
         for t in live:
-            if t.id not in seen_tracks:
+            # A photo from before it landed (a reprocess replays them all) isn't a miss.
+            if t.id not in seen_tracks and cap.captured_at >= t.first_seen_at:
                 t.misses += 1
                 if t.status == "candidate" and t.misses >= trk.DROP_CANDIDATE_AFTER:
                     t.status = "dropped"
@@ -198,6 +199,8 @@ class Pipeline:
         for t in db.scalars(select(Track).where(Track.card_id == card_id)):
             if not t.reviewed:  # people's labels and rejections are kept (and reviews point at them)
                 db.delete(t)
+            else:  # ... and replayed from scratch like the rest, not counted on top of the first run
+                t.n_seen, t.misses, t.prob_sum, t.n_classified = 0, 0, {}, 0
         db.flush()
         for c in caps:
             self.process(db, c, check_liner=False, found=found[c.id])  # which liner each photo is on was settled the first time
