@@ -199,7 +199,9 @@ def evaluate(db: Session, counts: dict | None = None, boxes: dict | None = None,
                 by_trap[card.trap_id].append(cid)
         for trap_id, cids in sorted(by_trap.items()):
             trap = db.get(Trap, trap_id)
-            manual_dates = sorted(d for cid in cids for d, label, n in counts[cid] if label == trap.lure for _ in range(n))
+            lure_of = {cid: db.get(Card, cid).lure or trap.lure for cid in cids}  # as lure_catch_dates reads them
+            manual_dates = sorted(d for cid in cids for d, label, n in counts[cid]
+                                  if label == trap.lure == lure_of[cid] for _ in range(n))
             m = phenology.sustained_biofix(manual_dates)
             a = phenology.sustained_biofix(services.lure_catch_dates(db, trap, set(cids)))
             if m is None and a is None:

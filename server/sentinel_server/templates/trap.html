@@ -22,8 +22,13 @@
     </form>
     {% endif %}
     {% endif %}
-    <form method="post" action="/traps/{{ trap.id }}/new-card">
+    <form method="post" action="/traps/{{ trap.id }}/new-card" style="display:flex;gap:6px;align-items:center">
       <input type="hidden" name="note" value="installed from dashboard">
+      {% if trap.kind != 'hub' %}
+      <select name="lure" aria-label="Lure with the new liner" title="Change it if a different lure went in with the liner; earlier liners keep theirs">
+        {% for l in ['CM', 'OFM', 'OBLR'] %}<option value="{{ l }}"{{ ' selected' if l == trap.lure }}>{{ l }} lure</option>{% endfor %}
+      </select>
+      {% endif %}
       <button class="primary" type="submit">New liner installed</button>
     </form>
   </div>
