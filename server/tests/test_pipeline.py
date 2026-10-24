@@ -295,6 +295,32 @@ def test_rejection_sticks_on_later_photos_and_reprocess():
             assert db.get(Track, ids[0]).review_status == "rejected"
 
 
+def test_reprocess_replays_a_reviewed_insect_from_where_it_landed():
+    """A reviewed track is kept through a reprocess. Its counters start over (they were added on top of the
+    first run's), and photos from before it landed don't count as misses: they used to drop a reviewed
+    candidate, and a fresh track then counted the same insect again."""
+    key = add_trap()
+    t0 = datetime.now(timezone.utc) - timedelta(hours=4)
+    with TestClient(create_app(start_worker=False)) as client:
+        upload(client, key, t0, MOTHS[:2], "r1")
+        upload(client, key, t0 + timedelta(hours=1), MOTHS[:2], "r2")
+        upload(client, key, t0 + timedelta(hours=2), MOTHS, "r3")  # the third moth lands
+        process_pending(Pipeline())
+    landed = (t0 + timedelta(hours=2)).replace(tzinfo=None)
+    with session_scope() as db:
+        new = db.query(Track).filter(Track.first_seen_at == landed).one()
+        assert new.status == "candidate" and new.n_seen == 1
+        new.reviewed_label, new.review_status = "OFM", "relabelled"
+        tid, card_id, n_classified = new.id, new.card_id, new.n_classified
+    with session_scope() as db:
+        assert Pipeline().reprocess_card(db, card_id) == 3
+    with session_scope() as db:
+        t = db.get(Track, tid)
+        assert t.status == "candidate" and t.n_seen == 1 and t.misses == 0, (t.status, t.n_seen, t.misses)
+        assert t.n_classified == n_classified
+        assert db.query(Track).filter(Track.status != "dropped").count() == 3, "the third moth counted once"
+
+
 def test_capture_uid_cannot_leave_the_media_folder():
     key = add_trap()
     with TestClient(create_app()) as client:
