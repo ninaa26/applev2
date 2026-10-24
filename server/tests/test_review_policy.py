@@ -47,6 +47,33 @@ def test_one_in_ten_sure_labels_is_spot_checked_and_scored():
         assert "1 of 2 agreed" in client.get("/traps/T1").text
 
 
+def test_a_lure_change_applies_from_the_new_liner_on():
+    """The lure is kept per liner. Swapping a CM lure for an OFM one used to reinterpret every past catch:
+    OFM bycatch on the old CM liner then counted towards the OFM biofix."""
+    from datetime import date
+
+    now = datetime(2026, 7, 20, 16)
+    first = trap_with_tracks([("OFM", 0.95, "auto", d) for d in (40, 39, 33, 32)], now=now)  # on the CM liner
+    with session_scope() as db:
+        old = db.get(Track, first[0]).card_id
+        new = services.start_new_card(db, "T1", at=now - timedelta(days=20), lure="OFM")
+        assert db.get(Trap, "T1").lure == "OFM" and new.lure == "OFM"
+        assert db.get(Card, old).lure == "CM"  # the liner it replaced keeps the lure it had
+        cap = db.query(Capture).first()
+        for d in (12, 11, 5, 4):
+            when = now - timedelta(days=d)
+            db.add(Track(card_id=new.id, first_seen_at=when, last_seen_at=when, first_capture_id=cap.id,
+                         status="confirmed", x1=0, y1=0, x2=10, y2=10, species="OFM", species_conf=0.95,
+                         review_status="auto"))
+    with session_scope() as db:
+        dates = services.lure_catch_dates(db, db.get(Trap, "T1"))
+    assert dates == sorted((now - timedelta(days=d)).date() for d in (12, 11, 5, 4)), dates
+    with TestClient(create_app()) as client:  # the dashboard's "New liner installed" can change the lure too
+        client.post("/traps/T1/new-card", data={"note": "OBLR now", "lure": "OBLR"})
+        assert client.post("/traps/T1/new-card", data={"lure": "PX"}).status_code == 422
+    with session_scope() as db:
+        assert db.get(Trap, "T1").lure == "OBLR" and services.open_card(db, "T1").lure == "OBLR"
+
 def test_biofix_says_when_it_rests_on_unconfirmed_catches(monkeypatch):
     # two CM a week for two weeks: the first week's are the model's unsure guesses. "Now" is pinned to a
     # Wednesday in June so each pair lands in one Monday–Sunday week and in this season, whatever today is.
@@ -74,30 +101,3 @@ def test_biofix_comes_from_this_seasons_catches_only():
         s = services.phenology_status(db, db.get(Trap, "T1"))
         assert s["biofix"] is None and s["catches"] == 0 and "dd" not in s
 
-
-def test_a_lure_change_applies_from_the_new_liner_on():
-    """The lure is kept per liner. Swapping a CM lure for an OFM one used to reinterpret every past catch:
-    OFM bycatch on the old CM liner then counted towards the OFM biofix."""
-    from datetime import date
-
-    now = datetime(2026, 7, 20, 16)
-    first = trap_with_tracks([("OFM", 0.95, "auto", d) for d in (40, 39, 33, 32)], now=now)  # on the CM liner
-    with session_scope() as db:
-        old = db.get(Track, first[0]).card_id
-        new = services.start_new_card(db, "T1", at=now - timedelta(days=20), lure="OFM")
-        assert db.get(Trap, "T1").lure == "OFM" and new.lure == "OFM"
-        assert db.get(Card, old).lure == "CM"  # the liner it replaced keeps the lure it had
-        cap = db.query(Capture).first()
-        for d in (12, 11, 5, 4):
-            when = now - timedelta(days=d)
-            db.add(Track(card_id=new.id, first_seen_at=when, last_seen_at=when, first_capture_id=cap.id,
-                         status="confirmed", x1=0, y1=0, x2=10, y2=10, species="OFM", species_conf=0.95,
-                         review_status="auto"))
-    with session_scope() as db:
-        dates = services.lure_catch_dates(db, db.get(Trap, "T1"))
-    assert dates == sorted((now - timedelta(days=d)).date() for d in (12, 11, 5, 4)), dates
-    with TestClient(create_app()) as client:  # the dashboard's "New liner installed" can change the lure too
-        client.post("/traps/T1/new-card", data={"note": "OBLR now", "lure": "OBLR"})
-        assert client.post("/traps/T1/new-card", data={"lure": "PX"}).status_code == 422
-    with session_scope() as db:
-        assert db.get(Trap, "T1").lure == "OBLR" and services.open_card(db, "T1").lure == "OBLR"
