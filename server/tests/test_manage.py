@@ -81,8 +81,7 @@ def test_orchard_view_and_each_traps_photos():
             assert _upload(client, k2, "T2", f"p{i:02d}", start + timedelta(hours=i)).status_code == 201
         _upload(client, k1, "T1", "h1")
         page = client.get("/").text
-        assert "whole orchard" in page and "Traps reporting" in page and "ESP32 via T1" in page
-        assert re.search(r'class="val">2<small> / 2', page)
+        assert "whole orchard" in page and "2 of 2 traps reporting" in page and "ESP32 via T1" in page
 
         photos = client.get("/traps/T2/photos").text
         assert "50 photos" in photos and photos.count('class="gallery"') == 1
@@ -118,7 +117,7 @@ def test_hub_without_a_camera_relays_esp32s_and_shows_when_it_last_checked_in():
             assert client.get(url).status_code == 200, url
         table = page.split("Each trap")[1]
         assert "/traps/T2" in table and "/traps/T1" not in table  # the hub has no row of counts
-        assert "0<small> / 1</small>" in page  # one camera in the orchard, not two
+        assert "0 of 1 traps reporting" in page  # one camera in the orchard, not two
 
         assert client.get("/api/v1/hub/nodes", headers={"Authorization": f"Bearer {hub_key}"}).status_code == 200
         page = client.get("/").text

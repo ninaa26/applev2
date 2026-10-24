@@ -347,6 +347,7 @@ def phenology_status(db: Session, trap: Trap) -> dict | None:
     if biofix:
         dd, missing = phenology.cumulative_dd(days, biofix, today, model.base_f)
         out.update(dd=dd, missing_days=missing, next=phenology.next_milestone(model, dd))
+    out["outlook"] = phenology.outlook(model, biofix, out.get("dd"), days, today)
     if trap.lure == "OFM":
         jan1 = date(today.year, 1, 1)
         out["dd_jan1"], out["missing_jan1"] = phenology.cumulative_dd(days, jan1, today, model.base_f)

@@ -1,31 +1,44 @@
 {% extends "base.html" %}
 {% set nav = 'review' %}
-{% block title %}Review queue · Orchard Sentinel{% endblock %}
+{% block title %}Review insects · Orchard Sentinel{% endblock %}
 {% block main %}
-<div>
-  <h1>Review queue</h1>
-  <p class="muted">Insects the model wasn't sure about, and one in ten of those it was sure about as a spot check. Your label overrides the model, counts right away, and becomes training data for the next model version.</p>
+<div class="page-head">
+  <div>
+    <h1>Review insects</h1>
+    <p class="lede">Insects the model wasn't sure about, plus one in ten it was sure about as a spot check. Your answer counts right away and teaches the next model version.</p>
+  </div>
+  {% if items %}<p class="muted">{{ items|length }} waiting</p>{% endif %}
 </div>
 {% if items %}
 <div class="review-grid">
-  {% for it in items %}{% set t = it.track %}
-  <div class="ritem">
-    {% if it.det %}<a href="/captures/{{ it.det.capture_id }}"><img src="/crops/{{ it.det.id }}.jpg" alt="Insect #{{ t.id }}" loading="lazy"></a>{% endif %}
-    <div style="font-size:13px">
-      <b>#{{ t.id }}</b> · first seen {{ t.first_seen_at|local }}<br>
-      <span class="muted">Model: {{ SPECIES_LABELS.get(t.species, t.species) }}{% if t.species_conf %} ({{ '%.0f'|format(100 * t.species_conf) }}%){% endif %} · seen in {{ t.n_seen }} photos</span>
-      {% if t.n_insects > 1 %}<br><b>Looks like {{ t.n_insects }} insects touching.</b> <span class="muted">Counted as {{ t.n_insects }}; fix the number below if that's wrong.</span>{% endif %}
+  {% for it in items %}{% set t = it.track %}{% set guess = SPECIES_LABELS.get(t.species, t.species) %}
+  <article class="ritem" aria-label="Insect {{ t.id }}">
+    {% if it.det %}<a href="/captures/{{ it.det.capture_id }}" title="Open the photo it is in"><img src="/crops/{{ it.det.id }}.jpg" alt="Close-up of insect {{ t.id }}" loading="lazy"></a>{% endif %}
+    <div>
+      {% if t.species in SPECIES %}<p class="guess">The model thinks <b>{{ guess }}</b>{% if t.species_conf %}, {{ '%.0f'|format(100 * t.species_conf) }}% sure{% endif %}</p>
+      {% else %}<p class="guess"><b>Not classified yet</b></p>{% endif %}
+      <p class="meta">{% if it.trap %}{{ it.trap.name or it.trap.id }}, {% endif %}first seen {{ t.first_seen_at|local('%b %-d, %H:%M') }}, in {{ t.n_seen }} photo{{ 's' if t.n_seen != 1 }}{% if t.review_status == 'auto' %}. Spot check of a label the model was sure of.{% endif %}</p>
+      {% if t.n_insects > 1 %}<p class="notice warn small" style="margin-top:8px"><b>Looks like {{ t.n_insects }} insects touching.</b> Counted as {{ t.n_insects }}; change the number if that's wrong.</p>{% endif %}
     </div>
-    <form method="post" action="/tracks/{{ t.id }}/review" class="btns">
+    <form method="post" action="/tracks/{{ t.id }}/review">
       <input type="hidden" name="next" value="/review">
-      {% if t.n_insects > 1 %}<label class="muted">How many? <input type="number" name="count" min="1" max="50" value="{{ t.n_insects }}" style="width:4em"></label>{% endif %}
-      {% for sp in SPECIES %}<button type="submit" name="label" value="{{ sp }}" class="{{ 'primary' if sp == t.species }}">{{ sp.replace('_', ' ') }}</button>{% endfor %}
-      <button type="submit" name="label" value="reject" title="Not an insect / don't count">reject</button>
+      {% if t.n_insects > 1 %}<label class="field">How many insects?<input type="number" name="count" min="1" max="50" value="{{ t.n_insects }}" style="width:6em"></label>{% endif %}
+      {% if t.species in SPECIES %}
+      <button type="submit" name="label" value="{{ t.species }}" class="primary">Yes, {{ guess[0].lower() ~ guess[1:] }}</button>
+      {% endif %}
+      <details{{ ' open' if t.species not in SPECIES }}>
+        <summary>{{ 'No, it is something else' if t.species in SPECIES else 'What is it?' }}</summary>
+        <div class="others">
+          {% for sp in SPECIES if sp != t.species and sp != 'debris' %}<button type="submit" name="label" value="{{ sp }}" class="small"><i class="dot c-{{ sp }}"></i>{{ SPECIES_LABELS[sp].split(' (')[0] }}</button>{% endfor %}
+          {% if t.species != 'debris' %}<button type="submit" name="label" value="debris" class="small"><i class="dot c-debris"></i>Debris</button>{% endif %}
+        </div>
+      </details>
+      <button type="submit" name="label" value="reject" class="quiet" title="Not an insect, or not on the liner: it won't be counted">Not an insect, don't count it</button>
     </form>
-  </div>
+  </article>
   {% endfor %}
 </div>
 {% else %}
-<div class="notice">Nothing to review right now.</div>
+<div class="notice">Nothing to review right now. New insects the model is unsure of will show up here.</div>
 {% endif %}
 {% endblock %}

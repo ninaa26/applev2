@@ -1,29 +1,31 @@
 {% extends "base.html" %}
 {% from "_status.html" import camera_status %}
 {% set nav = 'overview' %}
-{% block title %}{{ trap.id }} · Orchard Sentinel{% endblock %}
+{% block title %}{{ trap.name or trap.id }} · Orchard Sentinel{% endblock %}
 {% block head %}<meta http-equiv="refresh" content="60">{% endblock %}
 {% block main %}
-<div>
-  <h1>{{ trap.id }} <span class="muted" style="font-size:18px">{{ trap.name }}</span></h1>
-  {% if trap.retired_at %}<p class="pill offline">Removed from the orchard {{ trap.retired_at|local('%b %d, %Y') }}. <a href="/manage">Set up traps</a> to bring it back.</p>{% endif %}
-  <p class="muted">Hub, no camera{% if trap.block %} · {{ trap.block }}{% endif %} ·
-    <span class="pill {{ health.state }}">{% if health.state == 'never' %}Not heard from yet{% else %}{{ health.state|capitalize }} · checked in {{ health.seen_at|ago }}{% endif %}</span></p>
-  <p class="muted">It takes the photos from the ESP32 cameras below and sends them here, and checks in every minute or so.</p>
+<div class="page-head">
+  <div>
+    <a class="back" href="/">Orchard</a>
+    <h1>{{ trap.name or trap.id }}</h1>
+    <p class="sub"><span>{{ trap.id }}, hub with no camera{% if trap.block %}, {{ trap.block }}{% endif %}</span>
+      <span class="pill {{ health.state }}">{% if health.state == 'never' %}Not heard from yet{% else %}{{ health.state|capitalize }}, checked in {{ health.seen_at|ago }}{% endif %}</span></p>
+    <p class="lede">It takes the photos from the ESP32 cameras below and sends them here, and checks in every minute or so.</p>
+    {% if trap.retired_at %}<p class="notice warn" style="margin-top:12px">Taken out of the orchard {{ trap.retired_at|local('%b %-d, %Y') }}. <a href="/manage">Set up traps</a> to put it back.</p>{% endif %}
+  </div>
 </div>
 
-<div class="card tbl">
-  <h2>Its cameras</h2>
+<section class="section">
+  <div class="section-head"><h2>Its cameras</h2><a href="/manage">Add a camera</a></div>
   {% if cameras %}
-  <table style="margin-top:8px"><tbody>
-  {% for c in cameras %}
-  {% set h = c.health %}
+  <div class="tbl"><table><tbody>
+  {% for c in cameras %}{% set h = c.health %}
   <tr>
-    <td><a href="/traps/{{ c.trap.id }}"><b>{{ c.trap.id }}</b></a> <span class="muted">{{ c.trap.name }} · {{ c.trap.lure }} lure</span></td>
+    <td><a class="name" href="/traps/{{ c.trap.id }}">{{ c.trap.name or c.trap.id }}</a><span class="sub">{{ c.trap.id }}, {{ SPECIES_LABELS[c.trap.lure] }} lure</span></td>
     <td>{{ camera_status(h, 'last photo ') }}</td>
   </tr>
   {% endfor %}
-  </tbody></table>
+  </tbody></table></div>
   {% else %}<p class="muted">No cameras use this hub yet. <a href="/manage">Add one</a>.</p>{% endif %}
-</div>
+</section>
 {% endblock %}

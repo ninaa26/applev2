@@ -54,7 +54,14 @@ def _ago(dt: datetime | None) -> str:
 
 templates.env.filters["local"] = _local
 templates.env.filters["ago"] = _ago
-templates.env.globals.update(SPECIES=SPECIES, SPECIES_LABELS=SPECIES_LABELS, PESTS=PESTS, version=__version__)
+# What each event means, in a grower's words (Event.kind).
+EVENT_LABELS = {
+    "new_card": "New liner", "new_card_ignored": "Not a new liner after all: the same insects are still there",
+    "card_full": "Liner is getting full", "card_old": "Liner is old", "glare": "Glare on the liner",
+    "trap_added": "Trap added", "trap_changed": "Trap changed", "trap_removed": "Trap taken out", "trap_restored": "Trap put back",
+}
+templates.env.globals.update(SPECIES=SPECIES, SPECIES_LABELS=SPECIES_LABELS, PESTS=PESTS, version=__version__,
+                             EVENT_LABELS=EVENT_LABELS)
 
 
 def create_app(start_worker: bool = False) -> FastAPI:
@@ -281,10 +288,13 @@ def create_app(start_worker: bool = False) -> FastAPI:
     def overview(request: Request, db: Session = Depends(get_session)):
         rows = []
         traps = services.camera_traps(db)
+        now = utcnow()
         for t in traps:
+            card = services.open_card(db, t.id)
             rows.append({
                 "trap": t, "health": services.trap_health(db, t), "week": services.week_counts(db, t.id),
-                "pending": len(services.pending_reviews(db, t.id)), "card": services.open_card(db, t.id),
+                "pending": len(services.pending_reviews(db, t.id)), "card": card,
+                "liner_days": (now - card.installed_at).total_seconds() / 86400 if card else 0,
                 "pheno": services.phenology_status(db, t),
             })
         events = list(db.scalars(select(Event).order_by(Event.at.desc()).limit(12)))
@@ -292,6 +302,7 @@ def create_app(start_worker: bool = False) -> FastAPI:
                  "cameras": sum(t.hub_id == h.id for t in traps)} for h in services.hubs(db)]
         return templates.TemplateResponse(request, "overview.html", {
             "rows": rows, "hubs": hubs, "events": events, "orchard": services.orchard_summary(db, traps),
+            "today": services.local_date(now), "liner_max_days": get_settings().liner_max_days,
         })
 
     @app.get("/traps/{trap_id}", response_class=HTMLResponse)
@@ -314,7 +325,7 @@ def create_app(start_worker: bool = False) -> FastAPI:
             "trap": trap, "caps": caps, "latest": latest, "tracks": tracks, "daily": daily, "peak": peak,
             "health": services.trap_health(db, trap), "card": services.open_card(db, trap_id),
             "pheno": services.phenology_status(db, trap), "pending": len(services.pending_reviews(db, trap_id)),
-            "checks": services.spot_checks(db, trap_id),
+            "checks": services.spot_checks(db, trap_id), "today": services.local_date(utcnow()),
         })
 
     @app.get("/traps/{trap_id}/photos", response_class=HTMLResponse)
@@ -386,7 +397,7 @@ def create_app(start_worker: bool = False) -> FastAPI:
         items = []
         for t in services.pending_reviews(db)[:60]:
             det = db.scalar(select(Detection).where(Detection.track_id == t.id).order_by(Detection.det_conf.desc()))
-            items.append({"track": t, "det": det})
+            items.append({"track": t, "det": det, "trap": db.get(Trap, det.capture.trap_id) if det else None})
         return templates.TemplateResponse(request, "review.html", {"items": items})
 
     return app

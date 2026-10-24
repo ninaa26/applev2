@@ -1,35 +1,46 @@
 {% extends "base.html" %}
 {% set nav = 'overview' %}
-{% block title %}Photo {{ cap.id }} · Orchard Sentinel{% endblock %}
+{% block title %}Photo {{ cap.captured_at|local('%b %-d %H:%M') }} · Orchard Sentinel{% endblock %}
 {% block main %}
-<div>
-  <p><a href="/traps/{{ trap.id }}">← {{ trap.id }}</a></p>
-  <h1>Photo {{ cap.captured_at|local('%b %d, %Y %H:%M') }}</h1>
-  <p class="muted">Liner #{{ cap.card_id }} · <span class="pill {{ cap.status }}">{{ cap.status }}</span>{% if cap.model_version %} · {{ cap.model_version }}{% endif %}{% if cap.error %} · {{ cap.error }}{% endif %}</p>
+<div class="page-head">
+  <div>
+    <a class="back" href="/traps/{{ trap.id }}">{{ trap.name or trap.id }}</a>
+    <h1>Photo, {{ cap.captured_at|local('%B %-d, %Y at %H:%M') }}</h1>
+    <p class="sub"><span>Liner {{ cap.card_id }}</span>
+      {% if cap.status != 'processed' %}<span class="pill {{ cap.status }}">{{ {'new': 'Waiting to be processed', 'failed': 'Not used'}.get(cap.status, cap.status|capitalize) }}</span>{% endif %}
+      {% if cap.model_version %}<span class="faint small">Models {{ cap.model_version }}</span>{% endif %}</p>
+    {% if cap.error %}<p class="notice warn" style="margin-top:12px">{{ cap.error[0]|upper ~ cap.error[1:] }}</p>{% endif %}
+  </div>
 </div>
 <div class="grid g2">
-  <div class="card">{% include "_photo.html" %}</div>
-  <div class="card">
-    <h2>Readings</h2>
-    <dl class="kv" style="margin-top:8px">
-      <dt>Wake</dt><dd>{{ cap.wake_reason or '—' }}</dd>
-      <dt>Temperature</dt><dd class="mono">{{ '%.1f °C'|format(cap.temp_c) if cap.temp_c is not none else '—' }}</dd>
-      <dt>Humidity</dt><dd class="mono">{{ '%.0f %%'|format(cap.rh) if cap.rh is not none else '—' }}</dd>
-      <dt>Battery</dt><dd class="mono">{{ '%.2f V'|format(cap.battery_v) if cap.battery_v else '—' }}</dd>
-      <dt>Camera</dt><dd class="mono" style="font-size:12px">{{ cap.meta.camera | tojson if cap.meta.camera else '—' }}</dd>
-    </dl>
-    <h2 style="margin-top:16px">Insects in this photo</h2>
-    <table>
-      <thead><tr><th>Insect</th><th>Label</th><th>Status</th><th style="text-align:right">Conf.</th></tr></thead>
-      <tbody>
-      {% for d in cap.detections %}{% set t = tracks.get(d.track_id) %}
-        <tr><td><a href="/crops/{{ d.id }}.jpg">#{{ d.track_id }}</a></td>
-            <td><span class="sp"><i class="dot c-{{ t.label if t else 'unclassified' }}"></i>{{ SPECIES_LABELS.get(t.label, t.label) if t else '—' }}</span></td>
-            <td><span class="pill {{ t.review_status if t else '' }}">{{ t.status if t else '' }} · {{ t.review_status if t else '' }}</span></td>
-            <td class="n">{{ '%.2f'|format(t.species_conf) if t else '' }}</td></tr>
-      {% else %}<tr><td colspan="4" class="muted">None found.</td></tr>{% endfor %}
-      </tbody>
-    </table>
+  <section class="card">{% include "_photo.html" %}</section>
+  <div class="stack">
+    <section class="card">
+      <h2>Insects in this photo</h2>
+      <div class="tbl"><table>
+        <thead><tr><th>Insect</th><th>Label</th><th>Status</th><th class="n">Sure</th></tr></thead>
+        <tbody>
+        {% for d in cap.detections %}{% set t = tracks.get(d.track_id) %}
+          <tr><td><a href="/crops/{{ d.id }}.jpg">{{ d.track_id }}</a></td>
+              <td><span class="sp"><i class="dot c-{{ t.label if t else 'unclassified' }}"></i>{{ SPECIES_LABELS.get(t.label, t.label) if t else '—' }}</span></td>
+              <td>{% if t %}<span class="pill {{ t.review_status }}">{{ 'Counted' if t.status == 'confirmed' else 'Seen once' if t.status == 'candidate' else 'Dropped' }}{{ ', checked by a person' if t.reviewed }}</span>{% endif %}</td>
+              <td class="n">{{ '%.0f%%'|format(100 * t.species_conf) if t and t.species_conf else '' }}</td></tr>
+        {% else %}<tr><td colspan="4" class="muted">No insects found.</td></tr>{% endfor %}
+        </tbody>
+      </table></div>
+    </section>
+    <section class="card">
+      <h2>Readings</h2>
+      <dl class="kv">
+        <dt>Woke for</dt><dd>{{ {'scheduled': 'A scheduled photo', 'requested': 'A photo asked for on the dashboard', 'manual': 'A button press', 'setup': 'Setting up'}.get(cap.wake_reason, cap.wake_reason or '—') }}</dd>
+        <dt>Temperature</dt><dd>{{ '%.1f °C (%.0f °F)'|format(cap.temp_c, cap.temp_c * 9 / 5 + 32) if cap.temp_c is not none else '—' }}</dd>
+        <dt>Humidity</dt><dd>{{ '%.0f%%'|format(cap.rh) if cap.rh is not none else '—' }}</dd>
+        <dt>Battery</dt><dd>{{ '%.2f V'|format(cap.battery_v) if cap.battery_v else '—' }}</dd>
+        {% if cap.meta.liner_days is defined %}<dt>Liner age</dt><dd>{{ cap.meta.liner_days }} days</dd>{% endif %}
+        {% if cap.meta.px_per_mm %}<dt>Scale</dt><dd>{{ cap.meta.px_per_mm }} px/mm</dd>{% endif %}
+        {% if cap.meta.camera %}<dt>Camera</dt><dd class="mono small">{{ cap.meta.camera | tojson }}</dd>{% endif %}
+      </dl>
+    </section>
   </div>
 </div>
 {% endblock %}
