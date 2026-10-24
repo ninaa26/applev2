@@ -1,0 +1,13 @@
+# Nightly backup of the server's database and photos: docs/server-on-linux.md#back-it-up.
+# Paths are for the repo cloned to /home/pi/applev2 by user pi. Set the --push target to the machine that
+# keeps the far copy (it needs pi's SSH key in its authorized_keys).
+[Unit]
+Description=Orchard Sentinel backup (database snapshot + photos, pushed to another machine)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=pi
+WorkingDirectory=/home/pi/applev2/server
+ExecStart=/home/pi/applev2/server/.venv/bin/sentinel-server backup /home/pi/sentinel-backup --push USER@TEAM-MAC:sentinel-backup
