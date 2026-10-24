@@ -187,3 +187,13 @@ def test_error_status_says_why_on_hover_and_links_to_the_photo():
         link = f'<a class="pill error" href="/captures/{cap_id}" title="Newest photo failed: photo not used: no liner grid found">Error'
         for url in ("/", "/traps/T2", "/traps/T1", "/manage"):
             assert link in client.get(url).text, url
+
+
+def test_overview_shows_a_hub_before_any_camera_is_added():
+    """A fresh install has a hub and no cameras yet: the hub table sat inside the trap-rows block, so the
+    page couldn't say whether the hub was checking in."""
+    with TestClient(create_app()) as client:
+        _add(client, trap_id="T1", kind="hub", name="Fieldhouse hub")
+        page = client.get("/").text
+    assert "No cameras yet" in page
+    assert "<h2>Hubs</h2>" in page and "Fieldhouse hub" in page and "0 cameras" in page
