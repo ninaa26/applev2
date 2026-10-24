@@ -65,6 +65,9 @@ class Card(Base):
     installed_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     removed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     note: Mapped[str] = mapped_column(String(200), default="")
+    # The lure in the trap while this liner was in: its catches are read against it, so changing a trap's
+    # lure doesn't reinterpret earlier liners. None only on a liner made outside start_new_card.
+    lure: Mapped[str | None] = mapped_column(String(16), nullable=True)
     trap: Mapped[Trap] = relationship(back_populates="cards")
 
 

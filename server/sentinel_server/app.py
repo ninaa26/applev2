@@ -199,10 +199,14 @@ def create_app(start_worker: bool = False) -> FastAPI:
     # ---------------------------------------------------------------- dashboard actions
 
     @app.post("/traps/{trap_id}/new-card")
-    def new_card(trap_id: str, note: str = Form(default="installed from dashboard"), db: Session = Depends(get_session)):
+    def new_card(trap_id: str, note: str = Form(default="installed from dashboard"), lure: str = Form(default=""),
+                 db: Session = Depends(get_session)):
         if db.get(Trap, trap_id) is None:
             raise HTTPException(404, "no such trap")
-        services.start_new_card(db, trap_id, note=note)
+        try:
+            services.start_new_card(db, trap_id, note=note, lure=lure or None)
+        except ValueError as e:
+            raise HTTPException(422, str(e))
         return RedirectResponse(f"/traps/{trap_id}", status_code=303)
 
     @app.post("/traps/{trap_id}/request-photo")

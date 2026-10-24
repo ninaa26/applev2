@@ -45,6 +45,16 @@ def init_db() -> None:
 
     Base.metadata.create_all(engine())
     _add_missing_columns()
+    _fill_card_lures()
+
+
+def _fill_card_lures() -> None:
+    """Liners from before the lure was kept per liner had their trap's lure."""
+    from sqlalchemy import text
+
+    with engine().begin() as conn:
+        conn.execute(text("UPDATE cards SET lure = (SELECT lure FROM traps WHERE traps.id = cards.trap_id) "
+                          "WHERE lure IS NULL"))
 
 
 def _add_missing_columns() -> None:
