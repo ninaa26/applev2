@@ -7,11 +7,11 @@
     sentinel-server serve                  # API + dashboard + worker in one process (Mac dev setup)
     sentinel-server serve --no-worker      # API only; run `sentinel-server worker` separately
     sentinel-server worker
+    sentinel-server backup ~/sentinel-backup --push nina@team-mac:sentinel-backup   # database + photos
     sentinel-server reprocess --card 3     # re-run a liner's photos with the current models
     sentinel-server import-weather newa.csv --source newa:Ithaca
     sentinel-server detect photo.jpg --out overlays/   # try the detector on photos, draw what it found
     sentinel-server set-mask T1 --none     # lure not in view: don't ignore any area
-    sentinel-server backup ~/sentinel-backup --push nina@team-mac:sentinel-backup   # database + photos
 """
 
 from __future__ import annotations
