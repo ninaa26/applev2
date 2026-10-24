@@ -64,6 +64,30 @@ journalctl -u sentinel-server -f        # "worker started (baseline-cv-0.4+biocl
 The first start downloads BioCLIP 2 (about 1.6 GB, to `~/.cache/huggingface`). After `git pull` or a
 change to `.env`: `sudo systemctl restart sentinel-server`.
 
+## Back it up
+
+Everything the season produces is in `server/data/`: the database and the photos. One dead SD card loses
+it all, so a copy goes to another machine every night. `sentinel-server backup` takes a snapshot of the
+database with SQLite's backup API (safe while the server is writing), copies new photos next to it,
+keeps the last 14 snapshots, and with `--push` rsyncs the folder somewhere else. Nothing is deleted on
+the far side.
+
+On the far machine (the team Mac): turn on **Remote Login** in System Settings and add the Pi's SSH key
+(`ssh-keygen` on the Pi if it has none, then `ssh-copy-id USER@TEAM-MAC` over Tailscale). Then on the Pi:
+
+```bash
+.venv/bin/sentinel-server backup ~/sentinel-backup --push USER@TEAM-MAC:sentinel-backup   # try it once
+# edit USER@TEAM-MAC in the ExecStart line, then:
+sudo cp ~/applev2/server/systemd/sentinel-backup.{service,timer} /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now sentinel-backup.timer
+systemctl list-timers sentinel-backup      # next run, 03:30
+journalctl -u sentinel-backup              # "backed up sentinel-….db and N new photos"
+```
+
+To restore, stop the server, copy the newest `sentinel-*.db` to `server/data/sentinel.db` and the
+`media/` folder to `server/data/media/`, and start it again. Restore once on a spare machine to check the
+backup works before relying on it.
+
 ## Reaching it
 
 Install Tailscale and log in with the team account (`sudo tailscale up --ssh --hostname apple-pi-server`).

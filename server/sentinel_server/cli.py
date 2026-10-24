@@ -11,6 +11,7 @@
     sentinel-server import-weather newa.csv --source newa:Ithaca
     sentinel-server detect photo.jpg --out overlays/   # try the detector on photos, draw what it found
     sentinel-server set-mask T1 --none     # lure not in view: don't ignore any area
+    sentinel-server backup ~/sentinel-backup --push nina@team-mac:sentinel-backup   # database + photos
 """
 
 from __future__ import annotations
@@ -111,6 +112,21 @@ def cmd_worker(args) -> int:
 
     init_db()
     run_forever()
+    return 0
+
+
+def cmd_backup(args) -> int:
+    import subprocess
+
+    from . import backup
+
+    try:
+        done = backup.run(args.dest, keep=args.keep, target=args.push)
+    except (ValueError, subprocess.CalledProcessError, OSError) as e:
+        print(f"backup failed: {e}", file=sys.stderr)
+        return 1
+    print(f"backed up {done['database'].name} and {done['photos']} new photos to {args.dest}"
+          + (f", pushed to {args.push}" if args.push else ""))
     return 0
 
 
@@ -241,6 +257,12 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(fn=cmd_serve)
 
     sub.add_parser("worker", help="process new photos forever").set_defaults(fn=cmd_worker)
+
+    p = sub.add_parser("backup", help="snapshot the database and copy new photos to a folder (and push it elsewhere)")
+    p.add_argument("dest", type=Path, help="backup folder, outside the data folder")
+    p.add_argument("--keep", type=int, default=14, help="database snapshots to keep (default 14)")
+    p.add_argument("--push", metavar="TARGET", help="then rsync the folder here: a path or user@host:path")
+    p.set_defaults(fn=cmd_backup)
 
     p = sub.add_parser("reprocess", help="re-run detection/tracking for one liner")
     p.add_argument("--card", type=int, required=True)
