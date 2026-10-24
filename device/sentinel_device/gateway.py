@@ -61,6 +61,10 @@ def hash_key(key: str) -> str:
     return hashlib.sha256(key.encode()).hexdigest()
 
 
+# The soonest wake a camera is sent. The hub's own 2-minute boot margin made a check-in at 09:59:10 skip the
+# 10:01 photo. The node drops wakes under 60 s away itself (untilNextWake in main.cpp), so this matches it.
+NODE_MIN_GAP = timedelta(seconds=60)
+
 class Gateway:
     """Which ESP32 traps belong to this hub comes from the server (added and removed on the dashboard's
     "Set up traps" page) as {trap_id: key hash}, cached in data_dir/hub_nodes.json for wakes without
@@ -162,7 +166,7 @@ class Gateway:
         # The node wakes node_offset_s after the hub's slot, once the hub has booted and opened the window.
         wakes, t = [], now - offset
         for _ in range(12):  # a node that misses a window still knows when to wake after that
-            t = next_wake(t, self.cfg["schedule"]["times"], self.cfg["timezone"], min_gap=timedelta(minutes=2))
+            t = next_wake(t, self.cfg["schedule"]["times"], self.cfg["timezone"], min_gap=NODE_MIN_GAP)
             wakes.append(t + offset)
         return {"now": now.timestamp(), "next_wake": wakes[0].isoformat(), "sleep_s": round((wakes[0] - now).total_seconds()),
                 "wakes": [round(w.timestamp()) for w in wakes], "checkin_s": round(float(self.hub["checkin_min"]) * 60),
