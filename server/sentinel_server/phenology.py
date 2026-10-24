@@ -56,7 +56,9 @@ MODELS = {
         Milestone(200, "Egg hatch begins: time larval sprays for the first generation"),
         Milestone(965, "Next generation's moths start flying"),
     )),
-    "OBLR": PestModel("OBLR", "Obliquebanded leafroller", 43, "biofix (first catch; traps out by June 1)", (
+    # Biofix: sustained flight, moths caught "over two to three successive days" (Cornell, Jentsch 2019);
+    # NEWA's OBLR page doesn't define it. Checked Oct 24 2026 (L-12).
+    "OBLR": PestModel("OBLR", "Obliquebanded leafroller", 43, "biofix (first sustained catch; traps out by June 1)", (
         Milestone(350, "Egg hatch: spray targeting larvae (history of OBLR); second spray 10–14 days later"),
         Milestone(600, "Scout growing terminals for larvae (600–700 DD)"),
     )),
