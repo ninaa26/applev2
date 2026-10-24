@@ -11,6 +11,7 @@
     sentinel-server import-weather newa.csv --source newa:Ithaca
     sentinel-server detect photo.jpg --out overlays/   # try the detector on photos, draw what it found
     sentinel-server set-mask T1 --none     # lure not in view: don't ignore any area
+    sentinel-server set-scale T2 10.3      # the camera's measured px/mm: photos far from it are left out
 """
 
 from __future__ import annotations
@@ -173,6 +174,24 @@ def cmd_set_mask(args) -> int:
     return 0
 
 
+def cmd_set_scale(args) -> int:
+    """The camera's measured px/mm at the card centre: photos whose grid reads far from it are left out."""
+    with session_scope() as db:
+        trap = db.get(Trap, args.trap_id)
+        if trap is None:
+            print(f"no trap {args.trap_id}", file=sys.stderr)
+            return 1
+        if args.none:
+            trap.px_per_mm = None
+        elif args.px_per_mm is not None:
+            if args.px_per_mm <= 0:
+                print("px/mm must be above 0", file=sys.stderr)
+                return 1
+            trap.px_per_mm = args.px_per_mm
+        print(f"{trap.id} scale: {f'{trap.px_per_mm} px/mm' if trap.px_per_mm else 'not set (checked per liner)'}")
+    return 0
+
+
 def cmd_import_weather(args) -> int:
     """CSV with columns date, tmax_f, tmin_f (e.g. exported daily data from the nearest NEWA station)."""
     init_db()
@@ -258,6 +277,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--box", type=float, nargs=4, action="append", metavar=("X1", "Y1", "X2", "Y2"))
     p.add_argument("--none", action="store_true")
     p.set_defaults(fn=cmd_set_mask)
+
+    p = sub.add_parser("set-scale", help="set (or show) a camera's measured px/mm, which photos are checked against")
+    p.add_argument("trap_id")
+    p.add_argument("px_per_mm", type=float, nargs="?")
+    p.add_argument("--none", action="store_true", help="forget it: check each liner's photos against each other")
+    p.set_defaults(fn=cmd_set_scale)
 
     p = sub.add_parser("import-weather", help="import daily max/min temperatures (°F)")
     p.add_argument("csv", type=Path)

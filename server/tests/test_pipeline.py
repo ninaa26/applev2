@@ -325,6 +325,36 @@ def test_photo_with_a_different_scale_is_left_out():
     assert "no liner grid" in scale_problem([7.0, 7.1], None)
 
 
+def test_camera_scale_overrides_the_liners_first_photos():
+    """T2, Oct 2026: a liner's first photos misread the grid at about a third of the camera's 10.3 px/mm,
+    then every right reading after them was rejected for disagreeing. With the camera's measured scale the
+    first photos are checked too, and they can't outvote it."""
+    from sentinel_server.pipeline.worker import scale_problem
+
+    assert "scale reads 3.5" in scale_problem([], 3.5, camera=10.3)          # first photo of a liner
+    assert "camera reads 10.3" in scale_problem([], 32.6, camera=10.3)
+    assert scale_problem([3.5, 3.6, 3.4], 10.4, camera=10.3) is None          # the liner's misreads don't count
+    assert scale_problem([], 11.5, camera=10.3) is None                       # fisheye and focus: within 20%
+    assert "no liner grid" in scale_problem([], None, camera=10.3)
+
+
+def test_photo_off_the_cameras_scale_is_left_out():
+    key = add_trap()
+    with session_scope() as db:
+        db.get(Trap, "T1").px_per_mm = 15.3  # the synthetic liner reads ~6.4
+    with TestClient(create_app(start_worker=False)) as client:
+        upload(client, key, datetime(2026, 6, 1, 12, tzinfo=timezone.utc), MOTHS, "a")
+        process_pending(Pipeline())
+        with session_scope() as db:
+            cap = db.get(Capture, 1)
+            assert cap.status == "failed" and "camera reads 15.3" in cap.error
+            db.get(Trap, "T1").px_per_mm = 6.4
+            cap.status = "new"
+        process_pending(Pipeline())
+    with session_scope() as db:
+        assert db.get(Capture, 1).status == "processed"
+
+
 def test_blurred_photo_is_left_out_and_context_is_logged():
     from datetime import datetime
 

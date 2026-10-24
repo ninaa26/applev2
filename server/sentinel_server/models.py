@@ -41,6 +41,10 @@ class Trap(Base):
     device_config: Mapped[dict] = mapped_column(JSON, default=dict)
     # Areas to ignore, as [x1, y1, x2, y2] fractions of the image (the lure spot).
     mask: Mapped[list] = mapped_column(JSON, default=lambda: [[0.45, 0.46, 0.55, 0.54]])
+    # The camera's measured scale at the card centre (px/mm on the straightened photo), e.g. 10.3 for the
+    # 130° OV5640 110 mm over the card at 2048 × 1536. Photos whose grid reads far from it are left out.
+    # None: each liner's photos are checked against each other instead.
+    px_per_mm: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     # "esp32" is an ESP32 camera that uploads through hub_id's gateway; "hub" is a Pi with no camera that
     # only relays ESP32 photos; "pi" is a Pi camera trap that uploads by itself (and can also be a hub)

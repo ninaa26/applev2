@@ -187,6 +187,7 @@ class Grid:
     angles: tuple[float, ...]  # degrees; line directions found (usually two, ~90° apart)
     pitch_px: float            # spacing between neighbouring lines, in working-image pixels
     score: float               # how strongly periodic the lines are (0 = no grid found)
+    fraction: int = 1          # pitch_px is this fraction (1/n) of a measured spacing (see _pitch_choice)
 
 
 class BaselineDetector:
@@ -512,10 +513,15 @@ def _find_grid_1ch(v: np.ndarray, min_score: float) -> Grid:
     pitches = [p for p in (_period(pr) for pr in profiles) if p]
     if not pitches:
         return Grid((), 0.0, 0.0)
-    return Grid(tuple(angles), float(_agreed_pitch(pitches, profiles) * s), s1)
+    pitch, fraction = _pitch_choice(pitches, profiles)
+    return Grid(tuple(angles), float(pitch * s), s1, fraction)
 
 
 def _agreed_pitch(pitches: list[float], profiles: list[np.ndarray], tol: float = 0.08) -> float:
+    return _pitch_choice(pitches, profiles, tol)[0]
+
+
+def _pitch_choice(pitches: list[float], profiles: list[np.ndarray], tol: float = 0.08) -> tuple[float, int]:
     """One spacing for both line families. The liner's grid is square, so the two should agree. When they
     don't, a profile locked onto a multiple of the spacing (insects or the lure swamp it); averaging the two
     would give a scale that is wrong for both. Seen on the fake camera's liner (Oct 10 2026): 290 px and
@@ -524,9 +530,11 @@ def _agreed_pitch(pitches: list[float], profiles: list[np.ndarray], tol: float =
     Each measured spacing, and whole fractions of it (both can be multiples, e.g. 2x and 3x), is scored by
     how far the profiles repeat at it above how they repeat at half of it: a grid line repeats at its
     spacing and not halfway there. Plain correlation would favour any short lag, since lines and insects
-    are blurred; a multiple of the spacing repeats as well at its half as at itself."""
+    are blurred; a multiple of the spacing repeats as well at its half as at itself.
+
+    Also returns n when the spacing chosen is 1/n of the measured one it came from (1 when it is one of them)."""
     if len(pitches) < 2 or max(pitches) <= (1 + tol) * min(pitches):
-        return float(np.median(pitches))
+        return float(np.median(pitches)), 1
     acs = [_autocorr(pr) for pr in profiles]
 
     def at(ac: np.ndarray, lag: float) -> float:
@@ -536,10 +544,13 @@ def _agreed_pitch(pitches: list[float], profiles: list[np.ndarray], tol: float =
         vals = [at(ac, lag) - at(ac, lag / 2) for ac in acs if lag < 0.5 * len(ac)]
         return float(np.mean(vals)) if vals else -1.0
 
-    cands = {p / k for p in pitches for k in range(1, 5) if p / k >= 12}
+    cands: dict[float, int] = {}
+    for k in range(4, 0, -1):  # when two give the same spacing, the larger fraction (whole spacing) is kept
+        cands.update({p / k: k for p in pitches if p / k >= 12})
     if not cands:  # every spacing too fine for a real grid (noise on a dark frame): find_grid drops it
-        return float(np.median(pitches))
-    return max(cands, key=prominence)
+        return float(np.median(pitches)), 1
+    best = max(cands, key=prominence)
+    return best, cands[best]
 
 
 def _autocorr(p: np.ndarray) -> np.ndarray:

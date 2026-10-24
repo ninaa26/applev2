@@ -20,6 +20,9 @@ ESP32 trap T4 ─┘  or the fieldhouse Wi-Fi)        gateway.py, always on:    
   Hubs and cameras are added and removed on the dashboard's **Set up traps** page (or
   `sentinel-server add-trap T1 --kind hub` and `sentinel-server add-trap T2 --kind esp32 --hub T1 --lure CM`).
   Removing one hides it and stops its key, and keeps its photos and counts. **Put back** undoes it.
+  Once a camera is in its trap, set its measured scale (`sentinel-server set-scale T2 10.3`, the px/mm its
+  photos read at the card centre when the grid is found right): photos whose grid reads more than 20% off
+  it are left out, from a liner's first photo on.
 - **Hub:** `sentinel_device/gateway.py`, run always on by `systemd/sentinel-gateway.service`. Every 30 s
   it asks the server which ESP32 traps are its own (`GET /api/v1/hub/nodes`: their ids and key hashes,
   cached for when the server can't be reached), so the hub needs no change when cameras are added or

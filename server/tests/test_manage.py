@@ -149,6 +149,11 @@ def test_cli_hub_and_set_kind(capsys):
     assert main(["add-trap", "T3", "--lure", "CM"]) == 0
     assert main(["set-kind", "T3", "hub"]) == 0
     assert main(["set-kind", "T2", "hub"]) == 1  # an ESP32 stays a camera
+    assert main(["set-scale", "T2", "10.3"]) == 0
+    assert main(["set-scale", "T2", "0"]) == 1
+    with session_scope() as db:
+        assert db.get(Trap, "T2").px_per_mm == 10.3
+    assert main(["set-scale", "T2", "--none"]) == 0
     with session_scope() as db:
         assert db.get(Trap, "T3").kind == "hub"
 
