@@ -291,3 +291,21 @@ def test_line_families_agree_on_one_spacing():
     assert _agreed_pitch([200.0, 50.0], [across, down]) == pytest.approx(50)    # one a multiple
     assert _agreed_pitch([150.0, 100.0], [across, down]) == pytest.approx(50)   # both multiples
     assert _agreed_pitch([7.0, 11.0], [across, down]) == pytest.approx(9)      # all too fine: no raise
+
+
+def test_grid_says_which_fraction_of_a_spacing_it_chose():
+    """For the ⅓-scale misreads (L-01): a grid taken as a fraction of a measured spacing says which, so the
+    failing photos show whether the fraction search is the cause."""
+    from sentinel_server.pipeline.detect import _pitch_choice
+
+    def lines(n, pitch):
+        p = np.zeros(n)
+        p[::pitch] = 1.0
+        return p
+
+    across, down = lines(400, 50), lines(225, 50)
+    assert _pitch_choice([50.0, 51.0], [across, down]) == (pytest.approx(50.5), 1)
+    assert _pitch_choice([200.0, 50.0], [across, down]) == (pytest.approx(50), 1)
+    pitch, frac = _pitch_choice([150.0, 200.0], [across, down])
+    assert pitch == pytest.approx(50) and frac in (3, 4)
+    assert find_grid(cv2.cvtColor(liner(), cv2.COLOR_BGR2GRAY)).fraction == 1

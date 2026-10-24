@@ -45,12 +45,23 @@ def blur_problem(earlier: list[float], now: float) -> str | None:
     return None
 
 
-def scale_problem(earlier: list[float], now: float | None) -> str | None:
+def scale_problem(earlier: list[float], now: float | None, camera: float | None = None) -> str | None:
     """Why this photo's scale can't be right, or None. The camera and liner don't move, so every photo of
     a liner has the same px/mm; one that reads differently (or shows no grid at all, when the others did)
     is blurred, mis-exposed, knocked, or had its grid misread, and its boxes would be sized wrongly. Such a
-    photo is left out rather than allowed to drop real insects and add false ones. A new liner starts afresh,
-    so a camera that really was changed is believed from the next liner on."""
+    photo is left out rather than allowed to drop real insects and add false ones.
+
+    `camera` is the trap's measured px/mm (Trap.px_per_mm). With it, every photo is checked against the
+    camera, from a liner's first photo on. Without it, photos are checked against the liner's others, so
+    the first ones set the scale: if they misread the grid (T2, Oct 2026: a third of the true scale), every
+    right reading after them is rejected. A new liner starts afresh, so a camera that really was changed is
+    believed from the next liner on."""
+    if camera:
+        if now is None:
+            return f"no liner grid found (the camera reads {camera:.1f} px/mm)"
+        if abs(now / camera - 1) > SCALE_TOLERANCE:
+            return f"scale reads {now:.1f} px/mm, the camera reads {camera:.1f}"
+        return None
     if len(earlier) < 2:  # one photo is not enough to say which of two is the odd one
         return None
     usual = sorted(earlier)[len(earlier) // 2]
@@ -105,7 +116,11 @@ class Pipeline:
         ppm = None
         if info.get("grid") is not None:  # detectors that measure the liner's grid
             ppm = float(info["px_per_mm"]) if info["grid"].score > 0 and info.get("px_per_mm") else None
-            problem = scale_problem([m["px_per_mm"] for m in before if m.get("px_per_mm")], ppm) or problem
+            scale = scale_problem([m["px_per_mm"] for m in before if m.get("px_per_mm")], ppm,
+                                  db.get(Trap, cap.trap_id).px_per_mm)
+            if scale and getattr(info["grid"], "fraction", 1) > 1:  # the lead on the ⅓-scale misreads (L-01)
+                scale += f" (grid spacing taken as 1/{info['grid'].fraction} of a measured one)"
+            problem = scale or problem
         if problem:
             log.warning("capture %s left out: %s", cap.id, problem)
             cap.status, cap.processed_at, cap.model_version = "failed", utcnow(), self.version
