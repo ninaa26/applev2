@@ -26,6 +26,10 @@ Log in with the team's Tailscale account. `tailscale status` should list the Mac
 
 ## 3. Install the trap software
 
+> **Not on the bench Pi.** `apple-pi-hub` (the old `sentinel-t1`) is now the shared hub. Running
+> `install.sh` there replaces the hub with a Pi camera trap. Use a spare Pi for this guide, and ask the
+> team before running anything on `apple-pi-hub`.
+
 ```bash
 git clone <your repo URL> sentinel && cd sentinel/device
 sudo ./install.sh
