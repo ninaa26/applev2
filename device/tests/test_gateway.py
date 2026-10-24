@@ -199,6 +199,19 @@ def test_photo_asked_for_on_the_dashboard_goes_to_its_node_until_a_newer_photo_c
     assert not gw.schedule("Bearer key2")[1]["photo_now"]
 
 
+
+def test_a_requested_photo_answers_the_request_even_from_a_clock_that_runs_behind(tmp_path: Path, monkeypatch):
+    """The photo a node took because it was asked answers the request, whatever its clock says. Judged by
+    time alone, a node whose clock is a few minutes behind sent a photo "from before the request", was told
+    photo_now again, and took photo after photo."""
+    asked = {"T2": "2026-10-05T23:30:00+00:00"}
+    monkeypatch.setattr(gateway.requests, "get", lambda url, headers, timeout: _Reply(200, {"nodes": {}, "photo_requests": asked}))
+    gw = _gw(tmp_path)
+    assert gw.refresh_nodes() and gw.schedule("Bearer key2")[1]["photo_now"]
+    behind = _meta(captured_at="2026-10-05T23:28:00+00:00", wake_reason="requested")
+    assert not gw.capture("Bearer key2", behind, JPEG)[1]["photo_now"]
+    assert not gw.schedule("Bearer key2")[1]["photo_now"]
+
 def test_live_preview_is_listed_on_the_hub_page_while_it_lasts(tmp_path: Path):
     now = [NOW]
     gw = _gw(tmp_path)

@@ -199,8 +199,11 @@ class Gateway:
         queue = self.queue(trap_id)
         uid = None
         with self.lock:
-            if self.requests.get(trap_id) is not None and captured >= self.requests[trap_id]:
-                self.served[trap_id] = self.requests[trap_id]  # this photo answers the dashboard's request
+            # A photo taken after the dashboard's request answers it, and so does the one the node took because
+            # it was asked, even if its clock runs behind (judged by time alone, it would be asked again and again).
+            if self.requests.get(trap_id) is not None and (
+                    captured >= self.requests[trap_id] or meta.get("wake_reason") == "requested"):
+                self.served[trap_id] = self.requests[trap_id]
             # A retry after a lost reply: same node_capture_id, already queued or already sent.
             if not any(any(d.glob(f"*_{node_id}.jpg")) for d in (queue.queue_dir, queue.sent_dir)):
                 uid = f"{captured.strftime('%Y%m%dT%H%M%SZ')}_{trap_id}_{node_id}"
