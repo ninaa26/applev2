@@ -515,3 +515,44 @@ def test_upload_commits_while_a_liner_is_reprocessed():
     assert result["n"] == 2
     with session_scope() as db:
         assert {c.uid: c.status for c in db.query(Capture)} == {"r0": "processed", "r1": "processed", "during": "new"}
+
+
+def test_a_slow_upload_does_not_hold_up_other_requests(monkeypatch):
+    """upload_capture was `async def` doing blocking database and file work, so while one upload saved,
+    the event loop (every other request) waited for it."""
+    import threading
+    import time
+
+    key = add_trap()
+    real = services.open_card
+
+    def slow_open_card(db, trap_id):
+        time.sleep(1.5)
+        return real(db, trap_id)
+
+    monkeypatch.setattr(services, "open_card", slow_open_card)
+    with TestClient(create_app(start_worker=False)) as client:
+        t = threading.Thread(target=lambda: upload(client, key, datetime.now(timezone.utc), MOTHS, "slow"))
+        t.start()
+        time.sleep(0.3)
+        start = time.monotonic()
+        assert client.get("/healthz").status_code == 200
+        waited = time.monotonic() - start
+        t.join(10)
+    assert waited < 0.8, f"healthz waited {waited:.1f} s for the upload"
+
+
+def test_upload_size_is_capped(monkeypatch):
+    from sentinel_server.settings import reset_settings
+
+    size = len(liner(MOTHS))
+    monkeypatch.setenv("SENTINEL_MAX_UPLOAD_MB", str((size + 1000) / 1e6))
+    reset_settings()
+    key = add_trap()
+    with TestClient(create_app(start_worker=False)) as client:
+        meta = {"capture_uid": "big", "trap_id": "T1", "captured_at": datetime.now(timezone.utc).isoformat()}
+        r = client.post("/api/v1/captures", headers={"Authorization": f"Bearer {key}"},
+                        files={"image": ("big.jpg", b"\xff\xd8" + b"\0" * (size + 2000) + b"\xff\xd9", "image/jpeg")},
+                        data={"meta": json.dumps(meta)})
+        assert r.status_code == 413
+        assert upload(client, key, datetime.now(timezone.utc), MOTHS, "ok").status_code == 201  # just under the cap
