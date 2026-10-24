@@ -164,3 +164,20 @@ def test_photo_stats_say_what_was_left_out_and_if_the_ofm_is_big_enough():
     assert rep.photos["left_out"] == {"blurred": 1} and rep.photos["smallest_px"] == 42
     text = ev.to_markdown(rep)
     assert "**1** left out (50%): 1 blurred" in text and "**too few**" in text and "3.0% of the card" in text
+
+
+def test_moths_found_on_an_empty_liner_count_against_the_model():
+    """A liner with no moths by hand has no count accuracy (it would divide by 0), so its false positives
+    went unscored. They are now reported per empty liner, and the liner passes only with none."""
+    seed()  # liner 1: four confirmed CM, one dropped single-photo detection
+    with session_scope() as db:
+        db.add(Card(id=2, trap_id="T1", installed_at=noon(date(2026, 6, 20))))  # nothing on it, nothing found
+    with session_scope() as db:
+        rep = ev.evaluate(db, {1: [], 2: []})
+    rows = {r["card"]: r for r in rep.counts if r["label"] == "all moths"}
+    assert rows[1]["false_positives"] == 4 and not rows[1]["pass"]
+    assert rows[2]["false_positives"] == 0 and rows[2]["pass"]
+    assert rep.empty_cards == [{"card": 1, "trap": "T1", "false_positives": 4, "without_confirmation": 5},
+                               {"card": 2, "trap": "T1", "false_positives": 0, "without_confirmation": 0}]
+    md = ev.to_markdown(rep)
+    assert "Empty liners" in md and "4 moths found on 2 liners with none" in md

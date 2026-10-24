@@ -6,6 +6,7 @@ gives the report's three numbers, each with a pass mark:
 | Result | How it's measured | Pass mark | Why |
 |---|---|---|---|
 | Count accuracy per liner | 1 − \|auto − manual\| / manual, per pest and for all moths | ≥ 0.80 | Suto (2022): no standard metric, but forecasting tolerates ~20% error |
+| False positives on empty liners | moths found on liners with none by hand (no accuracy there: it would divide by 0) | 0 to pass | an empty liner is the cleanest test of false alarms |
 | Count per trap-day | new moths that day, automatic vs manual: mean error, and days within 20% or one moth | report | a liner's total can be right while its days are wrong, and the biofix is made of days |
 | Detection | a detection matches a drawn insect when IoMin = overlap / smaller box > 0.5 | report P / R / F1 | Ding & Taylor (2016); fairer than IoU for small insects in loose boxes |
 | Detection by size | recall and species accuracy by the drawn insect's long side (under 30, 30–75, 75–150, over 150 px) | report | accuracy swings ~20 points between small and large crops (AMI dataset); an average hides the OFM |
