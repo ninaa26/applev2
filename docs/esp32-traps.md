@@ -67,7 +67,9 @@ every 10–30 min), and corrects the next sleep. It also wakes early by `15 s + 
 (about 2.5 min before a 12 h slot) and keeps trying the hub's Wi-Fi for 2–5 min if it can't reach it.
 A node that has never reached the hub since power-on photographs once, then looks for the hub after
 10 min, 20 min and then every 30 min, for 2 min each time and without taking more photos, so it does not
-flatten its battery (firmware 0.2.2; these wakes report as `search`).
+flatten its battery (firmware 0.2.2; these wakes report as `search`). After a photo wake that couldn't
+reach the hub, later photo wakes try for 45 s only, until the hub answers again (a check-in that gets
+through resets it), so a hub outage doesn't keep Wi-Fi on for 5 min every photo.
 
 ## Setting up a hub
 
