@@ -62,7 +62,8 @@ check-ins off (then a photo asked for comes with the next scheduled photo).
 
 The ESP32's sleep clock is an RC oscillator that can be off by a few percent. The node never sets its
 clock. It measures the hub's time against its own on every contact, works out its drift from
-successive contacts, and corrects the next sleep. It also wakes early by `15 s + 0.3%` of the sleep
+contacts at least an hour apart (fw 0.2.6; before that it never updated, since nodes check in
+every 10–30 min), and corrects the next sleep. It also wakes early by `15 s + 0.3%` of the sleep
 (about 2.5 min before a 12 h slot) and keeps trying the hub's Wi-Fi for 2–5 min if it can't reach it.
 A node that has never reached the hub since power-on photographs once, then looks for the hub after
 10 min, 20 min and then every 30 min, for 2 min each time and without taking more photos, so it does not

@@ -7,7 +7,8 @@
 //
 // Timekeeping: the node never sets its clock. `clock` is seconds since power-on, which keeps counting
 // through deep sleep on the RTC timer, and `offset` (hub time - clock) is measured on every contact.
-// Comparing successive offsets gives the RTC's drift, which shortens or lengthens the next sleep.
+// Comparing offsets an hour or more apart gives the RTC's drift (drift.h), which shortens or lengthens
+// the next sleep.
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
@@ -19,6 +20,7 @@
 #include <vector>
 #include "driver/rtc_io.h"
 #include "esp_camera.h"
+#include "drift.h"
 #include "esp_http_server.h"
 #include "node_config.h"
 
@@ -33,7 +35,7 @@
 #define SETUP_HOLD_MS 3000               // hold BUTTON_PIN this long on a button wake for setup mode
 #endif
 
-#define FW_VERSION "0.2.5"
+#define FW_VERSION "0.2.6"
 static const int CONNECT_MIN_S = 120;      // keep trying the hub at least this long per wake
 static const int CONNECT_MAX_S = 300;
 static const int UNSYNCED_SLEEP_S = 600;   // never heard from the hub: first retry after this long,
@@ -49,6 +51,7 @@ RTC_DATA_ATTR bool synced = false;
 RTC_DATA_ATTR double offset = 0;           // hub unix time - clock
 RTC_DATA_ATTR double sync_clock = 0;       // clock at that measurement
 RTC_DATA_ATTR double rate = 1.0;           // real seconds per clock second while asleep
+RTC_DATA_ATTR DriftRef drift_ref = {0, 0, false};  // the contact the next rate update measures from
 RTC_DATA_ATTR int64_t wakes[MAX_WAKES];    // upcoming wake times (hub unix seconds)
 RTC_DATA_ATTR int n_wakes = 0;
 RTC_DATA_ATTR uint32_t boots = 0;
@@ -193,11 +196,7 @@ static void takeTime(JsonDocument &reply, double sent_clock) {
   if (!reply["now"].is<double>()) return;
   double now_clock = clockNow();
   double new_offset = reply["now"].as<double>() - (sent_clock + now_clock) / 2;
-  if (synced && now_clock - sync_clock > 3600) {
-    // Over the last stretch the hub's time moved (now_clock - sync_clock) + (new_offset - offset) seconds.
-    double r = ((now_clock - sync_clock) + (new_offset - offset)) / (now_clock - sync_clock);
-    if (r > 0.9 && r < 1.1) rate = 0.7 * rate + 0.3 * r;
-  }
+  updateDrift(drift_ref, rate, now_clock, new_offset);
   offset = new_offset; sync_clock = now_clock; synced = true;
   JsonArray w = reply["wakes"].as<JsonArray>();
   if (!w.isNull()) {
