@@ -406,7 +406,34 @@ def test_blurred_photo_is_left_out_and_context_is_logged():
         process_pending(Pipeline())
     with session_scope() as db:
         meta = db.get(Capture, 1).meta
-    assert {"sharpness", "glare", "card_rgb", "liner_days", "moon", "px_per_mm"} <= set(meta)
+    assert {"sharpness", "glare", "card_rgb", "brightness", "liner_days", "moon", "px_per_mm"} <= set(meta)
+
+
+def test_night_frame_is_left_out_as_too_dark():
+    from datetime import datetime
+
+    import cv2
+    import numpy as np
+
+    from sentinel_server.pipeline.detect import photo_quality
+    from sentinel_server.pipeline.worker import dark_problem
+    from sentinel_server.settings import get_settings
+
+    assert dark_problem(17.0) and "too dark" in dark_problem(17.0)   # T2 at night, Oct 24 2026
+    assert dark_problem(80.0) is None                               # T2's dimmest lit photo
+    night = np.full((300, 400, 3), (48, 0, 40), np.uint8)            # BGR of T2's night card colour
+    assert photo_quality(night)["brightness"] < 25
+
+    key = add_trap()
+    with TestClient(create_app(start_worker=False)) as client:
+        upload(client, key, datetime(2026, 6, 1, 12, tzinfo=timezone.utc), [(200, 200)], "a")
+        with session_scope() as db:
+            path = get_settings().media_dir / db.get(Capture, 1).image_path
+        cv2.imwrite(str(path), cv2.imread(str(path)) // 8)  # the same photo with the light gone
+        process_pending(Pipeline())
+    with session_scope() as db:
+        cap = db.get(Capture, 1)
+        assert cap.status == "failed" and "too dark" in cap.error and not cap.detections
 
 
 def test_late_photo_goes_on_the_liner_it_was_taken_on():

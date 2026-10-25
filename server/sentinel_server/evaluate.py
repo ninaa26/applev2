@@ -221,7 +221,8 @@ def photo_stats(db: Session, cards: list[int]) -> dict:
     for c in caps:
         if c.status == "failed":
             why = c.error or "failed"
-            left_out["blurred" if "blurred" in why else "scale or grid" if why.startswith("photo not used") else "error"] += 1
+            left_out["too dark" if "too dark" in why else "blurred" if "blurred" in why
+                     else "scale or grid" if why.startswith("photo not used") else "error"] += 1
     used = [c.meta or {} for c in caps if c.status == "processed"]
     ppm = sorted(m["px_per_mm"] for m in used if m.get("px_per_mm"))
     mid = ppm[len(ppm) // 2] if ppm else None

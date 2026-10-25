@@ -24,6 +24,7 @@ log = logging.getLogger(__name__)
 
 SCALE_TOLERANCE = 0.20  # a photo whose px/mm is further than this from the liner's other photos is not trusted
 BLURRED_BELOW = 0.4     # ... or whose sharpness is under this share of theirs (repeat shots vary by ~30%)
+DARK_BELOW = 40         # ... or whose card's median grey level (0-255) is under this: a night frame
 GLARE_WARN = 0.02       # share of the card blown out to white that raises a "glare" event
 
 
@@ -32,6 +33,16 @@ def moon_illumination(when) -> float:
     since moonlight changes how many moths fly."""
     days = (when - type(when)(2000, 1, 6, 18, 14)).total_seconds() / 86400
     return round((1 - math.cos(2 * math.pi * (days % 29.530588853) / 29.530588853)) / 2, 2)
+
+
+def dark_problem(brightness: float) -> str | None:
+    """Why this photo is too dark to use, or None. A fixed bar, unlike sharpness: nothing on the card can be
+    seen at all below it. T2's night frames (ESP32, Oct 2026) read 17-23 and every lit photo 80 or more. A
+    grid read off such a frame is noise, and one that happened to land near the right scale let a black
+    photo through as "0 insects"."""
+    if brightness < DARK_BELOW:
+        return f"too dark: the card's brightness is {brightness:.0f} of 255 (needs {DARK_BELOW})"
+    return None
 
 
 def blur_problem(earlier: list[float], now: float) -> str | None:
@@ -121,6 +132,7 @@ class Pipeline:
             if scale and getattr(info["grid"], "fraction", 1) > 1:  # the lead on the ⅓-scale misreads (L-01)
                 scale += f" (grid spacing taken as 1/{info['grid'].fraction} of a measured one)"
             problem = scale or problem
+        problem = dark_problem(quality["brightness"]) or problem  # the plainest reason, ahead of what it causes
         if problem:
             log.warning("capture %s left out: %s", cap.id, problem)
             cap.status, cap.processed_at, cap.model_version = "failed", utcnow(), self.version

@@ -86,6 +86,10 @@ Whatever the detector, three rules apply to every photo:
   ("photo not used: …") and changes no counts: its boxes would be sized wrongly.
 - **A blurred photo is left out** the same way: sharpness under 40% of the liner's other photos
   (repeat shots of one scene vary by about 30%; a blur of 3 px brings it to 20–25%).
+- **A photo too dark to see into is left out**: the card's median grey level under 40 of 255. A fixed bar,
+  not one judged against the liner's other photos. T2's night frames (ESP32 with no light, Oct 24 2026)
+  read 17–23 and its dimmest lit photo 80. Before this check, three of them read a grid off the noise
+  near the right scale and went in as "0 insects".
 - **Species comes from fresh photos.** A moth's photos count towards its species for 72 hours after it is
   first seen; after that it has lost scales to the glue and later photos only keep it in place.
 - **One box per insect.** A box lying mostly inside a bigger one (a body inside its wings, one wing of a
