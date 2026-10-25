@@ -1,0 +1,84 @@
+<title>Orchard Sentinel Schematics</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--gut-l:max(16px, env(safe-area-inset-left, 0px));--gut-r:max(16px, env(safe-area-inset-right, 0px));--ground:#f2f3ef;--surface:#fff;--ink:#151613;--muted:#5d6059;--rule:#dfe0da;--sel:#151613}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--ground:#121311;--surface:#1b1c1a;--ink:#eeeee9;--muted:#a3a59e;--rule:#2c2d2a;--sel:#eeeee9}}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark}}
+:root[data-theme="dark"]{color-scheme:dark;--ground:#121311;--surface:#1b1c1a;--ink:#eeeee9;--muted:#a3a59e;--rule:#2c2d2a;--sel:#eeeee9}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font:15px/1.5 "Hanken Grotesk",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+header{max-width:1400px;margin:0 auto;padding-block:28px 8px;padding-left:var(--gut-l);padding-right:var(--gut-r)}
+h1{font-size:28px;line-height:1.15;margin:0;letter-spacing:-.01em}
+header p{color:var(--muted);margin:8px 0 0;max-width:80ch}
+.picker{position:sticky;top:env(safe-area-inset-top, 0px);z-index:5;background:var(--ground);border-bottom:1px solid var(--rule)}
+.picker .in{max-width:1400px;margin:0 auto;padding-block:10px;padding-left:var(--gut-l);padding-right:var(--gut-r);display:flex;gap:6px;overflow-x:auto}
+.picker button{flex:none;height:38px;padding:0 12px;border-radius:19px;border:0;background:transparent;color:var(--muted);font:500 14px "Hanken Grotesk",sans-serif;cursor:pointer;transition:background-color 120ms ease,color 120ms ease,transform 140ms cubic-bezier(.23,1,.32,1)}
+.picker button:hover{color:var(--ink)}
+.picker button:active{transform:scale(.97)}
+.picker button[aria-pressed="true"]{background:var(--sel);color:var(--ground)}
+main{max-width:1400px;margin:0 auto;padding-block:20px 56px;padding-left:var(--gut-l);padding-right:var(--gut-r)}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top, 0px);z-index:10;background:var(--ground)}
+.about>div{min-width:0}
+.about{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:16px}
+.about h2{font-size:24px;margin:0;line-height:1.2}
+.about .meta{color:var(--muted);font-size:14px;margin-top:4px}
+.about p{margin:0}
+.about dl{margin:10px 0 0;display:grid;grid-template-columns:110px 1fr;gap:4px 12px;font-size:14px}
+.about dt{color:var(--muted)}
+.about dd{margin:0}
+.views{display:grid;grid-template-columns:1fr 300px;gap:20px;align-items:start}
+.frame{background:var(--surface);border-radius:12px;padding:10px;min-width:0}
+.frame .lab{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);padding:0 4px 8px}
+.frame .lab a{color:var(--ink)}
+.box{position:relative;overflow:hidden;border-radius:6px;background:#fff}
+.box iframe{position:absolute;top:0;left:0;border:0;transform-origin:0 0}
+@media (max-width:900px){.about{grid-template-columns:1fr}.views{grid-template-columns:1fr}.views .desk{display:none}}
+</style>
+<header>
+  <h1>Orchard Sentinel: ten directions for the grower dashboard</h1>
+  <p>Each one is a working, responsive screen built from the same sample day (Tue June 15, mid-season) in the shapes the server already uses, shown here at computer and phone width. Pick one and it becomes the real templates in <code>server/sentinel_server</code>.</p>
+</header>
+<nav class="picker" aria-label="Directions"><div class="in" id="pick"></div></nav>
+<main>
+  <section class="about" aria-live="polite"><div><h2 id="t"></h2><div class="meta" id="m"></div></div><div><p id="d"></p><dl id="dl"></dl></div></section>
+  <div class="views">
+    <div class="frame desk"><div class="lab"><span>Computer, 1440 wide</span><a id="open1" href="#" target="_blank">Open full size</a></div><div class="box" id="deskBox"><iframe id="desk" title="Computer view" loading="lazy"></iframe></div></div>
+    <div class="frame"><div class="lab"><span>Phone, 390 wide</span><a id="open2" href="#" target="_blank">Open</a></div><div class="box" id="phoneBox"><iframe id="phone" title="Phone view" loading="lazy"></iframe></div></div>
+  </div>
+</main>
+<script>
+const D = [
+  ['01-ledger.html', 'Ledger', 'taste-skill app style achromatic-ledger · Geist', 'No colour in the chrome. Ink on a sage ground, and the one hue is apple red on the pest whose spray comes due next, so the eye lands on it first.', 'Spray timing rows: each pest\'s degree-day ruler beside the sentence that says what to do', 'Daily check at the desk, quick phone look'],
+  ['02-plan.html', 'Orchard plan', 'taste-skill app style framed-sheet · IBM Plex Sans', 'A green-grey frame around a white sheet, and the orchard drawn as a plan: every trap pinned where it hangs with this week\'s count, offline traps dashed.', 'The orchard plan', 'Owners and managers who think in blocks'],
+  ['03-confirm.html', 'Confirm first', 'taste-skill app style accent-ladder · DM Sans', 'Opens on the job that holds the counts back: the insects on the glue, as crops, each with the model\'s guess, how sure it is, and Yes / Something else.', 'The review queue as the lead block', 'Scouts working through the morning photos'],
+  ['04-morning.html', 'Morning note', 'taste-skill app style editorial-greeting · Instrument Sans + Serif', 'A typeset sentence that says today\'s one fact, then sage panels on a strict 12-column grid. Reads like a note from your consultant.', 'The season in lanes: each week\'s catch per pest', 'Growers who want the answer, not the data'],
+  ['05-tiles.html', 'Pest tiles', 'taste-skill app style pastel-consumer · Manrope', 'One big pale tile per pest in its own colour, the count and the decision on the tile. Bottom tab bar on the phone. Made for the truck cab.', 'Three pest tiles', 'Phone first, in the field'],
+  ['06-network.html', 'Night network', 'taste-skill app style true-black-flat · Inter', 'Warm near-black for 5 a.m. in the fieldhouse. Leads with the hardware: the hub in the barn, each camera\'s link, last photo and battery.', 'The hub-and-camera network', 'Whoever looks after the traps and batteries'],
+  ['07-matrix.html', 'Trap matrix', 'taste-skill app style data-terminal · Public Sans + Plex Mono', 'Dense and exact. Six traps by seven days, every photo day a cell, a red ! where a camera went quiet. One thin green line marks every selection.', 'Trap-by-day matrix and photo log', 'Consultants watching many traps or farms'],
+  ['08-liner.html', 'Liner view', 'taste-skill page direction split-stage · Hanken Grotesk', 'Half the screen is the photo of the sticky liner with every insect boxed; the other half says what it means. Tap a trap and the liner changes.', 'The liner photo as evidence beside every number', 'Anyone who wants to see the moths, not just counts'],
+  ['09-chapters.html', 'Pest chapters', 'taste-skill page direction colour-chapters · Archivo', 'Each pest is a full-colour chapter, the one due first at the top. You know which pest you are reading by colour alone, even in bright sun.', 'Colour-coded chapters per pest', 'Phone in full sun; the boldest option'],
+  ['10-bulletin.html', 'Weekly bulletin', 'taste-skill page direction borrowed-category + report · Source Serif 4', 'The week as the printed extension pest bulletin growers already read: masthead, lead story for the pest that is due, a trap table. Prints on one page.', 'A printable, emailable weekly report', 'Crew handouts, the office wall, the consultant'],
+];
+const $ = (id) => document.getElementById(id);
+$('pick').innerHTML = D.map((d, i) => `<button type="button" data-i="${i}" aria-pressed="false">${i + 1}. ${d[1]}</button>`).join('');
+const fit = () => {
+  const dw = $('deskBox').clientWidth, s = dw / 1440; Object.assign($('desk').style, { width: '1440px', height: '1000px', transform: `scale(${s})` }); $('deskBox').style.height = 1000 * s + 'px';
+  const pw = $('phoneBox').clientWidth, p = pw / 390; Object.assign($('phone').style, { width: '390px', height: '844px', transform: `scale(${p})` }); $('phoneBox').style.height = 844 * p + 'px';
+};
+const show = (i) => {
+  const [f, t, m, d, sig, who] = D[i];
+  document.querySelectorAll('#pick button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.i == i));
+  $('t').textContent = `${i + 1}. ${t}`; $('m').textContent = m; $('d').textContent = d;
+  $('dl').innerHTML = `<dt>Signature</dt><dd>${sig}</dd><dt>Best for</dt><dd>${who}</dd>`;
+  $('desk').src = f; $('phone').src = f; $('open1').href = f; $('open2').href = f;
+  try { history.replaceState(null, '', '#' + (i + 1)); localStorage.setItem('os-dir', i); } catch (e) {}
+  fit();
+};
+$('pick').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) show(+b.dataset.i); });
+addEventListener('resize', fit);
+let start = parseInt(location.hash.slice(1), 10) - 1;
+if (!(start >= 0 && start < D.length)) { try { start = +localStorage.getItem('os-dir') || 0; } catch (e) { start = 0; } }
+show(start);
+</script>
