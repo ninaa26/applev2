@@ -25,7 +25,7 @@ device/     Raspberry Pi software: the hub for the ESP32 cameras (gateway.py, in
 server/     FastAPI + SQLite (Postgres later): upload API, detection/tracking/counting worker, dashboard
 ml/         training photos (AMI, iNaturalist, trap-style synthetic), labelling tool, detector and classifier training and scoring
 hardware/   trap dimensions (TRAP.md), mockup trap template, 3D-printable camera mount + liner tray, calibration prints
-docs/       ESP32 traps and the hub, the server on Linux or the Mac, Pi camera bring-up and wiring, camera bench test, measuring accuracy
+docs/       ESP32 traps and the hub, the server on Linux or the Mac, Pi camera bring-up and wiring, camera bench test, measuring accuracy, security and privacy
 ```
 
 ## Quick start (no hardware needed)
@@ -37,7 +37,7 @@ cd server && uv venv --python 3.12 .venv && uv pip install -p .venv/bin/python -
 ```
 
 Then run the device software with the fake camera ([docs/server-on-mac.md](docs/server-on-mac.md#try-it-without-a-pi)).
-ESP32 cameras and the hub: [docs/esp32-traps.md](docs/esp32-traps.md). The server on a Pi or a cloud machine: [docs/server-on-linux.md](docs/server-on-linux.md). A Pi with its own camera: [docs/bring-up.md](docs/bring-up.md). Choosing between cameras: [docs/camera-bench.md](docs/camera-bench.md).
+ESP32 cameras and the hub: [docs/esp32-traps.md](docs/esp32-traps.md). The server on a Pi or a cloud machine: [docs/server-on-linux.md](docs/server-on-linux.md). A Pi with its own camera: [docs/bring-up.md](docs/bring-up.md). Choosing between cameras: [docs/camera-bench.md](docs/camera-bench.md). Before opening it to growers: [docs/security-and-privacy.md](docs/security-and-privacy.md).
 
 ## What works today
 

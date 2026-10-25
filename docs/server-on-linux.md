@@ -94,7 +94,8 @@ Install Tailscale and log in with the team account (`sudo tailscale up --ssh --h
 The dashboard is then `http://apple-pi-server:8000` from any device on the tailnet, and the hub's
 `server_url` is the same address. Turn off key expiry for the server in the Tailscale admin console,
 or it drops off the tailnet after about 6 months. A cloud server for growers will want a domain name and
-HTTPS (for example Caddy with Let's Encrypt) instead.
+HTTPS (for example Caddy with Let's Encrypt) instead; see [security-and-privacy.md](security-and-privacy.md) for that and
+the rest of what to change first.
 
 **On Cornell's network** a Pi has to be registered before it gets real internet: until then every
 website it looks up resolves to Cornell's registration page. Register its Wi-Fi MAC at
