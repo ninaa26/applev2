@@ -2,10 +2,19 @@
 # Install a hub: a Raspberry Pi (4 or 5, Raspberry Pi OS Bookworm or later) with no camera, on mains power,
 # that takes photos from the ESP32 cameras near it and sends them to the server. No camera, LED, sensor,
 # RTC or power-off setup: for a Pi camera trap use install.sh instead.
-# Run from the repo's device/ folder:  sudo ./install-hub.sh
+# Run from the repo's device/ folder, with the line the dashboard shows when the hub is added (Set up traps):
+#   sudo ./install-hub.sh T1 <key> http://apple-pi-server:8000
+# That writes the three into /etc/sentinel/config.toml and starts the gateway. With no arguments it only
+# installs, and the config is filled in by hand. Run again with a new key after New key on the dashboard.
 set -euo pipefail
 
 if [[ $EUID -ne 0 ]]; then echo "run with sudo"; exit 1; fi
+if [[ $# -ne 0 && $# -ne 3 ]]; then echo "usage: sudo ./install-hub.sh [<trap id> <key> <server url>]"; exit 1; fi
+if [[ $# -eq 3 ]]; then
+  [[ $1 =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$ ]] || { echo "trap id: letters, digits, _ and - only"; exit 1; }
+  [[ $2 =~ ^[A-Za-z0-9_-]{16,}$ ]] || { echo "that doesn't look like a key from the dashboard"; exit 1; }
+  [[ $3 =~ ^https?://[A-Za-z0-9.:_/-]+$ ]] || { echo "server url: like http://apple-pi-server:8000"; exit 1; }
+fi
 
 apt-get update
 apt-get install -y python3-venv
@@ -20,11 +29,25 @@ install -d -o sentinel -g sentinel /var/lib/sentinel
 install -d /etc/sentinel
 if [[ ! -f /etc/sentinel/config.toml ]]; then
   install -m 640 -g sentinel hub.example.toml /etc/sentinel/config.toml
-  echo "Edit /etc/sentinel/config.toml (trap_id, api_key, server_url, schedule) before starting the hub."
+  [[ $# -eq 3 ]] || echo "Edit /etc/sentinel/config.toml (trap_id, api_key, server_url, schedule) before starting the hub."
 fi
 
 install -m 644 systemd/sentinel-gateway.service /etc/systemd/system/
 systemctl daemon-reload
+
+if [[ $# -eq 3 ]]; then
+  sed -i -e "s|^trap_id = .*|trap_id = \"$1\"|" -e "s|^api_key = .*|api_key = \"$2\"|" \
+         -e "s|^server_url = .*|server_url = \"$3\"|" /etc/sentinel/config.toml
+  systemctl enable sentinel-gateway
+  systemctl restart sentinel-gateway
+  cat <<MSG
+
+Hub $1 is running. The dashboard shows it online within a minute; add its ESP32 cameras there.
+Its photo times are [schedule] times in /etc/sentinel/config.toml (then sudo systemctl restart sentinel-gateway).
+Check it:  journalctl -u sentinel-gateway -f   ("gateway listening on 0.0.0.0:8080 for ...")
+MSG
+  exit 0
+fi
 
 cat <<'MSG'
 

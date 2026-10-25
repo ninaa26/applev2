@@ -54,6 +54,10 @@ def cmd_add_trap(args) -> int:
              "hub": "hub's /etc/sentinel/config.toml"}.get(args.kind, "device config.toml")
     what = "hub (no camera)" if args.kind == "hub" else f"trap ({args.lure} lure)"
     print(f"Created {what} {args.trap_id}.\nAPI key (shown once, put it in the {where}):\n\n  {key}\n")
+    setup = {"esp32": f"device/esp32-node/flash-camera.sh {args.trap_id} {key}",
+             "hub": f"sudo ./install-hub.sh {args.trap_id} {key} <server url>   (on the hub, in device/)"}.get(args.kind)
+    if setup:
+        print(f"Or set the device up with it in one go:\n\n  {setup}\n")
     return 0
 
 

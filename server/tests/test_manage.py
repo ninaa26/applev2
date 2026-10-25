@@ -65,6 +65,16 @@ def test_add_esp32_cameras_through_a_hub_and_remove_them():
         assert _upload(client, new_key, "T2", "a4").status_code == 201
 
 
+def test_adding_shows_the_one_command_that_sets_up_the_device():
+    with TestClient(create_app()) as client:
+        page = client.post("/manage/traps", data={"trap_id": "T1", "kind": "hub"}).text
+        key = re.search(r'api_key = "([^"]+)"', page).group(1)
+        assert f"sudo ./install-hub.sh T1 {key} http://testserver</pre>" in page
+        page = client.post("/manage/traps", data={"trap_id": "T2", "kind": "esp32", "hub_id": "T1", "lure": "CM"}).text
+        key = re.search(r'API_KEY "([^"]+)"', page).group(1)
+        assert f"flash-camera.sh T2 {key}</pre>" in page
+
+
 def test_hub_list_needs_the_hub_key():
     with TestClient(create_app()) as client:
         assert client.get("/api/v1/hub/nodes").status_code == 401

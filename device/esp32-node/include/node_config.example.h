@@ -1,7 +1,7 @@
 // Copy to node_config.h (gitignored) and fill in for this trap.
 #pragma once
 
-// From `sentinel-server add-trap T2 ...`; the same id and key go in the hub's [hub.nodes.T2].
+// From the dashboard's Set up traps page; flash-camera.sh T2 <key> fills in these two.
 #define TRAP_ID "T2"
 #define API_KEY "paste-the-key-printed-by-add-trap"
 
