@@ -2694,7 +2694,7 @@ requires-dist = [
     { name = "sqlalchemy", specifier = ">=2.0" },
     { name = "torch", marker = "extra == 'bioclip'", specifier = ">=2.2" },
     { name = "ultralytics", marker = "extra == 'yolo'", specifier = ">=8.3" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.29" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.54.0" },
 ]
 provides-extras = ["dev", "postgres", "bioclip", "flatbug", "yolo"]
 
