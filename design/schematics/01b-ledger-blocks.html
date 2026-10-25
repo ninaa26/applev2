@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ledger Blocks · Orchard Sentinel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="kit.css">
+<style>
+/* Ledger B, Block by block. Organised the way the orchard is walked and sprayed: one row per block,
+   each holding its pests, its job and its traps. Type: Libre Franklin only (Franklin Gothic, the
+   face of field reports and survey tables), tabular figures. Palette "Prussian survey": cool paper
+   ground, blue-black ink, Prussian blue only on the job that is due, rust for things to fix.
+   Grid: 1120px column; each block row 220 | 1fr | 300, 28px gap. */
+:root{
+  --ground:#eef1f4; --surface:#fff; --sunk:#e4e9ee; --border:#dce2e9; --rule:#e9edf1; --control:#c6cfd9;
+  --ink:#141a22; --muted:#56606d; --grid:#e4e9ee; --track:#e1e6ec;
+  --due:#1f4d78; --due-soft:#e5eef7; --fix:#9a4a10; --fix-soft:#f8ebe0;
+  --cm:#1f4d78; --ofm:#4a5562; --oblr:#8e98a4; --other:#c8cfd7;
+  --r:8px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font:15.5px/1.5 "Libre Franklin",system-ui,sans-serif;font-variant-numeric:tabular-nums lining-nums;-webkit-font-smoothing:antialiased}
+.col{max-width:1120px;margin:0 auto;padding:0 24px}
+header{height:56px;display:flex;align-items:center;gap:24px}
+.mark{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:-.005em}
+header nav{display:flex;gap:2px}
+header nav a{padding:7px 12px;border-radius:6px;color:var(--muted);text-decoration:none;font-weight:500}
+header nav a.on{background:var(--sunk);color:var(--ink)}
+.btn{display:inline-flex;align-items:center;justify-content:center;height:40px;padding:0 16px;border-radius:6px;border:0;font:600 14.5px "Libre Franklin",sans-serif;cursor:pointer;text-decoration:none;transition:transform 140ms cubic-bezier(.23,1,.32,1),background-color 150ms ease;white-space:nowrap}
+.btn:active{transform:scale(.97)}
+.btn.primary{background:var(--ink);color:#fff}.btn.primary:hover{background:#2a3340}
+.btn.line{background:var(--surface);border:1px solid var(--control);color:var(--ink)}.btn.line:hover{background:#f5f7f9}
+header .btn{margin-left:auto}
+.title{padding:20px 0 18px;display:flex;justify-content:space-between;align-items:flex-end;gap:16px}
+h1{font-size:26px;font-weight:700;margin:0;letter-spacing:-.01em}
+.title p{margin:4px 0 0;color:var(--muted)}
+.plan{display:grid;grid-template-columns:repeat(3,1fr);background:var(--surface);border:1px solid var(--border);border-radius:var(--r);margin-bottom:24px}
+.plan>div{padding:14px 18px}
+.plan>div+div{border-left:1px solid var(--rule)}
+.plan .l{font-size:13px;color:var(--muted)}
+.plan .v{font-weight:700;font-size:17px;margin-top:2px}
+.plan .s{font-size:13.5px;color:var(--muted)}
+.plan .due .v{color:var(--due)}
+.block{display:grid;grid-template-columns:220px 1fr 300px;gap:28px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px 22px;margin-bottom:12px}
+.block h2{font-size:20px;font-weight:700;margin:0}
+.block .meta{color:var(--muted);font-size:14px}
+.block .k{font-size:13px;color:var(--muted);margin-bottom:4px}
+.pest{display:grid;grid-template-columns:24px 1fr 46px;gap:8px;align-items:baseline;padding:8px 0;border-top:1px solid var(--rule)}
+.pest:first-of-type{border-top:0;padding-top:0}
+.pest .nm{font-weight:600}
+.pest .act{display:block;font-size:14px;color:var(--muted)}
+.pest .act b{color:var(--due);font-weight:600}
+.pest .n{text-align:right;font-size:20px;font-weight:600}
+.pest .n.na{color:var(--muted);font-size:15px;font-weight:400}
+.pest.none{color:var(--muted)}
+.trap{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid var(--rule);font-size:14.5px}
+.trap:first-of-type{border-top:0;padding-top:0}
+.trap span{color:var(--muted);text-align:right}
+.trap .fix{color:var(--fix);font-weight:600}
+.trap .fix small{display:block;font-weight:400;color:var(--muted)}
+.tree{display:block;margin-top:12px}
+.foot{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0 56px}
+.foot .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:16px 20px}
+.foot h3{font-size:15px;font-weight:700;margin:0 0 8px}
+.ddrow{display:grid;grid-template-columns:110px 1fr;gap:16px;align-items:center;padding:8px 0}
+.ddrow+.ddrow{border-top:1px solid var(--rule)}
+.menu{display:none}
+@media (max-width:980px){.block{grid-template-columns:1fr 1fr}.block .who{grid-column:1/-1}}
+@media (max-width:680px){
+  .col{padding:0 16px}
+  header nav,header .btn{display:none}
+  .menu{display:inline-flex;margin-left:auto;width:44px;height:44px;align-items:center;justify-content:center;background:none;border:0}
+  .title{flex-direction:column;align-items:stretch}
+  .title .btn{height:46px}
+  .plan{grid-template-columns:1fr}.plan>div+div{border-left:0;border-top:1px solid var(--rule)}
+  .plan>div{display:grid;grid-template-columns:96px 1fr;column-gap:12px;padding:12px 16px}.plan .l{display:none}.plan .v{margin:0;font-size:16px}
+  .block{grid-template-columns:1fr;gap:16px;padding:18px 16px}
+  .tree{display:none}
+  .foot{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<header class="col">
+  <span class="mark"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect x="2" y="2" width="18" height="18" rx="3" fill="#141a22"/><path d="M6 8h10M6 11h10M6 14h10" stroke="#eef1f4" stroke-width="1.4" stroke-dasharray="1.2 2.2" stroke-linecap="round"/></svg>Orchard Sentinel</span>
+  <nav aria-label="Main"><a href="#">Today</a><a class="on" href="#">Blocks</a><a href="#">Traps</a><a href="#">Spray log</a></nav>
+  <a class="btn primary" href="#">Confirm 6 insects</a>
+  <button class="menu" aria-label="Menu"><svg width="22" height="22" viewBox="0 0 20 20" aria-hidden="true"><path d="M3 6h14M3 10h14M3 14h14" stroke="#141a22" stroke-width="1.7" stroke-linecap="round"/></svg></button>
+</header>
+<main class="col">
+  <div class="title"><div><h1>Lansing Ridge, by block</h1><p id="line"></p></div><a class="btn line" href="#">Log a spray</a></div>
+  <section class="plan" aria-label="Spray plan" id="plan"></section>
+  <div id="blocks"></div>
+  <div class="foot">
+    <section class="card" aria-labelledby="d-h"><h3 id="d-h">Degree days since biofix</h3><div id="dd"></div></section>
+    <section class="card" aria-labelledby="c-h"><h3 id="c-h">Moths caught per day, whole orchard</h3><div id="chart"></div></section>
+  </div>
+</main>
+<script src="data.js"></script><script src="kit.js"></script><script src="ledger.js"></script>
+<script>
+const { traps, pheno, weekday, reporting, LABEL, ago, LINER_MAX_DAYS } = OS;
+const { blocks, jobs, liners, fmt, range } = LG;
+const $ = (id) => document.getElementById(id);
+$('line').textContent = `${weekday} · ${reporting} of ${traps.length} cameras sending · 16 acres`;
+const sprays = jobs.filter((j) => j.kind === 'spray');
+$('plan').innerHTML = sprays.slice(0, 3).map((j, i) => `<div class="${i === 0 ? 'due' : ''}"><div class="l">${i === 0 ? 'Next spray' : 'Then'}</div><div class="v">${j.end ? range(j.date, j.end) : fmt(j.date)}</div><div class="s">${j.title} · ${j.where}</div></div>`).join('');
+const short = { CM: 'Codling moth', OFM: 'Oriental fruit moth', OBLR: 'Leafroller' };
+const actFor = (sp, b) => {
+  if (sp === 'CM') return `<b>Spray ${fmt(jobs[0].date)}</b>, again ${(([j]) => range(j.date, j.end))(jobs.filter((j) => j.sp === 'CM' && j.end))}`;
+  if (sp === 'OBLR') return b.oblrHistory ? `<b>Spray ${fmt(jobs.find((j) => j.sp === 'OBLR').date)}</b> (damage here last year)` : 'No spray: no history in this block';
+  return `No spray now. Flight 2 from ${fmt(jobs.find((j) => j.sp === 'OFM').date, { month: 'short', day: 'numeric' })}`;
+};
+$('blocks').innerHTML = blocks.map((b) => {
+  const ts = b.traps.map((id) => traps.find((t) => t.id === id));
+  const pests = ['CM', 'OFM', 'OBLR'].map((sp) => {
+    const t = ts.find((x) => x.lure === sp);
+    if (!t) return `<div class="pest none"><i class="dot" style="background:var(--other)"></i><div><span class="nm" style="font-weight:500">${short[sp]}</span><span class="act">No trap in this block${sp === 'OBLR' ? '. ' + actFor(sp, b) : ''}</span></div><span class="n na">—</span></div>`;
+    const off = t.state === 'offline';
+    return `<div class="pest"><i class="dot c-${sp}"></i><div><span class="nm">${short[sp]}</span><span class="act">${off ? 'No count: camera down. ' : ''}${actFor(sp, b)}</span></div><span class="n ${off ? 'na' : ''}">${off ? '—' : t.week[sp] || 0}</span></div>`;
+  }).join('');
+  const trapRows = ts.map((t) => { const l = liners.find((x) => x.trap === t), off = t.state === 'offline';
+    return `<div class="trap"><div>${t.name} ${t.id}<br><span style="font-size:13px;text-align:left">${t.lure} lure</span></div>${off ? `<span class="fix">Camera down<small>since Sun · ${t.battery.toFixed(2)} V</small></span>` : l.overdue ? `<span class="fix">Change liner<small>${t.linerDays} days in</small></span>` : `<span>OK · ${ago(t.lastMin)}<br>liner due ${fmt(l.due, { month: 'short', day: 'numeric' })}</span>`}</div>`; }).join('');
+  const rows = Array.from({ length: 6 }, (_, i) => `<line x1="4" x2="96" y1="${8 + i * 7}" y2="${8 + i * 7}" stroke="var(--control)" stroke-width="2.4" stroke-dasharray="0.1 5" stroke-linecap="round"/>`).join('');
+  return `<section class="block" aria-labelledby="b-${b.id}"><div class="who"><h2 id="b-${b.id}">${b.name}</h2><div class="meta">${b.variety} · ${b.acres} acres</div><svg class="tree" width="100" height="50" viewBox="0 0 100 50" aria-hidden="true">${rows}</svg></div>
+    <div><div class="k">Pests this week, Jun 9–15</div>${pests}</div><div><div class="k">Traps</div>${trapRows}</div></section>`;
+}).join('');
+$('dd').innerHTML = ['CM', 'OFM', 'OBLR'].map((sp) => `<div class="ddrow"><span>${short[sp]}</span>${Kit.dd(sp, { compact: true })}</div>`).join('');
+Kit.stack($('chart'), { height: 110, labels: 'weeks' });
+</script>
+</body>
+</html>

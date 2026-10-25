@@ -37,7 +37,7 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 @media (max-width:900px){.about{grid-template-columns:1fr}.views{grid-template-columns:1fr}.views .desk{display:none}}
 </style>
 <header>
-  <h1>Orchard Sentinel: ten directions for the grower dashboard</h1>
+  <h1>Orchard Sentinel: directions for the grower dashboard</h1>
   <p>Each one is a working, responsive screen built from the same sample day (Tue June 15, mid-season) in the shapes the server already uses, shown here at computer and phone width. Pick one and it becomes the real templates in <code>server/sentinel_server</code>.</p>
 </header>
 <nav class="picker" aria-label="Directions"><div class="in" id="pick"></div></nav>
@@ -51,6 +51,9 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 <script>
 const D = [
   ['01-ledger.html', 'Ledger', 'taste-skill app style achromatic-ledger · Geist', 'No colour in the chrome. Ink on a sage ground, and the one hue is apple red on the pest whose spray comes due next, so the eye lands on it first.', 'Spray timing rows: each pest\'s degree-day ruler beside the sentence that says what to do', 'Daily check at the desk, quick phone look'],
+  ['01a-ledger-today.html', 'Ledger A · Today', 'Ledger, organised by urgency · Atkinson Hyperlegible + Crimson Pro · palette lichen and apple', 'Opens on the one decision (spray codling moth tomorrow, all blocks), then a tick-off list for your rounds, then the next three weeks as dates. Degree days stay one line under the decision; the daily chart is folded away.', 'The decision card and the rounds checklist', 'A grower who wants to know what to do today'],
+  ['01b-ledger-blocks.html', 'Ledger B · Blocks', 'Ledger, organised by place · Libre Franklin · palette Prussian survey', 'The orchard as you walk and spray it: one row per block with its pests, what to do there and when, and its traps. Leafroller spray shows only in the block with a history.', 'Block rows: pests, job and traps side by side', 'Spraying block by block, or more than one variety'],
+  ['01c-ledger-calendar.html', 'Ledger C · Calendar', 'Ledger, organised by time · Barlow · palette moss and slate', 'Three weeks on one screen: every spray, moth flight and liner change on its day, so you can book the sprayer and the crew. On a phone it becomes a day-by-day list.', 'The three-week spray calendar', 'Planning labour and equipment ahead'],
   ['02-plan.html', 'Orchard plan', 'taste-skill app style framed-sheet · IBM Plex Sans', 'A green-grey frame around a white sheet, and the orchard drawn as a plan: every trap pinned where it hangs with this week\'s count, offline traps dashed.', 'The orchard plan', 'Owners and managers who think in blocks'],
   ['03-confirm.html', 'Confirm first', 'taste-skill app style accent-ladder · DM Sans', 'Opens on the job that holds the counts back: the insects on the glue, as crops, each with the model\'s guess, how sure it is, and Yes / Something else.', 'The review queue as the lead block', 'Scouts working through the morning photos'],
   ['04-morning.html', 'Morning note', 'taste-skill app style editorial-greeting · Instrument Sans + Serif', 'A typeset sentence that says today\'s one fact, then sage panels on a strict 12-column grid. Reads like a note from your consultant.', 'The season in lanes: each week\'s catch per pest', 'Growers who want the answer, not the data'],
@@ -62,7 +65,8 @@ const D = [
   ['10-bulletin.html', 'Weekly bulletin', 'taste-skill page direction borrowed-category + report · Source Serif 4', 'The week as the printed extension pest bulletin growers already read: masthead, lead story for the pest that is due, a trap table. Prints on one page.', 'A printable, emailable weekly report', 'Crew handouts, the office wall, the consultant'],
 ];
 const $ = (id) => document.getElementById(id);
-$('pick').innerHTML = D.map((d, i) => `<button type="button" data-i="${i}" aria-pressed="false">${i + 1}. ${d[1]}</button>`).join('');
+const NUM = ['1', '1A', '1B', '1C', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
+$('pick').innerHTML = D.map((d, i) => `<button type="button" data-i="${i}" aria-pressed="false">${NUM[i]}. ${d[1]}</button>`).join('');
 const fit = () => {
   const dw = $('deskBox').clientWidth, s = dw / 1440; Object.assign($('desk').style, { width: '1440px', height: '1000px', transform: `scale(${s})` }); $('deskBox').style.height = 1000 * s + 'px';
   const pw = $('phoneBox').clientWidth, p = pw / 390; Object.assign($('phone').style, { width: '390px', height: '844px', transform: `scale(${p})` }); $('phoneBox').style.height = 844 * p + 'px';
@@ -70,15 +74,15 @@ const fit = () => {
 const show = (i) => {
   const [f, t, m, d, sig, who] = D[i];
   document.querySelectorAll('#pick button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.i == i));
-  $('t').textContent = `${i + 1}. ${t}`; $('m').textContent = m; $('d').textContent = d;
+  $('t').textContent = `${NUM[i]}. ${t}`; $('m').textContent = m; $('d').textContent = d;
   $('dl').innerHTML = `<dt>Signature</dt><dd>${sig}</dd><dt>Best for</dt><dd>${who}</dd>`;
   $('desk').src = f; $('phone').src = f; $('open1').href = f; $('open2').href = f;
-  try { history.replaceState(null, '', '#' + (i + 1)); localStorage.setItem('os-dir', i); } catch (e) {}
+  try { history.replaceState(null, '', '#d' + NUM[i].toLowerCase()); localStorage.setItem('os-dir', i); } catch (e) {}
   fit();
 };
 $('pick').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) show(+b.dataset.i); });
 addEventListener('resize', fit);
-let start = parseInt(location.hash.slice(1), 10) - 1;
+let start = NUM.findIndex((n) => '#d' + n.toLowerCase() === location.hash);
 if (!(start >= 0 && start < D.length)) { try { start = +localStorage.getItem('os-dir') || 0; } catch (e) { start = 0; } }
 show(start);
 </script>
