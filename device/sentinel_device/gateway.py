@@ -20,10 +20,22 @@ Node protocol (all requests carry "Authorization: Bearer <that trap's server API
     GET  /node/v1/schedule   last call of a wake; marks the node done for this window
     POST /node/v1/preview    header X-Sentinel-Meta: {"url": "http://<node ip>/", "seconds": n}: the node is
                              streaming a live preview for setting it up, listed on the hub's page (GET /)
+    GET  /node/v1/firmware   the firmware the dashboard sent this node (the "firmware" in a reply), as a file
 
 All reply with {"now": unix seconds, "sleep_s": seconds until the node's next wake, "wakes": the next
 12 wake times in unix seconds, "checkin_s": how often to check in between photos (0: don't),
-"photo_now": true when a photo was asked for on the dashboard and this node hasn't sent one since}.
+"photo_now": true when a photo was asked for on the dashboard and this node hasn't sent one since,
+and "firmware": {"version", "size", "md5"} when the dashboard sent it firmware to install}.
+
+A node with no trap id or key yet (a new camera, firmware 0.3.0 or later) pairs instead, with no key:
+
+    POST /node/v1/pair       header X-Sentinel-Meta: {"code": last 6 hex digits of its MAC, "fw", "rssi"}
+                             202 {"waiting": true} until it is added on the dashboard, then
+                             200 {"trap_id", "api_key"}
+
+The hub's own trap id and key come from its config, or, for a hub set up with a pairing code
+(install-hub.sh with no arguments), from the server once that code is entered on the dashboard
+(kept in data_dir/identity.json).
 """
 
 from __future__ import annotations
@@ -54,6 +66,9 @@ log = logging.getLogger(__name__)
 NODE_ID = re.compile(r"[0-9a-fA-F]{8,32}")
 PREVIEW_URL = re.compile(r"http://[0-9.]{7,15}(:[0-9]{1,5})?/")
 TRAP_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,31}")
+CAMERA_CODE = re.compile(r"[0-9A-F]{6}")
+FW_VERSION = re.compile(r"[0-9A-Za-z._-]{1,32}")
+WAITING_FOR = 600  # a pairing camera not heard from for this long is no longer reported as waiting
 
 
 def hash_key(key: str) -> str:
@@ -88,16 +103,29 @@ class Gateway:
             server = json.loads(self.cache.read_text())
         except (OSError, ValueError):
             server = {}
-        self._set_nodes(server)
         self.done: set[str] = set()  # nodes that asked for their schedule since the window opened
         self.requests: dict[str, datetime] = {}  # photo asked for on the dashboard: trap_id -> when (from the server)
         self.served: dict[str, datetime] = {}    # requests a node has already sent a newer photo for
         self.previews: dict[str, tuple[str, float]] = {}  # trap_id -> (live preview url, until clock())
-        self.lock = threading.Lock()
+        self.firmware_dir = data_dir / "firmware"
+        self.firmware: dict[str, dict] = {}  # trap_id -> {version, size, md5}, for firmware this hub has a copy of
+        self.waiting: dict[str, dict] = {}   # pairing cameras: code -> {fw, rssi, seen (clock())}
+        self.pairing_file = data_dir / "pairing.json"
+        try:  # code -> {trap_id, api_key, handed}: keys from the dashboard for cameras that paired here
+            self.assigned: dict[str, dict] = json.loads(self.pairing_file.read_text())
+        except (OSError, ValueError):
+            self.assigned = {}
+        self.lock = threading.RLock()
+        self._set_nodes(server)
 
-    def _set_nodes(self, server: dict[str, str]) -> None:
-        hashes = {t: h for t, h in server.items() if TRAP_ID.fullmatch(t) and isinstance(h, str)}
+    def _set_nodes(self, server: dict[str, str] | None = None) -> None:
+        if server is not None:
+            self.server_nodes = {t: h for t, h in server.items() if TRAP_ID.fullmatch(t) and isinstance(h, str)}
+        hashes = dict(self.server_nodes)
         hashes.update({t: hash_key(k) for t, k in self.local_keys.items()})
+        # A camera just added on the dashboard can use its key before the next node list lists it.
+        hashes.update({a["trap_id"]: hash_key(a["api_key"]) for a in self.assigned.values()
+                       if TRAP_ID.fullmatch(str(a.get("trap_id"))) and a.get("api_key")})
         self.hashes = hashes
 
     def refresh_nodes(self) -> bool:
@@ -110,6 +138,8 @@ class Gateway:
             assert isinstance(nodes, dict)
             asked = {t: datetime.fromisoformat(w).astimezone(timezone.utc)
                      for t, w in (r.json().get("photo_requests") or {}).items()}
+            firmware = r.json().get("firmware") or {}
+            assert isinstance(firmware, dict)
         except (requests.RequestException, ValueError, KeyError, AssertionError, TypeError, AttributeError) as e:
             log.warning("node list not refreshed (%s); using the last one: %s", e.__class__.__name__, ", ".join(self.hashes) or "none")
             return False
@@ -126,7 +156,120 @@ class Gateway:
             log.info("photo asked for on the dashboard: %s", ", ".join(new))
         if set(self.hashes) != before:
             log.info("nodes for this hub: %s", ", ".join(sorted(self.hashes)) or "none")
+        self._fetch_firmware(firmware)
+        self.sync_pairing()
         return True
+
+    # ------------------------------------------------------------------ firmware for the cameras
+
+    def _fetch_firmware(self, wanted: dict) -> None:
+        """Keep a copy of each firmware the dashboard sent this hub's cameras, and offer it only once it is here
+        and checks out, so a camera never starts an update the hub can't finish."""
+        ready = {}
+        for trap_id, fw in wanted.items():
+            try:
+                version, size, md5 = str(fw["version"]), int(fw["size"]), str(fw["md5"])
+                assert FW_VERSION.fullmatch(version) and TRAP_ID.fullmatch(trap_id)
+            except (KeyError, TypeError, ValueError, AssertionError):
+                continue
+            path = self.firmware_dir / f"{version}.bin"
+            if not path.exists():
+                try:
+                    r = requests.get(f"{self.cfg['server_url'].rstrip('/')}/api/v1/hub/firmware/{version}", timeout=60,
+                                     headers={"Authorization": f"Bearer {self.cfg['api_key']}"})
+                    r.raise_for_status()
+                except requests.RequestException as e:
+                    log.warning("firmware %s not fetched: %s", version, e.__class__.__name__)
+                    continue
+                if len(r.content) != size or hashlib.md5(r.content).hexdigest() != md5:
+                    log.error("firmware %s from the server doesn't match its size and md5", version)
+                    continue
+                self.firmware_dir.mkdir(parents=True, exist_ok=True)
+                tmp = path.with_suffix(".part")
+                tmp.write_bytes(r.content)
+                os.replace(tmp, path)
+                log.info("firmware %s fetched (%d kB)", version, size // 1000)
+            ready[trap_id] = {"version": version, "size": size, "md5": md5}
+        with self.lock:
+            new = sorted(f"{t} -> {f['version']}" for t, f in ready.items() if self.firmware.get(t) != f)
+            self.firmware = ready
+        if new:
+            log.info("firmware to offer: %s", ", ".join(new))
+
+    def firmware_file(self, authorization: str) -> tuple[int, Path | dict]:
+        trap_id = self.trap_for(authorization)
+        if trap_id is None:
+            return 401, {"error": "unknown or missing trap API key"}
+        with self.lock:
+            fw = self.firmware.get(trap_id)
+        if fw is None:
+            return 404, {"error": "no firmware for this node"}
+        log.info("node %s: sending firmware %s", trap_id, fw["version"])
+        return 200, self.firmware_dir / f"{fw['version']}.bin"
+
+    # ------------------------------------------------------------------ cameras pairing
+
+    def pair(self, meta_header: str) -> tuple[int, dict]:
+        """A camera with no trap id or key yet. Reported to the server as waiting until it is added on the
+        dashboard; then it gets its trap id and key here."""
+        try:
+            meta = json.loads(meta_header or "{}")
+            code = str(meta["code"]).upper()
+            assert CAMERA_CODE.fullmatch(code)
+        except (ValueError, KeyError, TypeError, AttributeError, AssertionError):
+            return 422, {"error": 'meta must be {"code": "<6 hex digits>", "fw", "rssi"}'}
+        with self.lock:
+            got = self.assigned.get(code)
+            if got:  # marked handed once the camera uses the key (trap_for): this reply may not reach it
+                log.info("camera %s: sending it its key, as %s", code, got["trap_id"])
+                return 200, {**self.schedule_reply(got["trap_id"]), "trap_id": got["trap_id"], "api_key": got["api_key"]}
+            fw = str(meta.get("fw", ""))
+            if code not in self.waiting:
+                log.info("camera %s is asking to be added (fw %s)", code, fw)
+            self.waiting[code] = {"fw": fw if FW_VERSION.fullmatch(fw) else "",
+                                  "rssi": meta.get("rssi") if isinstance(meta.get("rssi"), int) else None,
+                                  "seen": self.clock()}
+        return 202, {**self.schedule_reply(), "waiting": True}
+
+    def _save_pairing(self) -> None:
+        tmp = self.pairing_file.with_suffix(".tmp")
+        tmp.touch(mode=0o600)
+        tmp.write_text(json.dumps(self.assigned))
+        os.replace(tmp, self.pairing_file)
+
+    def sync_pairing(self) -> None:
+        """Tell the server which cameras are waiting and which have their key; get keys for ones added since."""
+        now = self.clock()
+        with self.lock:
+            self.waiting = {c: w for c, w in self.waiting.items() if now - w["seen"] < WAITING_FOR}
+            waiting = [{"code": c, "fw": w["fw"], "rssi": w["rssi"]} for c, w in self.waiting.items()]
+            handed = [c for c, a in self.assigned.items() if a.get("handed")]
+        if not waiting and not handed and not self.assigned:
+            return
+        try:
+            r = requests.post(f"{self.cfg['server_url'].rstrip('/')}/api/v1/hub/pairing", timeout=10,
+                              json={"waiting": waiting, "handed": handed},
+                              headers={"Authorization": f"Bearer {self.cfg['api_key']}"})
+            r.raise_for_status()
+            assigned = r.json()["assigned"]
+            assert isinstance(assigned, dict)
+        except (requests.RequestException, ValueError, KeyError, AssertionError) as e:
+            log.warning("pairing not synced: %s", e.__class__.__name__)
+            return
+        with self.lock:
+            # The server keeps a key until told it was handed over, so a handed one it no longer lists is done.
+            kept = {c: a for c, a in self.assigned.items() if c in assigned or not a.get("handed")}
+            for code, a in assigned.items():
+                if CAMERA_CODE.fullmatch(code) and isinstance(a, dict) and TRAP_ID.fullmatch(str(a.get("trap_id"))) \
+                        and a.get("api_key") and code not in kept:
+                    kept[code] = {"trap_id": a["trap_id"], "api_key": a["api_key"], "handed": False}
+                    self.waiting.pop(code, None)
+                    log.info("camera %s was added on the dashboard as %s", code, a["trap_id"])
+            changed = kept != self.assigned
+            self.assigned = kept
+            if changed:
+                self._save_pairing()
+        self._set_nodes()
 
     def queue(self, trap_id: str) -> Queue:
         return Queue(self.nodes_dir / trap_id)
@@ -154,6 +297,13 @@ class Gateway:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.touch(mode=0o600)
             path.write_text(key)
+        if found:
+            with self.lock:
+                for code, a in self.assigned.items():
+                    if a["trap_id"] == found and not a.get("handed"):
+                        a["handed"] = True
+                        self._save_pairing()
+                        log.info("camera %s is using its key, as %s", code, found)
         return found
 
     def photo_wanted(self, trap_id: str | None) -> bool:
@@ -169,9 +319,14 @@ class Gateway:
         for _ in range(12):  # a node that misses a window still knows when to wake after that
             t = next_wake(t, self.cfg["schedule"]["times"], self.cfg["timezone"], min_gap=NODE_MIN_GAP)
             wakes.append(t + offset)
-        return {"now": now.timestamp(), "next_wake": wakes[0].isoformat(), "sleep_s": round((wakes[0] - now).total_seconds()),
-                "wakes": [round(w.timestamp()) for w in wakes], "checkin_s": round(float(self.hub["checkin_min"]) * 60),
-                "photo_now": self.photo_wanted(trap_id)}
+        reply = {"now": now.timestamp(), "next_wake": wakes[0].isoformat(), "sleep_s": round((wakes[0] - now).total_seconds()),
+                 "wakes": [round(w.timestamp()) for w in wakes], "checkin_s": round(float(self.hub["checkin_min"]) * 60),
+                 "photo_now": self.photo_wanted(trap_id)}
+        with self.lock:
+            fw = self.firmware.get(trap_id) if trap_id else None
+        if fw:
+            reply["firmware"] = fw
+        return reply
 
     def capture(self, authorization: str, meta_header: str, body: bytes) -> tuple[int, dict]:
         trap_id = self.trap_for(authorization)
@@ -270,13 +425,19 @@ class Gateway:
         with self.lock:
             previews = {t: u for t, (u, until) in self.previews.items() if until > now}
             asked = {t for t in self.requests if self.served.get(t) != self.requests[t]}
+            waiting = sorted(c for c, w in self.waiting.items() if now - w["seen"] < WAITING_FOR)
+            updating = {t: f["version"] for t, f in self.firmware.items()}
         rows = []
+        for c in waiting:
+            rows.append(f"<li><b>New camera {html.escape(c)}</b> · waiting to be added on the dashboard (Set up traps)</li>")
         for t in sorted(set(self.hashes) | set(previews)):
             cells = [f"<b>{html.escape(t)}</b>"]
             if t in previews:
                 cells.append(f'<a href="{html.escape(previews[t])}">live preview</a>')
             if t in asked:
                 cells.append("photo asked for")
+            if t in updating:
+                cells.append(f"firmware {html.escape(updating[t])} waiting for it")
             rows.append("<li>" + " · ".join(cells) + "</li>")
         return ("<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width'>"
                 "<meta http-equiv=refresh content=10><title>Hub " + html.escape(self.cfg["trap_id"]) + "</title>"
@@ -323,6 +484,8 @@ def make_server(gw: Gateway, host: str, port: int, socket_timeout: float = 60) -
             self.wfile.write(data)
 
         def do_POST(self):
+            if self.path == "/node/v1/pair":
+                return self._reply(*gw.pair(self.headers.get("X-Sentinel-Meta", "")))
             if self.path == "/node/v1/preview":
                 return self._reply(*gw.preview(self.headers.get("Authorization", ""), self.headers.get("X-Sentinel-Meta", "")))
             if self.path != "/node/v1/captures":
@@ -340,6 +503,16 @@ def make_server(gw: Gateway, host: str, port: int, socket_timeout: float = 60) -
                 data = gw.status_page().encode()
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                return self.wfile.write(data)
+            if self.path == "/node/v1/firmware":
+                status, got = gw.firmware_file(self.headers.get("Authorization", ""))
+                if status != 200:
+                    return self._reply(status, got)
+                data = got.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/octet-stream")
                 self.send_header("Content-Length", str(len(data)))
                 self.end_headers()
                 return self.wfile.write(data)
@@ -379,6 +552,48 @@ def serve_window(gw: Gateway, until: float) -> None:
     log.info("gateway closed; %s", f"no word from {', '.join(missing)}" if missing else "every node checked in")
 
 
+def load_identity(cfg: dict, data_dir: Path) -> bool:
+    """The hub's trap id and key: from its config, else from data_dir/identity.json (got with its pairing code)."""
+    if cfg["api_key"]:
+        return True
+    try:
+        ident = json.loads((data_dir / "identity.json").read_text())
+        assert TRAP_ID.fullmatch(ident["trap_id"]) and ident["api_key"]
+    except (OSError, ValueError, KeyError, TypeError, AssertionError):
+        return False
+    cfg.update(trap_id=ident["trap_id"], api_key=ident["api_key"])
+    return True
+
+
+def claim(cfg: dict, data_dir: Path, code: str, sleep=time.sleep, every: float = 30) -> None:
+    """Ask the server with the pairing code until the hub is added on the dashboard with it, then keep the
+    trap id and key it sends in data_dir/identity.json."""
+    url = f"{cfg['server_url'].rstrip('/')}/api/v1/hub/claim"
+    log.info("waiting to be added on the dashboard (Set up traps) with pairing code %s-%s", code[:4], code[4:])
+    tries = 0
+    while True:
+        try:
+            r = requests.post(url, json={"code": code}, timeout=10)
+            if r.status_code == 200:
+                ident = r.json()
+                assert TRAP_ID.fullmatch(ident["trap_id"]) and ident["api_key"]
+                path = data_dir / "identity.json"
+                tmp = path.with_suffix(".tmp")
+                tmp.touch(mode=0o600)
+                tmp.write_text(json.dumps({"trap_id": ident["trap_id"], "api_key": ident["api_key"]}))
+                os.replace(tmp, path)
+                cfg.update(trap_id=ident["trap_id"], api_key=ident["api_key"])
+                log.info("added on the dashboard as hub %s", ident["trap_id"])
+                return
+            if r.status_code != 404:
+                log.warning("server answered the pairing code with %s", r.status_code)
+        except (requests.RequestException, ValueError, KeyError, TypeError, AssertionError) as e:
+            if tries % 20 == 0:
+                log.warning("server not reached for pairing (%s): is %s right?", e.__class__.__name__, cfg["server_url"])
+        tries += 1
+        sleep(every)
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--config", type=Path, default=None, help="config.toml (default /etc/sentinel/config.toml)")
@@ -388,9 +603,14 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     cfg = config_mod.load(args.config)
-    if not cfg["api_key"]:  # an empty or unreadable config would otherwise run as trap T0 against localhost
-        ap.error(f"{args.config or config_mod.DEFAULT_CONFIG_PATH} has no api_key: it needs the hub trap's trap_id, api_key and server_url")
-    gw = Gateway(cfg, Path(cfg["data_dir"]))
+    data_dir = Path(cfg["data_dir"])
+    if not load_identity(cfg, data_dir):
+        code_file = data_dir / "claim_code"
+        if not code_file.exists():  # an empty or unreadable config would otherwise run as trap T0 against localhost
+            ap.error(f"{args.config or config_mod.DEFAULT_CONFIG_PATH} has no api_key and there is no {code_file}: "
+                     "run install-hub.sh with no arguments for a pairing code, or put the hub's trap_id and api_key in the config")
+        claim(cfg, data_dir, code_file.read_text().strip())
+    gw = Gateway(cfg, data_dir)
     gw.refresh_nodes()
     server = make_server(gw, cfg["hub"]["listen"], cfg["hub"]["port"])
     threading.Thread(target=server.serve_forever, daemon=True).start()
