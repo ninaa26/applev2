@@ -7,6 +7,7 @@
 # kept as ~/sentinel-src.prev. Packages are installed at the versions in uv.lock (as constraints.txt, made here
 # with uv, since the hub has only pip). The hub's config, key and queued photos are not touched, so a camera's photo
 # waiting on the hub is never lost. Its cameras keep their own firmware: that goes through the dashboard.
+# A deploy that comes up is tagged hub-<hub name>-<time> (pushed to GitHub when the commit is on origin/master).
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -59,3 +60,11 @@ if [[ -d ~/sentinel-src ]]; then
 fi
 exit 1
 EOF
+
+tag=hub-${host#*@}-$(date +%Y-%m-%d-%H%M)
+git tag -a "$tag" -m "gateway deployed to $host" HEAD
+if git fetch -q origin master 2>/dev/null; git merge-base --is-ancestor HEAD origin/master; then
+  git push -q origin "$tag" || echo "note: could not push tag $tag; push it later with: git push origin $tag"
+else
+  echo "tagged $tag here only: the commit isn't on origin/master"
+fi

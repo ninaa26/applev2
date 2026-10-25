@@ -10,6 +10,8 @@
 # 60 s, it restores that backup's code and packages and restarts again. The database is put back too if the new
 # code migrated it (its Alembic revision changed): it then matches the old code again, and anything the server
 # saved in the database between the backup and the failed start is lost (the photo files stay).
+# A deploy that comes up is tagged server-<time> (pushed to GitHub when the commit is on origin/master), so
+# `git tag -l 'server-*'` lists what ran when, and `git diff server-A server-B` is what changed between two.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -94,3 +96,11 @@ fi
 sudo systemctl restart sentinel-server
 exit 1
 EOF
+
+tag=server-$(date +%Y-%m-%d-%H%M)
+git tag -a "$tag" -m "server deployed to $host" HEAD
+if git merge-base --is-ancestor HEAD origin/master; then
+  git push -q origin "$tag" || echo "note: could not push tag $tag; push it later with: git push origin $tag"
+else
+  echo "tagged $tag here only: the commit isn't on origin/master"
+fi
