@@ -7,10 +7,14 @@
     sentinel-server serve                  # API + dashboard + worker in one process (Mac dev setup)
     sentinel-server serve --no-worker      # API only; run `sentinel-server worker` separately
     sentinel-server worker
+    sentinel-server backup ~/sentinel-backup --push nina@team-mac:sentinel-backup   # database + photos
     sentinel-server reprocess --card 3     # re-run a liner's photos with the current models
     sentinel-server import-weather newa.csv --source newa:Ithaca
+    sentinel-server set-location T1 42.4534 -76.4735   # a hub's location: its ESP32s' photos get the weather there
+    sentinel-server fill-weather           # look up the weather now for photos with no sensor reading
     sentinel-server detect photo.jpg --out overlays/   # try the detector on photos, draw what it found
     sentinel-server set-mask T1 --none     # lure not in view: don't ignore any area
+    sentinel-server set-scale T2 10.3      # the camera's measured px/mm: photos far from it are left out
 """
 
 from __future__ import annotations
@@ -52,6 +56,10 @@ def cmd_add_trap(args) -> int:
              "hub": "hub's /etc/sentinel/config.toml"}.get(args.kind, "device config.toml")
     what = "hub (no camera)" if args.kind == "hub" else f"trap ({args.lure} lure)"
     print(f"Created {what} {args.trap_id}.\nAPI key (shown once, put it in the {where}):\n\n  {key}\n")
+    setup = {"esp32": f"device/esp32-node/flash-camera.sh {args.trap_id} {key}",
+             "hub": f"sudo ./install-hub.sh {args.trap_id} {key} <server url>   (on the hub, in device/)"}.get(args.kind)
+    if setup:
+        print(f"Or set the device up with it in one go:\n\n  {setup}\n")
     return 0
 
 
@@ -114,6 +122,21 @@ def cmd_worker(args) -> int:
     return 0
 
 
+def cmd_backup(args) -> int:
+    import subprocess
+
+    from . import backup
+
+    try:
+        done = backup.run(args.dest, keep=args.keep, target=args.push)
+    except (ValueError, subprocess.CalledProcessError, OSError) as e:
+        print(f"backup failed: {e}", file=sys.stderr)
+        return 1
+    print(f"backed up {done['database'].name} and {done['photos']} new photos to {args.dest}"
+          + (f", pushed to {args.push}" if args.push else ""))
+    return 0
+
+
 def cmd_reprocess(args) -> int:
     from .pipeline.worker import Pipeline
 
@@ -173,6 +196,24 @@ def cmd_set_mask(args) -> int:
     return 0
 
 
+def cmd_set_scale(args) -> int:
+    """The camera's measured px/mm at the card centre: photos whose grid reads far from it are left out."""
+    with session_scope() as db:
+        trap = db.get(Trap, args.trap_id)
+        if trap is None:
+            print(f"no trap {args.trap_id}", file=sys.stderr)
+            return 1
+        if args.none:
+            trap.px_per_mm = None
+        elif args.px_per_mm is not None:
+            if args.px_per_mm <= 0:
+                print("px/mm must be above 0", file=sys.stderr)
+                return 1
+            trap.px_per_mm = args.px_per_mm
+        print(f"{trap.id} scale: {f'{trap.px_per_mm} px/mm' if trap.px_per_mm else 'not set (checked per liner)'}")
+    return 0
+
+
 def cmd_import_weather(args) -> int:
     """CSV with columns date, tmax_f, tmin_f (e.g. exported daily data from the nearest NEWA station)."""
     init_db()
@@ -188,6 +229,41 @@ def cmd_import_weather(args) -> int:
                 db.add(WeatherDay(source=args.source, day=day, tmax_f=tmax, tmin_f=tmin))
             n += 1
     print(f"imported {n} days into {args.source}")
+    return 0
+
+
+def cmd_set_location(args) -> int:
+    from .weather import forget, parse_location
+
+    init_db()
+    with session_scope() as db:
+        trap = db.get(Trap, args.trap_id)
+        if trap is None:
+            print(f"no trap {args.trap_id}", file=sys.stderr)
+            return 1
+        if args.none:
+            trap.lat, trap.lon = None, None
+            forget(db, trap)
+        elif args.lat is not None:
+            try:
+                where = parse_location(args.lat, args.lon or "")
+            except ValueError as e:
+                print(e, file=sys.stderr)
+                return 1
+            if where != (trap.lat, trap.lon):
+                trap.lat, trap.lon = where
+                n = forget(db, trap)
+                print(f"{n} photos' weather is looked up again at the new location")
+        print(f"{trap.id} location: {f'{trap.lat}, {trap.lon}' if trap.lat is not None else 'not set'}")
+    return 0
+
+
+def cmd_fill_weather(args) -> int:
+    from .weather import fill
+
+    init_db()
+    with session_scope() as db:
+        print(f"weather filled in for {fill(db, limit=args.limit)} photos")
     return 0
 
 
@@ -242,6 +318,12 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("worker", help="process new photos forever").set_defaults(fn=cmd_worker)
 
+    p = sub.add_parser("backup", help="snapshot the database and copy new photos to a folder (and push it elsewhere)")
+    p.add_argument("dest", type=Path, help="backup folder, outside the data folder")
+    p.add_argument("--keep", type=int, default=14, help="database snapshots to keep (default 14)")
+    p.add_argument("--push", metavar="TARGET", help="then rsync the folder here: a path or user@host:path")
+    p.set_defaults(fn=cmd_backup)
+
     p = sub.add_parser("reprocess", help="re-run detection/tracking for one liner")
     p.add_argument("--card", type=int, required=True)
     p.set_defaults(fn=cmd_reprocess)
@@ -259,10 +341,27 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--none", action="store_true")
     p.set_defaults(fn=cmd_set_mask)
 
+    p = sub.add_parser("set-scale", help="set (or show) a camera's measured px/mm, which photos are checked against")
+    p.add_argument("trap_id")
+    p.add_argument("px_per_mm", type=float, nargs="?")
+    p.add_argument("--none", action="store_true", help="forget it: check each liner's photos against each other")
+    p.set_defaults(fn=cmd_set_scale)
+
     p = sub.add_parser("import-weather", help="import daily max/min temperatures (°F)")
     p.add_argument("csv", type=Path)
     p.add_argument("--source", default="newa:station")
     p.set_defaults(fn=cmd_import_weather)
+
+    p = sub.add_parser("set-location", help="set (or show) where a hub or trap is, for the weather on its photos")
+    p.add_argument("trap_id")
+    p.add_argument("lat", nargs="?")
+    p.add_argument("lon", nargs="?")
+    p.add_argument("--none", action="store_true", help="forget it")
+    p.set_defaults(fn=cmd_set_location)
+
+    p = sub.add_parser("fill-weather", help="look up the weather for recent photos with no sensor reading")
+    p.add_argument("--limit", type=int, default=1000)
+    p.set_defaults(fn=cmd_fill_weather)
 
     p = sub.add_parser("evaluate", help="score counts, detection (IoMin) and biofix against manual truth")
     p.add_argument("--counts", type=Path, help="CSV card,date,label,count from counting the liners by hand")

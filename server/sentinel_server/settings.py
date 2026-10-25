@@ -45,6 +45,8 @@ class Settings:
     lens_k: str | float = field(default_factory=lambda: _lens(os.environ.get("SENTINEL_LENS_K", "auto")))
     worker_poll_s: float = field(default_factory=lambda: float(os.environ.get("SENTINEL_WORKER_POLL_S", "3")))
     # A liner older than this raises a "card_old" event: glue dries, dust and scales build up, moths decay.
+    # Largest photo accepted (the hub caps ESP32 photos at 4 MB; a Pi camera's full-size JPEG is a few MB).
+    max_upload_mb: float = field(default_factory=lambda: float(os.environ.get("SENTINEL_MAX_UPLOAD_MB", "25")))
     liner_max_days: float = field(default_factory=lambda: float(os.environ.get("SENTINEL_LINER_MAX_DAYS", "28")))
     offline_after_h: float = field(default_factory=lambda: float(os.environ.get("SENTINEL_OFFLINE_AFTER_H", "12")))
     # A hub is always on and checks in every minute or so, so it is offline much sooner than a camera.

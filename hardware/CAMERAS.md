@@ -42,7 +42,9 @@ grid: roughly 15 px/mm in the centre (15.3 px/mm measured on the bench, below) a
   outside the card (gone with baseline 0.4: 31 boxes became 21), and estimates a different lens k
   (−0.10) than on the empty liner. Repeat photos of the same scene do not always read the same
   grid: `calibrated_3.jpg` of this set and of the next reads 40 and 34 px/mm instead of 14–16. The
-  server now leaves out a photo whose scale is more than 20% from its liner's other photos. The single
+  server now leaves out a photo whose scale is more than 20% from its liner's other photos. Re-read on
+  Oct 10 2026: 5 of the 10 calibrated photos with specimens (both sets) read 32–63 px/mm, against all 5
+  of the empty liner reading 15.3, so insects on the card still throw the grid finder off. The single
   LED casts long red shadows; diffuse light from two sides would shorten them. The trap had been
   moved since the white-card calibration and the correction no longer lined up (faint green and
   pink patches): recalibrate whenever the camera or trap is moved.

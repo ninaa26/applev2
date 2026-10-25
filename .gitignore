@@ -13,6 +13,7 @@ camera_bench/
 
 # model weights (flatbug downloads flat_bug_M.pt into the working dir; train_v2 writes models/v2/*.pt)
 *.pt
+constraints.txt.new
 
 # STLs and renders from hardware/scad/export_housing.sh
 hardware/print/housing/

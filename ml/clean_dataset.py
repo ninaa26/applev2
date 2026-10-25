@@ -32,8 +32,8 @@ import sys
 from pathlib import Path
 
 import numpy as np
-
 from train_v1 import MODEL, embeddings, load_rows
+
 
 def odd_ones(X: np.ndarray, labels: np.ndarray, z: float) -> list[tuple[int, float]]:
     """(row, robust z) for photos far from their label's other photos, most suspect first."""
@@ -52,11 +52,11 @@ def odd_ones(X: np.ndarray, labels: np.ndarray, z: float) -> list[tuple[int, flo
 
 def out_of_fold(X: np.ndarray, y: np.ndarray, groups: np.ndarray, folds: int = 4) -> np.ndarray:
     """Class probabilities for every row from a head that never saw its group."""
-    from sklearn.linear_model import LogisticRegression
-
     import hashlib
 
-    fold = np.array([int(hashlib.sha1(g.encode()).hexdigest()[:8], 16) % folds for g in groups])
+    from sklearn.linear_model import LogisticRegression
+
+    fold = np.array([int(hashlib.sha1(g.encode(), usedforsecurity=False).hexdigest()[:8], 16) % folds for g in groups])
     classes = sorted(set(y))
     P = np.zeros((len(y), len(classes)), np.float32)
     for k in range(folds):

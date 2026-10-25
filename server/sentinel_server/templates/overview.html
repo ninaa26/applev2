@@ -1,97 +1,140 @@
 {% extends "base.html" %}
+{% from "_status.html" import camera_status, ddtrack %}
 {% set nav = 'overview' %}
 {% block title %}Orchard · Orchard Sentinel{% endblock %}
 {% block head %}<meta http-equiv="refresh" content="60">{% endblock %}
 {% block main %}
-<div>
-  <h1>Orchard</h1>
-  <p class="muted">New catches in the last 7 days, all traps together. Pending reviews aren't counted until a person confirms them.</p>
+{% set o = orchard %}
+<div class="page-head">
+  <div>
+    <h1>Orchard</h1>
+    <p class="sub">
+      <span>{{ today.strftime('%A, %B %-d') }}</span>
+      {% if rows %}<span>{{ o.reporting }} of {{ o.n_traps }} traps reporting</span><span>{{ o.photos_24h }} photos in the last 24 hours</span>{% endif %}
+    </p>
+  </div>
+  {% if o.pending %}<a class="btn primary" href="/review">Review {{ o.pending }} insect{{ 's' if o.pending != 1 }}</a>{% endif %}
 </div>
 
 {% if not rows %}
-<div class="notice">No cameras yet. <a href="/manage">Add a hub and its ESP32 cameras</a>.</div>
+<div class="notice">No cameras yet. <a href="/manage">Add a hub and its ESP32 cameras</a> to start counting.</div>
 {% endif %}
 
-
 {% if rows %}
-{% set o = orchard %}
-<div class="tiles">
-  <div class="tile"><span class="lbl">Traps reporting</span><span class="val">{{ o.reporting }}<small> / {{ o.n_traps }}</small></span>
-    <span class="sub">{% if o.problems %}<span class="pill offline">{{ o.problems }} need a look</span>{% else %}all fine{% endif %}</span></div>
-  {% for sp in PESTS %}
-  <div class="tile"><span class="lbl"><i class="dot c-{{ sp }}"></i> {{ SPECIES_LABELS[sp] }}</span><span class="val">{{ o.week.get(sp, 0) }}</span><span class="sub">this week</span></div>
-  {% endfor %}
-  <div class="tile"><span class="lbl">To review</span><span class="val">{% if o.pending %}<a href="/review">{{ o.pending }}</a>{% else %}0{% endif %}</span><span class="sub">{{ o.photos_24h }} photos in 24 h</span></div>
-</div>
-
-<div class="card">
-  <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px">
-    <h2>New catches per day, whole orchard, last 30 days</h2>
-    <span class="muted" style="display:flex;gap:12px;flex-wrap:wrap;font-size:12.5px">
-      {% for sp in ['CM','OFM','OBLR','other_moth','unclassified'] %}<span class="sp"><i class="dot c-{{ sp }}"></i>{{ SPECIES_LABELS[sp] }}</span>{% endfor %}
-    </span>
+<section class="section" aria-labelledby="week">
+  <div class="section-head">
+    <h2 id="week">This week</h2>
+    <span class="aside">Pest timing from each trap's biofix and NEWA degree days</span>
   </div>
-  <div class="bars" role="img" aria-label="Daily new catches across the orchard by species">
-    {% for r in o.daily %}
-      <div class="bar" title="{{ r.date.strftime('%b %d') }}: {% for k, v in r.counts.items() %}{{ k }} {{ v }} {% endfor %}">
-        {% for sp in ['CM','OFM','OBLR','other_moth','unclassified'] %}{% if r.counts.get(sp) %}<i class="c-{{ sp }}" style="height:{{ 120 * r.counts[sp] / o.peak }}px"></i>{% endif %}{% endfor %}
+  <div class="outlook">
+    {% for r in rows %}{% set p = r.pheno %}{% set ol = p.outlook if p else none %}
+    <div class="orow">
+      <div class="who">
+        <a href="/traps/{{ r.trap.id }}">{{ r.trap.name or r.trap.id }}</a>
+        <span class="pest"><i class="dot c-{{ r.trap.lure }}"></i>{{ SPECIES_LABELS[r.trap.lure] }} lure</span>
+        <span class="faint small">{{ r.trap.id }}{% if r.trap.block %}, {{ r.trap.block }}{% endif %}</span>
       </div>
+      <div class="what">
+        {% if ol %}
+        <p class="headline">{% if ol.state != 'waiting' %}<span class="tag {{ ol.state }}">{{ {'now': 'Due now', 'soon': 'Soon', 'later': 'Coming up', 'done': 'Done'}[ol.state] }}</span>{% endif %}{{ ol.headline }}</p>
+        <p class="detail">{% if ol.state == 'waiting' %}{{ p.catches }} {{ r.trap.lure }} moth{{ 's' if p.catches != 1 }} caught this season. Biofix needs 2 or more a week, two weeks running.{% else %}{{ ol.detail }}{% endif %}</p>
+        {% else %}<p class="detail">No degree-day model for this lure.</p>{% endif %}
+      </div>
+      <div>{% if p and p.biofix %}{{ ddtrack(p) }}{% else %}<span class="faint small">{{ r.week.get(r.trap.lure, 0) }} {{ r.trap.lure }} this week</span>{% endif %}</div>
+    </div>
     {% endfor %}
   </div>
-  <div class="axis"><span>{{ o.daily[0].date.strftime('%b %d') }}</span><span>peak {{ o.peak }}/day</span><span>{{ o.daily[-1].date.strftime('%b %d') }}</span></div>
-</div>
+</section>
 
-{% if hubs %}
-<div class="card tbl">
-  <h2>Hubs</h2>
-  <p class="muted">Each hub takes the photos from the ESP32 cameras near it and sends them here. It checks in every minute or so.</p>
-  <table style="margin-top:8px"><tbody>
-  {% for r in hubs %}
-  {% set h = r.health %}
+{% set crit = rows|selectattr('health.state', 'equalto', 'offline')|list %}
+{% set errs = rows|selectattr('health.state', 'equalto', 'error')|list %}
+{% set old = rows|selectattr('liner_days', 'gt', liner_max_days)|list %}
+{% set hubs_down = hubs|selectattr('health.state', 'equalto', 'offline')|list %}
+<section class="section" aria-labelledby="look">
+  <div class="section-head"><h2 id="look">Needs a look</h2></div>
+  {% if crit or errs or old or hubs_down or o.pending %}
+  <ul class="attention">
+    {% for h in hubs_down %}<li class="crit"><span class="what">Hub {{ h.trap.name or h.trap.id }} is offline: its {{ h.cameras }} camera{{ 's' if h.cameras != 1 }} can't send photos. Last checked in {{ h.health.seen_at|ago }}.</span><a href="/traps/{{ h.trap.id }}">Open hub</a></li>{% endfor %}
+    {% for r in crit %}<li class="crit"><span class="what">{{ r.trap.name or r.trap.id }} hasn't sent a photo since {{ r.health.last.received_at|local('%b %-d, %H:%M') }}. Check its battery and Wi-Fi.</span><a href="/traps/{{ r.trap.id }}">Open trap</a></li>{% endfor %}
+    {% for r in errs %}<li class="warn"><span class="what">{{ r.trap.name or r.trap.id }}: {{ r.health.reason }}</span><a href="{{ r.health.reason_url }}">See why</a></li>{% endfor %}
+    {% for r in old %}<li class="warn"><span class="what">The liner in {{ r.trap.name or r.trap.id }} is {{ r.liner_days|round|int }} days old. Old glue catches less and blurs the count.</span><a href="/traps/{{ r.trap.id }}">Record a new liner</a></li>{% endfor %}
+    {% if o.pending %}<li class="info"><span class="what">{{ o.pending }} insect{{ 's' if o.pending != 1 }} waiting for a person to confirm. They aren't counted until then.</span><a href="/review">Review them</a></li>{% endif %}
+  </ul>
+  {% else %}<p class="allgood">Every trap is reporting and nothing is waiting for review.</p>{% endif %}
+</section>
+
+<section class="section" aria-labelledby="daily">
+  <div class="section-head">
+    <h2 id="daily">New catches per day, whole orchard, last 30 days</h2>
+    <span class="legend-row">{% for sp in ['CM','OFM','OBLR','other_moth','unclassified'] %}<span class="sp"><i class="dot c-{{ sp }}"></i>{{ SPECIES_LABELS[sp] }}</span>{% endfor %}</span>
+  </div>
+  <div class="chart">
+    <div class="yax" aria-hidden="true"><span>{{ o.peak }}</span><span>{{ (o.peak // 2) if o.peak >= 4 and o.peak is even else '' }}</span><span>0</span></div>
+    <div class="bars" role="img" aria-label="Daily new catches across the orchard by species, peak {{ o.peak }} a day">
+      {% for r in o.daily %}
+        <div class="bar" title="{{ r.date.strftime('%b %-d') }}: {% for k, v in r.counts.items() %}{{ v }} {{ SPECIES_LABELS.get(k, k) }}{{ ', ' if not loop.last }}{% else %}none{% endfor %}">
+          {% for sp in ['CM','OFM','OBLR','other_moth','unclassified'] %}{% if r.counts.get(sp) %}<i class="c-{{ sp }}" style="height:{{ 150 * r.counts[sp] / o.peak }}px"></i>{% endif %}{% endfor %}
+        </div>
+      {% endfor %}
+    </div>
+    <div class="axis"><span>{{ o.daily[0].date.strftime('%b %-d') }}</span><span>{{ o.daily[-1].date.strftime('%b %-d') }}</span></div>
+  </div>
+</section>
+{% endif %}
+
+{% if hubs %}{# outside the rows block: a new hub shows before its cameras are added #}
+<section class="section">
+  <div class="section-head">
+    <h2>Hubs</h2>
+    <span class="aside">Each hub takes the photos from the ESP32 cameras near it and sends them here.</span>
+  </div>
+  <div class="tbl"><table><tbody>
+  {% for r in hubs %}{% set h = r.health %}
   <tr>
-    <td><a href="/manage"><b>{{ r.trap.id }}</b></a> <span class="muted">{{ r.trap.name }}{% if r.trap.block %} · {{ r.trap.block }}{% endif %}</span></td>
-    <td><span class="pill {{ h.state }}">{% if h.state == 'never' %}Not heard from yet{% else %}{{ h.state|capitalize }} · checked in {{ h.seen_at|ago }}{% endif %}</span></td>
+    <td><a class="name" href="/traps/{{ r.trap.id }}">{{ r.trap.name or r.trap.id }}</a><span class="sub">{{ r.trap.id }}{% if r.trap.block %}, {{ r.trap.block }}{% endif %}</span></td>
+    <td><span class="pill {{ h.state }}">{% if h.state == 'never' %}Not heard from yet{% else %}{{ h.state|capitalize }}, checked in {{ h.seen_at|ago }}{% endif %}</span></td>
     <td class="muted">{{ r.cameras }} camera{{ '' if r.cameras == 1 else 's' }}</td>
   </tr>
   {% endfor %}
-  </tbody></table>
-</div>
+  </tbody></table></div>
+</section>
 {% endif %}
 
-<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap">
-  <h2>Each trap</h2>
-  <a href="/manage">Add or remove traps</a>
-</div>
-<div class="card tbl">
-<table>
-  <thead><tr><th>Trap</th><th>Status</th>{% for sp in PESTS %}<th style="text-align:right">{{ sp }}</th>{% endfor %}<th style="text-align:right">Other</th><th style="text-align:right">To review</th><th>Liner since</th><th>Battery</th><th>Degree days</th></tr></thead>
-  <tbody>
-  {% for r in rows %}
-  {% set h = r.health %}
-  <tr>
-    <td><a href="/traps/{{ r.trap.id }}"><b>{{ r.trap.id }}</b></a> <span class="muted">{{ r.trap.name }} · {{ r.trap.lure }} lure{% if r.trap.kind == 'esp32' %} · ESP32 via {{ r.trap.hub_id }}{% else %} · Pi camera{% endif %}</span></td>
-    <td><span class="pill {{ h.state }}">{% if h.state == 'never' %}No photos yet{% else %}{{ h.state|capitalize }} · {{ h.last.received_at|ago }}{% endif %}</span></td>
-    {% for sp in PESTS %}<td class="n">{{ r.week.get(sp, 0) }}</td>{% endfor %}
-    <td class="n">{{ r.week.get('other_moth', 0) + r.week.get('unclassified', 0) }}</td>
-    <td class="n">{% if r.pending %}<a href="/review">{{ r.pending }}</a>{% else %}0{% endif %}</td>
-    <td class="mono">{{ r.card.installed_at|local('%b %d') if r.card else '—' }}</td>
-    <td class="mono">{{ '%.2f V'|format(h.last.battery_v) if h.last and h.last.battery_v else '—' }}</td>
-    <td>{% if r.pheno and r.pheno.biofix %}<span class="mono">{{ '%.0f'|format(r.pheno.dd) }}</span> <span class="muted">since {{ r.pheno.biofix.strftime('%b %d') }}</span>{% elif r.pheno %}<span class="muted">No biofix yet</span>{% else %}—{% endif %}</td>
-  </tr>
-  {% endfor %}
-  </tbody>
-</table>
-</div>
+{% if rows %}
+<section class="section">
+  <div class="section-head">
+    <h2>Each trap</h2>
+    <a href="/manage">Add or remove traps</a>
+  </div>
+  <div class="tbl">
+  <table>
+    <thead><tr><th>Trap</th><th>Status</th>{% for sp in PESTS %}<th class="n" title="{{ SPECIES_LABELS[sp] }}, last 7 days">{{ sp }}</th>{% endfor %}<th class="n" title="Other moths and not-yet-classified insects, last 7 days">Other</th><th class="n">To review</th><th>Liner in since</th><th class="n">Battery</th></tr></thead>
+    <tbody>
+    {% for r in rows %}{% set h = r.health %}
+    <tr>
+      <td><a class="name" href="/traps/{{ r.trap.id }}">{{ r.trap.name or r.trap.id }}</a><span class="sub">{{ r.trap.id }}, {{ r.trap.lure }} lure, {% if r.trap.kind == 'esp32' %}ESP32 via {{ r.trap.hub_id }}{% else %}Pi camera{% endif %}</span></td>
+      <td>{{ camera_status(h) }}</td>
+      {% for sp in PESTS %}{% set n = r.week.get(sp, 0) %}<td class="n {{ 'zero' if not n }}">{{ n }}</td>{% endfor %}
+      {% set other = r.week.get('other_moth', 0) + r.week.get('unclassified', 0) %}<td class="n {{ 'zero' if not other }}">{{ other }}</td>
+      <td class="n">{% if r.pending %}<a href="/review">{{ r.pending }}</a>{% else %}<span class="zero">0</span>{% endif %}</td>
+      <td>{{ r.card.installed_at|local('%b %-d') if r.card else '—' }}{% if r.card %}<span class="sub">{{ r.liner_days|round|int }} days</span>{% endif %}</td>
+      <td class="n">{{ '%.2f V'|format(h.last.battery_v) if h.last and h.last.battery_v else '—' }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
 {% endif %}
 
-<div class="card">
-  <h2>Recent events</h2>
+<section class="section">
+  <div class="section-head"><h2>Recent events</h2></div>
   {% if events %}
-  <table><tbody>
+  <div class="tbl"><table><tbody>
   {% for e in events %}
-    <tr><td class="mono muted" style="width:130px">{{ e.at|local }}</td><td>{{ e.trap_id or '' }}</td><td>{{ e.kind.replace('_',' ') }}</td><td class="muted">{{ e.payload.note or e.payload.detections or '' }}</td></tr>
+    <tr><td class="muted" style="width:150px;white-space:nowrap">{{ e.at|local('%b %-d, %H:%M') }}</td><td style="width:70px">{{ e.trap_id or '' }}</td><td>{{ EVENT_LABELS.get(e.kind, e.kind.replace('_', ' ')|capitalize) }}</td><td class="muted">{{ e.payload.note or e.payload.detections or '' }}</td></tr>
   {% endfor %}
-  </tbody></table>
+  </tbody></table></div>
   {% else %}<p class="muted">Nothing yet.</p>{% endif %}
-</div>
+</section>
 {% endblock %}

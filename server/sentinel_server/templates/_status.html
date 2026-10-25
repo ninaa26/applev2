@@ -1,0 +1,21 @@
+{# A camera trap's status pill. "Error" says why on hover and links to the photo (or trap) that explains it. #}
+{% macro camera_status(h, photo='') -%}
+{% if h.state == 'never' %}<span class="pill never">No photos yet</span>
+{%- elif h.state == 'error' %}<a class="pill error" href="{{ h.reason_url }}" title="{{ h.reason }}">Error: {{ 'newest photo failed' if h.last and h.last.status == 'failed' else 'trap reported a problem' }}</a>
+{%- elif h.state == 'offline' %}<span class="pill offline" title="Last photo {{ h.last.received_at|local }}">Offline, last photo {{ h.last.received_at|ago }}</span>
+{%- else %}<span class="pill {{ h.state }}" title="Last photo {{ h.last.received_at|local }}">Online, {{ photo }}{{ h.last.received_at|ago }}</span>{% endif %}
+{%- endmacro %}
+
+{# Degree-day progress from biofix to the last milestone. Needs: pheno (phenology_status) #}
+{% macro ddtrack(pheno) -%}
+{% set ms = pheno.model.milestones %}
+{% set top = ms[-1].dd if ms else 1 %}
+{% set dd = pheno.dd or 0 %}
+<div class="ddtrack" role="img" aria-label="{{ '%.0f'|format(dd) }} of {{ '%.0f'|format(top) }} degree days since biofix">
+  <div class="line">
+    <span class="fill" style="width:{{ [100, 100 * dd / top]|min }}%"></span>
+    {% for m in ms %}<span class="tick {{ 'passed' if dd >= m.dd }}" style="left:{{ 100 * m.dd / top }}%" title="{{ '%.0f'|format(m.dd) }} DD: {{ m.short }}"></span>{% endfor %}
+  </div>
+  <div class="legend"><span><b>{{ '%.0f'|format(dd) }} DD</b> since biofix {{ pheno.biofix.strftime('%b %-d') }}</span><span>{{ '%.0f'|format(top) }}</span></div>
+</div>
+{%- endmacro %}

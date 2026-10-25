@@ -100,6 +100,7 @@ def photo_quality(img: np.ndarray, outline: np.ndarray | None = None, max_side: 
                the lens). Compared with the same liner's other photos, never against a fixed number.
     glare      share of the card that is blown out to white, where an insect cannot be seen.
     card_rgb   the card's median colour (R, G, B): drifts as the liner gets dirty or the light changes.
+    brightness the card's median grey level (0-255): near black at night, when nothing on it can be seen.
     """
     f = min(1.0, max_side / max(img.shape[:2]))
     small = cv2.resize(img, None, fx=f, fy=f, interpolation=cv2.INTER_AREA) if f < 1 else img
@@ -112,7 +113,9 @@ def photo_quality(img: np.ndarray, outline: np.ndarray | None = None, max_side: 
         on[:] = True
     lap = cv2.Laplacian(cv2.cvtColor(small, cv2.COLOR_BGR2GRAY), cv2.CV_32F)
     b, g, r = (float(np.median(small[..., c][on])) for c in range(3))
-    return {"sharpness": round(float(lap[on].var()), 2),
+    grey = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+    return {"brightness": round(float(np.median(grey[on])), 1),
+            "sharpness": round(float(lap[on].var()), 2),
             "glare": round(float((small.min(axis=2)[on] >= 250).mean()), 4),
             "card_rgb": [round(r), round(g), round(b)]}
 
@@ -187,6 +190,7 @@ class Grid:
     angles: tuple[float, ...]  # degrees; line directions found (usually two, ~90° apart)
     pitch_px: float            # spacing between neighbouring lines, in working-image pixels
     score: float               # how strongly periodic the lines are (0 = no grid found)
+    fraction: int = 1          # pitch_px is this fraction (1/n) of a measured spacing (see _pitch_choice)
 
 
 class BaselineDetector:
@@ -508,21 +512,65 @@ def _find_grid_1ch(v: np.ndarray, min_score: float) -> Grid:
         if s2 >= min_score:
             angles.append(a2)
 
-    pitches = [p for p in (_period(profile(a)) for a in angles) if p]
+    profiles = [profile(a) for a in angles]
+    pitches = [p for p in (_period(pr) for pr in profiles) if p]
     if not pitches:
         return Grid((), 0.0, 0.0)
-    return Grid(tuple(angles), float(np.median(pitches) * s), s1)
+    pitch, fraction = _pitch_choice(pitches, profiles)
+    return Grid(tuple(angles), float(pitch * s), s1, fraction)
+
+
+def _agreed_pitch(pitches: list[float], profiles: list[np.ndarray], tol: float = 0.08) -> float:
+    return _pitch_choice(pitches, profiles, tol)[0]
+
+
+def _pitch_choice(pitches: list[float], profiles: list[np.ndarray], tol: float = 0.08) -> tuple[float, int]:
+    """One spacing for both line families. The liner's grid is square, so the two should agree. When they
+    don't, a profile locked onto a multiple of the spacing (insects or the lure swamp it); averaging the two
+    would give a scale that is wrong for both. Seen on the fake camera's liner (Oct 10 2026): 290 px and
+    1160 px for a 290 px grid, averaged to 2.5 times the true scale.
+
+    Each measured spacing, and whole fractions of it (both can be multiples, e.g. 2x and 3x), is scored by
+    how far the profiles repeat at it above how they repeat at half of it: a grid line repeats at its
+    spacing and not halfway there. Plain correlation would favour any short lag, since lines and insects
+    are blurred; a multiple of the spacing repeats as well at its half as at itself.
+
+    Also returns n when the spacing chosen is 1/n of the measured one it came from (1 when it is one of them)."""
+    if len(pitches) < 2 or max(pitches) <= (1 + tol) * min(pitches):
+        return float(np.median(pitches)), 1
+    acs = [_autocorr(pr) for pr in profiles]
+
+    def at(ac: np.ndarray, lag: float) -> float:
+        return float(np.interp(lag, np.arange(len(ac)), ac))
+
+    def prominence(lag: float) -> float:
+        vals = [at(ac, lag) - at(ac, lag / 2) for ac in acs if lag < 0.5 * len(ac)]
+        return float(np.mean(vals)) if vals else -1.0
+
+    cands: dict[float, int] = {}
+    for k in range(4, 0, -1):  # when two give the same spacing, the larger fraction (whole spacing) is kept
+        cands.update({p / k: k for p in pitches if p / k >= 12})
+    if not cands:  # every spacing too fine for a real grid (noise on a dark frame): find_grid drops it
+        return float(np.median(pitches)), 1
+    best = max(cands, key=prominence)
+    return best, cands[best]
+
+
+def _autocorr(p: np.ndarray) -> np.ndarray:
+    """Normalised, unbiased autocorrelation (long lags have fewer overlapping samples)."""
+    x = p - p.mean()
+    n = len(x)
+    ac = np.correlate(x, x, mode="full")[n - 1:]
+    ac /= ac[0] + 1e-9
+    return ac / ((n - np.arange(n)) / n)
 
 
 def _period(p: np.ndarray, min_lag: int = 6) -> float | None:
     """Spacing of a periodic profile: first clear peak of its autocorrelation."""
-    x = p - p.mean()
-    n = len(x)
+    n = len(p)
     if n < 3 * min_lag:
         return None
-    ac = np.correlate(x, x, mode="full")[n - 1:]
-    ac /= ac[0] + 1e-9
-    ac /= (n - np.arange(n)) / n  # unbiased: long lags have fewer overlapping samples
+    ac = _autocorr(p)
     for lag in range(min_lag, int(n * 0.7)):
         if ac[lag] > 0.25 and ac[lag] >= ac[lag - 1] and ac[lag] >= ac[lag + 1]:
             # sub-sample peak position

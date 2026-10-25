@@ -2,7 +2,7 @@
 import io
 import json
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -26,7 +26,7 @@ def _add(client, **form) -> tuple[int, str | None]:
 
 
 def _upload(client, key, trap_id, uid, when=None):
-    when = when or datetime.now(timezone.utc)
+    when = when or datetime.now(UTC)
     meta = {"capture_uid": uid, "trap_id": trap_id, "captured_at": when.isoformat()}
     return client.post("/api/v1/captures", headers={"Authorization": f"Bearer {key}"},
                        files={"image": (f"{uid}.jpg", _jpeg(), "image/jpeg")}, data={"meta": json.dumps(meta)})
@@ -65,6 +65,16 @@ def test_add_esp32_cameras_through_a_hub_and_remove_them():
         assert _upload(client, new_key, "T2", "a4").status_code == 201
 
 
+def test_adding_shows_the_one_command_that_sets_up_the_device():
+    with TestClient(create_app()) as client:
+        page = client.post("/manage/traps", data={"trap_id": "T1", "kind": "hub"}).text
+        key = re.search(r'api_key = "([^"]+)"', page).group(1)
+        assert f"sudo ./install-hub.sh T1 {key} http://testserver</pre>" in page
+        page = client.post("/manage/traps", data={"trap_id": "T2", "kind": "esp32", "hub_id": "T1", "lure": "CM"}).text
+        key = re.search(r'API_KEY "([^"]+)"', page).group(1)
+        assert f"flash-camera.sh T2 {key}</pre>" in page
+
+
 def test_hub_list_needs_the_hub_key():
     with TestClient(create_app()) as client:
         assert client.get("/api/v1/hub/nodes").status_code == 401
@@ -76,13 +86,12 @@ def test_orchard_view_and_each_traps_photos():
         k1 = services.create_trap(db, "T1", "Hub", lure="CM")
         k2 = services.create_trap(db, "T2", "Row 4", lure="OFM", kind="esp32", hub_id="T1")
     with TestClient(create_app()) as client:
-        start = datetime.now(timezone.utc) - timedelta(days=3)
+        start = datetime.now(UTC) - timedelta(days=3)
         for i in range(50):
             assert _upload(client, k2, "T2", f"p{i:02d}", start + timedelta(hours=i)).status_code == 201
         _upload(client, k1, "T1", "h1")
         page = client.get("/").text
-        assert "whole orchard" in page and "Traps reporting" in page and "ESP32 via T1" in page
-        assert re.search(r'class="val">2<small> / 2', page)
+        assert "whole orchard" in page and "2 of 2 traps reporting" in page and "ESP32 via T1" in page
 
         photos = client.get("/traps/T2/photos").text
         assert "50 photos" in photos and photos.count('class="gallery"') == 1
@@ -114,13 +123,18 @@ def test_hub_without_a_camera_relays_esp32s_and_shows_when_it_last_checked_in():
 
         page = client.get("/").text
         assert "Not heard from yet" in page
+        for url in ("/traps/T1", "/traps/T1/photos", "/manage"):  # a hub has no photos: every page still works
+            assert client.get(url).status_code == 200, url
         table = page.split("Each trap")[1]
         assert "/traps/T2" in table and "/traps/T1" not in table  # the hub has no row of counts
-        assert "0<small> / 1</small>" in page  # one camera in the orchard, not two
+        assert "0 of 1 traps reporting" in page  # one camera in the orchard, not two
 
         assert client.get("/api/v1/hub/nodes", headers={"Authorization": f"Bearer {hub_key}"}).status_code == 200
         page = client.get("/").text
         assert "checked in" in page and "1 camera" in page
+        hub_page = client.get("/traps/T1")
+        assert hub_page.status_code == 200 and "checked in" in hub_page.text and "/traps/T2" in hub_page.text
+        assert client.get("/manage").status_code == 200
         with session_scope() as db:
             seen = db.get(Trap, "T1").last_seen_at
             assert seen is not None and services.trap_health(db, db.get(Trap, "T1"))["state"] == "online"
@@ -129,7 +143,7 @@ def test_hub_without_a_camera_relays_esp32s_and_shows_when_it_last_checked_in():
             assert db.get(Trap, "T1").last_seen_at == seen  # not rewritten on every request
 
         with session_scope() as db:
-            db.get(Trap, "T1").last_seen_at = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=2)
+            db.get(Trap, "T1").last_seen_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=2)
         assert "Offline" in client.get("/").text.split("Each trap")[0]
         assert _upload(client, cam_key, "T2", "b1").status_code == 201
 
@@ -144,5 +158,67 @@ def test_cli_hub_and_set_kind(capsys):
     assert main(["add-trap", "T3", "--lure", "CM"]) == 0
     assert main(["set-kind", "T3", "hub"]) == 0
     assert main(["set-kind", "T2", "hub"]) == 1  # an ESP32 stays a camera
+    assert main(["set-scale", "T2", "10.3"]) == 0
+    assert main(["set-scale", "T2", "0"]) == 1
+    with session_scope() as db:
+        assert db.get(Trap, "T2").px_per_mm == 10.3
+    assert main(["set-scale", "T2", "--none"]) == 0
     with session_scope() as db:
         assert db.get(Trap, "T3").kind == "hub"
+
+
+def test_take_a_photo_now_reaches_the_hub_and_clears_when_a_newer_photo_arrives():
+    with TestClient(create_app()) as client:
+        _, hub_key = _add(client, trap_id="T1", kind="hub")
+        _, cam_key = _add(client, trap_id="T2", kind="esp32", hub_id="T1")
+        hub = {"Authorization": f"Bearer {hub_key}"}
+        assert client.get("/api/v1/hub/nodes", headers=hub).json()["photo_requests"] == {}
+        assert client.post("/traps/T1/request-photo").status_code == 422  # a hub has no camera
+        assert "Take a photo now" in client.get("/traps/T2").text
+
+        before = datetime.now(UTC) - timedelta(minutes=5)
+        assert client.post("/traps/T2/request-photo", follow_redirects=False).status_code == 303
+        assert "taken at the next check-in" in client.get("/traps/T2").text
+        asked = client.get("/api/v1/hub/nodes", headers=hub).json()["photo_requests"]
+        assert list(asked) == ["T2"] and datetime.fromisoformat(asked["T2"]).tzinfo is not None
+
+        assert _upload(client, cam_key, "T2", "old", when=before).status_code == 201  # taken before the request
+        assert "T2" in client.get("/api/v1/hub/nodes", headers=hub).json()["photo_requests"]
+        assert _upload(client, cam_key, "T2", "new").status_code == 201
+        assert client.get("/api/v1/hub/nodes", headers=hub).json()["photo_requests"] == {}
+        assert "Take a photo now" in client.get("/traps/T2").text
+
+
+def test_error_status_says_why_on_hover_and_links_to_the_photo():
+    from sentinel_server.models import Capture
+    with TestClient(create_app()) as client:
+        _add(client, trap_id="T1", kind="hub", name="Fieldhouse")
+        _, cam_key = _add(client, trap_id="T2", kind="esp32", hub_id="T1")
+        assert _upload(client, cam_key, "T2", "e1").status_code == 201
+        with session_scope() as db:
+            cap = db.query(Capture).filter_by(trap_id="T2").one()
+            cap.status, cap.error, cap_id = "failed", "photo not used: no liner grid found", cap.id
+        link = f'<a class="pill error" href="/captures/{cap_id}" title="Newest photo failed: photo not used: no liner grid found">Error'
+        for url in ("/", "/traps/T2", "/traps/T1", "/manage"):
+            assert link in client.get(url).text, url
+
+
+def test_overview_shows_a_hub_before_any_camera_is_added():
+    """A fresh install has a hub and no cameras yet: the hub table sat inside the trap-rows block, so the
+    page couldn't say whether the hub was checking in."""
+    with TestClient(create_app()) as client:
+        _add(client, trap_id="T1", kind="hub", name="Fieldhouse hub")
+        page = client.get("/").text
+    assert "No cameras yet" in page
+    assert "<h2>Hubs</h2>" in page and "Fieldhouse hub" in page and "0 cameras" in page
+
+
+def test_stylesheet_url_changes_with_its_contents():
+    # A deploy must not leave browsers on a cached old app.css with the new pages.
+    import hashlib
+
+    from sentinel_server import app as app_module
+    css = (app_module.HERE / "static" / "app.css").read_bytes()
+    with TestClient(create_app()) as client:
+        page = client.get("/").text
+        assert f'href="/static/app.css?v={hashlib.sha256(css).hexdigest()[:12]}"' in page

@@ -29,6 +29,7 @@ def be_degree_days(tmax_f: float, tmin_f: float, base_f: float) -> float:
 class Milestone:
     dd: float
     label: str
+    short: str = ""  # a few words, for the grower's sentence ("First spray in about 2 days")
 
 
 @dataclass(frozen=True)
@@ -42,26 +43,28 @@ class PestModel:
 
 MODELS = {
     "CM": PestModel("CM", "Codling moth", 50, "biofix (first sustained catch)", (
-        Milestone(50, "Egg laying begins: apply materials that must be present before egg laying (50–75 DD)"),
-        Milestone(100, "Early egg laying: window for materials targeting early egg laying (100–200 DD)"),
-        Milestone(220, "First eggs hatch"),
-        Milestone(250, "First spray for overwintering generation; second spray 10–14 days later"),
+        Milestone(50, "Egg laying begins: apply materials that must be present before egg laying (50–75 DD)", "Egg laying begins"),
+        Milestone(100, "Early egg laying: window for materials targeting early egg laying (100–200 DD)", "Early egg laying"),
+        Milestone(220, "First eggs hatch", "First eggs hatch"),
+        Milestone(250, "First spray for overwintering generation; second spray 10–14 days later", "First spray"),
     )),
     "OFM": PestModel("OFM", "Oriental fruit moth", 45, "biofix (first sustained catch)", (
         # UC IPM OFM phenology models (Croft et al. 1980, validated in Michigan; Rice et al. 1984),
         # both base 45 °F from biofix. They use a 90 °F horizontal upper cutoff that NEWA's BE
         # degree days don't; it rarely matters in Ithaca. The 2nd flight is also predicted from
         # Jan 1 (1000–1400 DD), shown separately on the trap page.
-        Milestone(50, "Egg laying begins"),
-        Milestone(200, "Egg hatch begins: time larval sprays for the first generation"),
-        Milestone(965, "Next generation's moths start flying"),
+        Milestone(50, "Egg laying begins", "Egg laying begins"),
+        Milestone(200, "Egg hatch begins: time larval sprays for the first generation", "Larval spray"),
+        Milestone(965, "Next generation's moths start flying", "Next flight"),
     )),
-    "OBLR": PestModel("OBLR", "Obliquebanded leafroller", 43, "biofix (first catch; traps out by June 1)", (
-        Milestone(350, "Egg hatch: spray targeting larvae (history of OBLR); second spray 10–14 days later"),
-        Milestone(600, "Scout growing terminals for larvae (600–700 DD)"),
+    # Biofix: sustained flight, moths caught "over two to three successive days" (Cornell, Jentsch 2019);
+    # NEWA's OBLR page doesn't define it. Checked Oct 24 2026 (L-12).
+    "OBLR": PestModel("OBLR", "Obliquebanded leafroller", 43, "biofix (first sustained catch; traps out by June 1)", (
+        Milestone(350, "Egg hatch: spray targeting larvae (history of OBLR); second spray 10–14 days later", "Larval spray"),
+        Milestone(600, "Scout growing terminals for larvae (600–700 DD)", "Scout terminals"),
     )),
     "PC": PestModel("PC", "Plum curculio", 50, "petal fall (entered manually)", (
-        Milestone(308, "Protection can stop: oviposition period over (308 DD after petal fall)"),
+        Milestone(308, "Protection can stop: oviposition period over (308 DD after petal fall)", "Protection can stop"),
     )),
 }
 
@@ -103,6 +106,49 @@ def sustained_biofix(catch_dates: list[date], min_per_week: int = 2, weeks_in_a_
             run = []
         w += timedelta(days=7)
     return None
+
+
+NOW_WITHIN_DD = 30  # a milestone passed this recently is still "due now"
+SOON_DAYS = 7       # a milestone this close is "soon"
+
+
+def recent_dd_per_day(days: dict[date, tuple[float, float]], today: date, base_f: float, n: int = 7) -> float | None:
+    """Mean degree days a day over the last n days with weather data: how fast the clock is running now."""
+    got = [be_degree_days(*days[d], base_f) for i in range(n) if (d := today - timedelta(days=i)) in days]
+    return sum(got) / len(got) if got else None
+
+
+def outlook(model: PestModel, biofix: date | None, dd: float | None, days: dict[date, tuple[float, float]],
+            today: date) -> dict:
+    """The grower's sentence for one trap: what is due now or next, and in about how many days at this
+    week's temperatures. state: waiting (no biofix), soon (within SOON_DAYS), now (just passed), later, done."""
+    if biofix is None or dd is None:
+        return {"state": "waiting", "headline": "Waiting for biofix", "passed": [], "next": None,
+                "dd_to_go": None, "days_to_go": None,
+                "detail": "The degree-day clock starts at the first sustained catch of this lure's moth."}
+    passed = [m for m in model.milestones if dd >= m.dd]
+    nxt = next_milestone(model, dd)
+    rate = recent_dd_per_day(days, today, model.base_f)
+    to_go = round(nxt.dd - dd) if nxt else None
+    days_to_go = math.ceil(to_go / rate) if nxt and rate and rate >= 0.5 else None
+    detail = ""
+    if nxt and days_to_go is None:
+        detail = "Too cool this week for degree days to build up." if rate is not None else "No recent weather data."
+    elif nxt:
+        detail = f"{to_go} DD to go, at about {rate:.0f} DD a day this week."
+    when = f"in about {days_to_go} day{'s' if days_to_go != 1 else ''}" if days_to_go is not None else f"at {nxt.dd:.0f} DD" if nxt else ""
+    if nxt and days_to_go is not None and days_to_go <= SOON_DAYS:
+        state, headline = "soon", f"{nxt.short} {when}"
+    elif passed and dd - passed[-1].dd <= NOW_WITHIN_DD:
+        last = passed[-1]
+        state, headline = "now", f"{last.short} {'due ' if 'spray' in last.short.lower() else ''}now"
+        detail = f"{last.label}." + (f" Then {nxt.short[0].lower()}{nxt.short[1:]} {when}." if nxt else "")
+    elif nxt:
+        state, headline = "later", f"Next: {nxt.short[0].lower()}{nxt.short[1:]} {when}"
+    else:
+        state, headline = "done", "All milestones passed for this generation"
+    return {"state": state, "headline": headline, "passed": passed, "next": nxt, "dd_to_go": to_go,
+            "days_to_go": days_to_go, "detail": detail}
 
 
 def next_milestone(model: PestModel, dd: float) -> Milestone | None:

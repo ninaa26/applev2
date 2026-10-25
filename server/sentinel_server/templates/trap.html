@@ -1,90 +1,154 @@
 {% extends "base.html" %}
+{% from "_status.html" import camera_status, ddtrack %}
 {% set nav = 'overview' %}
-{% block title %}{{ trap.id }} · Orchard Sentinel{% endblock %}
+{% block title %}{{ trap.name or trap.id }} · Orchard Sentinel{% endblock %}
 {% block head %}<meta http-equiv="refresh" content="120">{% endblock %}
 {% block main %}
-<div style="display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:flex-end">
+<div class="page-head">
   <div>
-    <h1>{{ trap.id }} <span class="muted" style="font-size:18px">{{ trap.name }}</span></h1>
-    {% if trap.retired_at %}<p class="pill offline">Removed from the orchard {{ trap.retired_at|local('%b %d, %Y') }}. <a href="/manage">Set up traps</a> to bring it back.</p>{% endif %}
-    <p class="muted">{{ trap.lure }} lure · {% if trap.kind == 'esp32' %}ESP32 camera via <a href="/traps/{{ trap.hub_id }}">{{ trap.hub_id }}</a>{% else %}Raspberry Pi{% endif %}{% if trap.block %} · {{ trap.block }}{% endif %} · liner {% if card %}#{{ card.id }} {% endif %}installed {{ card.installed_at|local if card else '—' }}
-      · <span class="pill {{ health.state }}">{% if health.state == 'never' %}No photos yet{% else %}{{ health.state|capitalize }} · last photo {{ health.last.received_at|ago }}{% endif %}</span></p>
-    {% if health.device_error %}<p class="pill error">Trap reported: {{ health.device_error }}</p>{% endif %}
+    <a class="back" href="/">Orchard</a>
+    <h1>{{ trap.name or trap.id }}</h1>
+    <p class="sub">
+      <span class="sp"><i class="dot c-{{ trap.lure }}"></i>{{ SPECIES_LABELS[trap.lure] }} lure</span>
+      <span>{{ trap.id }}, {% if trap.kind == 'esp32' %}ESP32 camera via <a href="/traps/{{ trap.hub_id }}">{{ trap.hub_id }}</a>{% else %}Raspberry Pi camera{% endif %}{% if trap.block %}, {{ trap.block }}{% endif %}</span>
+      {{ camera_status(health, 'last photo ') }}
+    </p>
+    {% if trap.retired_at %}<p class="notice warn" style="margin-top:12px">Taken out of the orchard {{ trap.retired_at|local('%b %-d, %Y') }}. <a href="/manage">Set up traps</a> to put it back.</p>{% endif %}
+    {% if health.device_error %}<p class="notice warn" style="margin-top:12px">The trap reported: {{ health.device_error }}</p>{% endif %}
   </div>
-  <form method="post" action="/traps/{{ trap.id }}/new-card">
-    <input type="hidden" name="note" value="installed from dashboard">
-    <button class="primary" type="submit">New liner installed</button>
-  </form>
+  {% if not trap.retired_at %}
+  <div class="btns">
+    {% if trap.kind == 'esp32' %}
+      {% if trap.photo_requested_at %}
+      <span class="pill never" title="The camera checks in with its hub between photos and takes it then">Photo asked for {{ trap.photo_requested_at|ago }}, taken at the next check-in</span>
+      {% else %}
+      <form method="post" action="/traps/{{ trap.id }}/request-photo">
+        <button type="submit" title="The camera takes it at its next check-in with the hub, within about 30 minutes">Take a photo now</button>
+      </form>
+      {% endif %}
+    {% endif %}
+    <details class="step">
+      <summary class="btn primary">New liner</summary>
+      <form class="pop" method="post" action="/traps/{{ trap.id }}/new-card">
+        <h3>Record a new liner</h3>
+        <p class="muted small">Do this when you put a fresh sticky liner in the trap. Counting starts again from zero; earlier liners keep their counts.</p>
+        <input type="hidden" name="note" value="installed from dashboard">
+        <label class="field">Lure in the trap now
+          <select name="lure">{% for l in PESTS %}<option value="{{ l }}"{{ ' selected' if l == trap.lure }}>{{ SPECIES_LABELS[l] }} ({{ l }}){{ ', same as before' if l == trap.lure }}</option>{% endfor %}</select>
+        </label>
+        <button class="primary" type="submit">Save new liner</button>
+      </form>
+    </details>
+  </div>
+  {% endif %}
 </div>
 
 <div class="grid g2">
-  <div class="card" style="display:flex;flex-direction:column;gap:10px">
+  <section class="card" aria-labelledby="photo">
     {% if latest %}
-      <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
-        <h2>Latest photo</h2>
-        <span class="muted mono">{{ latest.captured_at|local }} · <span class="pill {{ latest.status }}">{{ latest.status }}</span> · <a href="/captures/{{ latest.id }}">details</a></span>
+      <div class="section-head" style="border:0;padding:0;margin-bottom:12px">
+        <h2 id="photo">Latest photo</h2>
+        <span class="aside">{{ latest.captured_at|local('%b %-d, %H:%M') }}{% if latest.status != 'processed' %} <span class="pill {{ latest.status }}">{{ latest.status|capitalize }}</span>{% endif %} <a href="/captures/{{ latest.id }}">Details</a></span>
       </div>
       {% set cap = latest %}{% include "_photo.html" %}
-      <p class="muted" style="font-size:12.5px">Dashed boxes are candidates, seen in one photo so far. They count once they show up in a second photo.</p>
+      <p class="muted small" style="margin-top:10px">Solid boxes are counted. Dashed boxes have been seen in one photo so far and count once they show up in a second.</p>
     {% else %}
+      <h2 id="photo">Latest photo</h2>
       <p class="muted">No photos from this trap yet.</p>
     {% endif %}
-  </div>
+  </section>
 
-  <div style="display:flex;flex-direction:column;gap:16px">
-    <div class="card">
-      <h2>{{ pheno.model.name if pheno else 'Degree days' }}</h2>
-      {% if pheno %}
-      <dl class="kv" style="margin-top:8px">
-        <dt>Base temp</dt><dd class="mono">{{ '%.0f'|format(pheno.model.base_f) }} °F (BE method)</dd>
-        <dt>Clock starts</dt><dd>{{ pheno.model.start }}</dd>
-        <dt>Biofix</dt><dd>{{ pheno.biofix.strftime('%b %d, %Y') if pheno.biofix else 'Not yet: needs more than 1 moth two weeks in a row' }}</dd>
-        {% if pheno.biofix and pheno.biofix != pheno.biofix_sure %}
-        <dt></dt><dd class="muted">Provisional: it rests on {{ pheno.unsure_catches }} catch{{ 'es' if pheno.unsure_catches != 1 }} the model was unsure of. <a href="/review">Confirm them</a>{% if pheno.biofix_sure %}; from confirmed catches alone it is {{ pheno.biofix_sure.strftime('%b %d') }}{% endif %}.</dd>
-        {% endif %}
-        {% if pheno.biofix %}
-        <dt>DD since biofix</dt><dd class="mono">{{ '%.0f'|format(pheno.dd) }}{% if pheno.missing_days %} <span class="muted">({{ pheno.missing_days }} days without weather data)</span>{% endif %}</dd>
-        <dt>Next</dt><dd>{{ '%.0f DD: %s'|format(pheno.next.dd, pheno.next.label) if pheno.next else 'All milestones passed' }}</dd>
-        {% endif %}
-        {% if pheno.dd_jan1 is defined %}<dt>DD since Jan 1</dt><dd class="mono">{{ '%.0f'|format(pheno.dd_jan1) }} <span class="muted">(2nd flight expected at 1000–1400)</span></dd>{% endif %}
-        <dt>Weather</dt><dd class="muted">{{ pheno.weather_source }}</dd>
-      </dl>
-      {% else %}<p class="muted">No model for this lure.</p>{% endif %}
-    </div>
-    <div class="card">
-      <h2>Review</h2>
-      <p>{% if pending %}<a href="/review">{{ pending }} insect{{ 's' if pending != 1 }}</a> waiting for a person to confirm.{% else %}Nothing waiting.{% endif %}</p>
-      {% if checks.checked %}<p class="muted">Spot checks of labels the model was sure of: {{ checks.agreed }} of {{ checks.checked }} agreed with a person.</p>{% endif %}
-    </div>
-  </div>
-</div>
+  <div class="stack">
+    <section class="card" aria-labelledby="timing">
+      {% if pheno %}{% set ol = pheno.outlook %}
+      <h2 id="timing">{{ pheno.model.name }} timing</h2>
+      <p class="headline" style="font:600 19px/1.3 var(--serif)">{% if ol.state != 'waiting' %}<span class="tag {{ ol.state }}">{{ {'now': 'Due now', 'soon': 'Soon', 'later': 'Coming up', 'done': 'Done'}[ol.state] }}</span>{% endif %}{{ ol.headline }}</p>
+      <p class="muted small" style="margin-top:4px">{% if ol.state == 'waiting' %}{{ pheno.catches }} {{ trap.lure }} moth{{ 's' if pheno.catches != 1 }} caught this season. The clock starts once 2 or more are caught a week, two weeks running.{% else %}{{ ol.detail }}{% endif %}</p>
 
-<div class="card">
-  <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px">
-    <h2>New catches per day, last 30 days</h2>
-    <span class="muted" style="display:flex;gap:12px;flex-wrap:wrap;font-size:12.5px">
-      {% for sp in ['CM','OFM','OBLR','other_moth','unclassified'] %}<span class="sp"><i class="dot c-{{ sp }}"></i>{{ SPECIES_LABELS[sp] }}</span>{% endfor %}
-    </span>
-  </div>
-  <div class="bars" role="img" aria-label="Daily new catches by species">
-    {% for r in daily %}
-      <div class="bar" title="{{ r.date.strftime('%b %d') }}: {% for k, v in r.counts.items() %}{{ k }} {{ v }} {% endfor %}">
-        {% for sp in ['CM','OFM','OBLR','other_moth','unclassified'] %}{% if r.counts.get(sp) %}<i class="c-{{ sp }}" style="height:{{ 120 * r.counts[sp] / peak }}px"></i>{% endif %}{% endfor %}
+      {% if pheno.biofix %}
+      <div style="margin:16px 0 6px">{{ ddtrack(pheno) }}</div>
+      <ul class="milestones" aria-label="Milestones in degree days after biofix">
+        {% for m in pheno.model.milestones %}
+        <li class="{{ 'passed' if pheno.dd >= m.dd else 'next' if ol.next and m.dd == ol.next.dd else '' }}"><span class="at">{{ '%.0f'|format(m.dd) }} DD</span><span>{{ m.label }}</span></li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+
+      <h3 style="margin:18px 0 8px">Biofix</h3>
+      <p>{% if pheno.biofix %}<b>{{ pheno.biofix.strftime('%B %-d, %Y') }}</b>{% else %}Not set yet{% endif %}
+        <span class="muted small">{% if pheno.biofix_set %}{% if pheno.biofix == pheno.biofix_auto %}Confirmed by a person.{% else %}Set by a person; from the catches it would be {{ pheno.biofix_auto.strftime('%b %-d') if pheno.biofix_auto else 'not set yet' }}.{% endif %}{% elif pheno.biofix %}From the catches: the first sustained catch.{% endif %}</span></p>
+      {% if pheno.biofix and pheno.biofix != pheno.biofix_sure and not pheno.biofix_set %}
+      <p class="notice warn small" style="margin-top:8px">Provisional: it rests on {{ pheno.unsure_catches }} catch{{ 'es' if pheno.unsure_catches != 1 }} the model was unsure of. <a href="/review">Confirm them</a>{% if pheno.biofix_sure %}; from confirmed catches alone it is {{ pheno.biofix_sure.strftime('%b %-d') }}{% endif %}.</p>
+      {% endif %}
+      <div class="btns" style="margin-top:10px;align-items:center">
+        {% if pheno.biofix and not pheno.biofix_set %}
+        <form method="post" action="/traps/{{ trap.id }}/biofix">
+          <input type="hidden" name="date" value="{{ pheno.biofix.isoformat() }}">
+          <button type="submit" class="small" title="Lock in this date for the season, whatever later catches say">Confirm biofix</button>
+        </form>
+        {% endif %}
+        <details class="inline"{{ ' open' if not pheno.biofix }}>
+          <summary>{{ 'Change the date' if pheno.biofix else 'Set a biofix date' }}</summary>
+          <form method="post" action="/traps/{{ trap.id }}/biofix" class="btns" style="margin-top:8px;align-items:center">
+            <input type="date" name="date" value="{{ pheno.biofix.isoformat() if pheno.biofix else '' }}" max="{{ today.isoformat() }}" required aria-label="Biofix date">
+            <button type="submit" class="small primary">Save biofix</button>
+          </form>
+        </details>
+        {% if pheno.biofix_set %}
+        <form method="post" action="/traps/{{ trap.id }}/biofix">
+          <input type="hidden" name="date" value="">
+          <button type="submit" class="small quiet">Use the catches again</button>
+        </form>
+        {% endif %}
       </div>
-    {% endfor %}
+
+      <dl class="kv small" style="margin-top:18px">
+        <dt>Degree days</dt><dd>Base {{ '%.0f'|format(pheno.model.base_f) }} °F, Baskerville-Emin{% if pheno.missing_days %}; {{ pheno.missing_days }} day{{ 's' if pheno.missing_days != 1 }} without weather data{% endif %}</dd>
+        {% if pheno.dd_jan1 is defined %}<dt>Since Jan 1</dt><dd>{{ '%.0f'|format(pheno.dd_jan1) }} DD (second flight expected at 1000–1400)</dd>{% endif %}
+        <dt>Weather</dt><dd>{{ pheno.weather_source.replace('newa:', 'NEWA station ').replace('trap:', "this trap's own sensor, ") }}</dd>
+      </dl>
+      {% else %}<h2 id="timing">Degree days</h2><p class="muted">No degree-day model for this lure.</p>{% endif %}
+    </section>
+
+    <section class="card" aria-labelledby="rev">
+      <h2 id="rev">Review</h2>
+      {% if pending %}
+      <p>{{ pending }} insect{{ 's' if pending != 1 }} waiting for a person to confirm. They aren't counted until then.</p>
+      <p style="margin-top:10px"><a class="btn" href="/review">Review them</a></p>
+      {% else %}<p class="muted">Nothing waiting.</p>{% endif %}
+      {% if checks.checked %}<p class="muted small" style="margin-top:10px">Spot checks of labels the model was sure of: {{ checks.agreed }} of {{ checks.checked }} agreed with a person.</p>{% endif %}
+    </section>
   </div>
-  <div class="axis"><span>{{ daily[0].date.strftime('%b %d') }}</span><span>peak {{ peak }}/day</span><span>{{ daily[-1].date.strftime('%b %d') }}</span></div>
 </div>
 
-<div class="card">
-  <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
-    <h2>Recent photos</h2>
-    <a href="/traps/{{ trap.id }}/photos">All photos from {{ trap.id }}</a>
+<section class="section" aria-labelledby="daily">
+  <div class="section-head">
+    <h2 id="daily">New catches per day, last 30 days</h2>
+    <span class="legend-row">{% for sp in ['CM','OFM','OBLR','other_moth','unclassified'] %}<span class="sp"><i class="dot c-{{ sp }}"></i>{{ SPECIES_LABELS[sp] }}</span>{% endfor %}</span>
+  </div>
+  <div class="chart">
+    <div class="yax" aria-hidden="true"><span>{{ peak }}</span><span>{{ (peak // 2) if peak >= 4 and peak is even else '' }}</span><span>0</span></div>
+    <div class="bars" role="img" aria-label="Daily new catches by species, peak {{ peak }} a day">
+      {% for r in daily %}
+        <div class="bar" title="{{ r.date.strftime('%b %-d') }}: {% for k, v in r.counts.items() %}{{ v }} {{ SPECIES_LABELS.get(k, k) }}{{ ', ' if not loop.last }}{% else %}none{% endfor %}">
+          {% for sp in ['CM','OFM','OBLR','other_moth','unclassified'] %}{% if r.counts.get(sp) %}<i class="c-{{ sp }}" style="height:{{ 150 * r.counts[sp] / peak }}px"></i>{% endif %}{% endfor %}
+        </div>
+      {% endfor %}
+    </div>
+    <div class="axis"><span>{{ daily[0].date.strftime('%b %-d') }}</span><span>{{ daily[-1].date.strftime('%b %-d') }}</span></div>
+  </div>
+</section>
+
+<section class="section" aria-labelledby="recent">
+  <div class="section-head">
+    <h2 id="recent">Recent photos</h2>
+    <a href="/traps/{{ trap.id }}/photos">All photos from this trap</a>
   </div>
   <div class="strip">
     {% for c in caps %}
-      <a href="/captures/{{ c.id }}"><img src="/media/{{ c.image_path }}" alt="" loading="lazy">{{ c.captured_at|local('%b %d %H:%M') }}<br>{{ c.detections|length }} boxes</a>
+      <a href="/captures/{{ c.id }}"><img src="/media/{{ c.image_path }}" alt="Liner photo from {{ c.captured_at|local }}" loading="lazy">{{ c.captured_at|local('%b %-d, %H:%M') }}<br>{{ c.detections|length }} insect{{ 's' if c.detections|length != 1 }}{% if c.status == 'failed' %}, not used{% endif %}</a>
+    {% else %}<p class="muted">No photos yet.</p>
     {% endfor %}
   </div>
-</div>
+</section>
 {% endblock %}

@@ -11,12 +11,16 @@ and `hardware/CAMERAS.md`.
 - `server/`: FastAPI + SQLite package `sentinel_server` (upload API, detect/track/classify pipeline, dashboard, `evaluate`)
 - `ml/`: standalone scripts run from inside `ml/` (fetch, build dataset, label, train, score); no package
 - `hardware/`: trap dimensions, camera notes, printable parts
+- `field-tests/`: self-contained test runs on the real hardware, separate from the regular code (e.g. `esp32-window-day/`: scripts to start, check, fail, finish and report a day-long run; run output goes to its gitignored `runs/`)
+- `code-review/`: the review ledger. `LEDGER.md` holds checked findings (to-dos, facts, wrong claims); `UNVERIFIED.md` holds Gemini claims nobody has checked yet. `gemini-raw/` has the raw Gemini output, and `gemini-upload/` has the brief and the read-only live-snapshot scripts. Rebuild the page with `python3 code-review/make_unverified.py && python3 code-review/build_ledger.py`
 - `docs/`: ESP32 traps and the hub, server on Linux (the Pi 5) or the Mac, Pi camera bring-up, wiring, camera bench, measuring accuracy
 
 ## Environments and tests
 
 Each of `server/`, `device/` and `ml/` has its own `.venv` (Python 3.12, made with `uv`). Use that
-folder's `.venv/bin/python`, not the system Python.
+folder's `.venv/bin/python`, not the system Python. `server/` and `device/` pin every package in `uv.lock`
+(`uv sync --locked --python 3.12 --extra dev`); after changing a `pyproject.toml`, run `uv lock` there and
+commit both. `ml/` still uses `requirements.txt`.
 
 ```bash
 cd server && .venv/bin/python -m pytest -q            # about a minute
@@ -24,7 +28,9 @@ cd device && .venv/bin/python -m pytest -q            # camera-bench tests skip 
 cd ml && .venv/bin/python -m unittest discover tests
 ```
 
-CI runs the same three suites on every pull request (`.github/workflows/tests.yml`).
+CI runs the same three suites and `uvx ruff check .` (settings in `ruff.toml`) on every pull request
+(`.github/workflows/tests.yml`). Dependabot opens weekly PRs for the locked versions and Actions; CodeQL
+scans the Python and the workflows.
 
 The labeller and model playground are preview servers in `.claude/launch.json`
 (`field-labeler`, `ofm-labeler`, `model-playground`).
@@ -39,3 +45,4 @@ The labeller and model playground are preview servers in `.claude/launch.json`
 - Camera settings and the white-card correction (`flatfield.npz`) belong to one Pi, camera position and lighting setup. Redo the calibration when any of them changes.
 - How it runs (since Oct 22 2026): ESP32 cameras → hub Pi with no camera (`apple-pi-hub`, the bench Pi; gateway only) → server on a Pi 5 (`apple-pi-server`, a stand-in for a cloud server). Both are on the team Tailscale.
 - The bench Pi is shared. Ask before running anything on it, and do not run `device/install.sh` there.
+- Deploying fixes: `server/deploy.sh` (server), `device/deploy-hub.sh pi@<hub>` (a hub), and ESP32 firmware through the dashboard (Set up traps → Camera firmware, built with `device/esp32-node/release.sh`). All three go back to the old version if the new one doesn't come up: [docs/esp32-traps.md](docs/esp32-traps.md#fixing-and-updating-in-the-field).

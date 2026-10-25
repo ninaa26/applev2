@@ -6,8 +6,17 @@ import cv2
 import numpy as np
 import pytest
 
-from sentinel_server.pipeline.detect import (BaselineDetector, Box, card_outline, distort_points, estimate_lens_k,
-                                             find_grid, merge_tiles, on_card, tile_origins)
+from sentinel_server.pipeline.detect import (
+    BaselineDetector,
+    Box,
+    card_outline,
+    distort_points,
+    estimate_lens_k,
+    find_grid,
+    merge_tiles,
+    on_card,
+    tile_origins,
+)
 
 W, H = 640, 480
 PX_PER_MM = 7.0
@@ -227,3 +236,85 @@ def test_tiles_cover_the_photo_and_an_insect_cut_by_a_tile_edge_counts_once():
     neighbour = (660, 110, 720, 140, 0.8)                               # a second moth touching the first
     assert merge_tiles([whole, part, neighbour], tiles=[1, 0, 1]) == [0, 2]
     assert merge_tiles([whole, part], tiles=[0, 0]) == [0, 1]  # within one tile the detector already chose
+
+
+# The device's fake camera (sentinel_device.camera.FakeCamera): a faint grid every 290 px (11.6 px/mm) and
+# large moths. These six are from an Oct 10 2026 end-to-end run whose photo read as 34.8 px/mm, after
+# other photos of the same liner had read 29 and 6.9: the two line families gave different multiples of
+# the spacing and were averaged.
+FAKE_MOTHS = [(1228, 1031, 70, (90, 90, 90), 65), (1164, 396, 120, (150, 110, 70), 102), (1266, 374, 110, (95, 80, 70), 17),
+              (376, 352, 50, (40, 40, 40), 141), (972, 793, 120, (150, 110, 70), 162), (1722, 469, 120, (150, 110, 70), 105)]
+
+
+def fake_camera_liner() -> np.ndarray:
+    from PIL import Image, ImageDraw, ImageFilter
+
+    w, h, step = 2304, 1296, 290
+    img = Image.new("RGB", (w, h), (236, 232, 205))
+    d = ImageDraw.Draw(img)
+    for x in range(0, w, step):
+        d.line([(x, 0), (x, h)], fill=(214, 210, 185), width=2)
+    for y in range(0, h, step):
+        d.line([(0, y), (w, y)], fill=(214, 210, 185), width=2)
+    d.rounded_rectangle([w / 2 - 40, h / 2 - 14, w / 2 + 40, h / 2 + 14], radius=8, fill=(170, 40, 40))
+    for x, y, length, colour, angle in FAKE_MOTHS:
+        moth = Image.new("RGBA", (length * 2, length * 2), (0, 0, 0, 0))
+        ImageDraw.Draw(moth).ellipse([length * 0.5, length * 0.75, length * 1.5, length * 1.25], fill=colour + (255,))
+        moth = moth.rotate(angle, resample=Image.BICUBIC)
+        img.paste(moth, (x - length, y - length), moth)
+    rgb = np.asarray(img.filter(ImageFilter.GaussianBlur(0.8)))
+    ok, jpg = cv2.imencode(".jpg", cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 95])
+    return cv2.imdecode(jpg, cv2.IMREAD_COLOR)
+
+
+def test_grid_scale_on_the_fake_camera_liner():
+    from sentinel_server.pipeline.detect import photo_scale
+
+    ppm, _ = photo_scale(fake_camera_liner(), 25.0, 0.0)
+    assert ppm == pytest.approx(290 / 25, rel=0.03)
+
+
+def test_dark_frame_with_fine_banding_has_no_grid():
+    """A night photo from an ESP32 with no light (T2, Oct 23 2026): dark, with faint fine banding that reads as
+    two line families both closer than any real grid. It used to raise inside _agreed_pitch instead of
+    coming back as no grid, so the capture got a traceback rather than "no liner grid found"."""
+    img = np.full((1200, 1600), 30, np.uint8)
+    img[::28, :] = 10
+    img[:, ::44] = 10
+    assert find_grid(img).pitch_px == 0.0
+    assert find_grid(np.zeros((1200, 1600, 3), np.uint8)).pitch_px == 0.0  # all black
+
+
+def test_line_families_agree_on_one_spacing():
+    from sentinel_server.pipeline.detect import _agreed_pitch
+
+    def lines(n, pitch, blobs=()):
+        p = np.zeros(n)
+        p[::pitch] = 1.0
+        for i in blobs:  # insects: strong, wide, irregular
+            p[i:i + 15] += 3.0
+        return p
+
+    across, down = lines(400, 50, blobs=(20, 140, 330)), lines(225, 50)
+    assert _agreed_pitch([50.0, 51.0], [across, down]) == pytest.approx(50.5)  # agree: as before
+    assert _agreed_pitch([200.0, 50.0], [across, down]) == pytest.approx(50)    # one a multiple
+    assert _agreed_pitch([150.0, 100.0], [across, down]) == pytest.approx(50)   # both multiples
+    assert _agreed_pitch([7.0, 11.0], [across, down]) == pytest.approx(9)      # all too fine: no raise
+
+
+def test_grid_says_which_fraction_of_a_spacing_it_chose():
+    """For the ⅓-scale misreads (L-01): a grid taken as a fraction of a measured spacing says which, so the
+    failing photos show whether the fraction search is the cause."""
+    from sentinel_server.pipeline.detect import _pitch_choice
+
+    def lines(n, pitch):
+        p = np.zeros(n)
+        p[::pitch] = 1.0
+        return p
+
+    across, down = lines(400, 50), lines(225, 50)
+    assert _pitch_choice([50.0, 51.0], [across, down]) == (pytest.approx(50.5), 1)
+    assert _pitch_choice([200.0, 50.0], [across, down]) == (pytest.approx(50), 1)
+    pitch, frac = _pitch_choice([150.0, 200.0], [across, down])
+    assert pitch == pytest.approx(50) and frac in (3, 4)
+    assert find_grid(cv2.cvtColor(liner(), cv2.COLOR_BGR2GRAY)).fraction == 1

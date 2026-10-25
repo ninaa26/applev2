@@ -24,8 +24,7 @@ On Raspberry Pi OS (64-bit) or Ubuntu, logged in as the user that will run it (`
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh                  # uv, which brings Python 3.12
 git clone https://github.com/ninaa26/applev2.git ~/applev2
-cd ~/applev2/server && ~/.local/bin/uv venv --python 3.12 .venv
-~/.local/bin/uv pip install -p .venv/bin/python -e '.[bioclip]'  # torch + open_clip for the classifier
+cd ~/applev2/server && ~/.local/bin/uv sync --locked --python 3.12 --extra bioclip  # torch + open_clip for the classifier
 ```
 
 The classifier's head is not in git: copy it from the machine that trained it, for example
@@ -63,6 +62,44 @@ journalctl -u sentinel-server -f        # "worker started (baseline-cv-0.4+biocl
 
 The first start downloads BioCLIP 2 (about 1.6 GB, to `~/.cache/huggingface`). After `git pull` or a
 change to `.env`: `sudo systemctl restart sentinel-server`.
+
+## Deploying a fix
+
+From the Mac, in the repo, on the commit to deploy (normally `master` after the pull request is merged):
+
+```bash
+server/deploy.sh                 # to pi@apple-pi-server; server/deploy.sh <user@host> for another
+server/deploy.sh --rollback      # put back the code and database from before the last deploy
+```
+
+It saves the server's code and a snapshot of its database to `~/deploy-backups/<time>/` (the last 10 are
+kept), copies `server/sentinel_server/` over, installs the versions in `uv.lock` if it or `pyproject.toml` changed, and
+restarts. If `/healthz` doesn't answer within 60 s it puts the old code and packages back and restarts again. The deployed commit is
+in `~/applev2/server/DEPLOYED`. Hubs and cameras: [esp32-traps.md](esp32-traps.md#fixing-and-updating-in-the-field).
+
+## Back it up
+
+Everything the season produces is in `server/data/`: the database and the photos. One dead SD card loses
+it all, so a copy goes to another machine every night. `sentinel-server backup` takes a snapshot of the
+database with SQLite's backup API (safe while the server is writing), copies new photos next to it,
+keeps the last 14 snapshots, and with `--push` rsyncs the folder somewhere else. Nothing is deleted on
+the far side.
+
+On the far machine (the team Mac): turn on **Remote Login** in System Settings and add the Pi's SSH key
+(`ssh-keygen` on the Pi if it has none, then `ssh-copy-id USER@TEAM-MAC` over Tailscale). Then on the Pi:
+
+```bash
+.venv/bin/sentinel-server backup ~/sentinel-backup --push USER@TEAM-MAC:sentinel-backup   # try it once
+# edit USER@TEAM-MAC in the ExecStart line, then:
+sudo cp ~/applev2/server/systemd/sentinel-backup.{service,timer} /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now sentinel-backup.timer
+systemctl list-timers sentinel-backup      # next run, 03:30
+journalctl -u sentinel-backup              # "backed up sentinel-….db and N new photos"
+```
+
+To restore, stop the server, copy the newest `sentinel-*.db` to `server/data/sentinel.db` and the
+`media/` folder to `server/data/media/`, and start it again. Restore once on a spare machine to check the
+backup works before relying on it.
 
 ## Reaching it
 

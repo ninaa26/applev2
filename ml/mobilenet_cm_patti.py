@@ -1,12 +1,17 @@
-import os
+"""Patti's first classifier (Sep 24 2026): MobileNetV3-Small, codling moth vs not, on an ImageFolder
+(data/train/<class>/, data/val/<class>/). Kept for the record; train_v2.py grew out of it and is the one
+in use (all six trap classes, the group-aware split from build_dataset.py). Was the repo-root file
+"Patti's code" until Oct 24 2026.
+"""
+
 import copy
+import os
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
-
-from torchvision import datasets, transforms, models
 from torch.utils.data import DataLoader
-
+from torchvision import datasets, models, transforms
 
 # ---------------------------------------------------------
 # SETTINGS

@@ -190,9 +190,9 @@ def main(argv=None) -> int:
     results = {}
     # v0: zero-shot, text prompts only.
     embedder = embedder or Embedder(args.model, args.device)
-    T = embedder.texts([PROMPTS[c] for c in classes])
+    text = embedder.texts([PROMPTS[c] for c in classes])  # not T: that is v1's temperature below
     for name, m in tests.items():
-        results[f"v0 zero-shot · {name}"] = report(y[m], (X[m] @ T.T).argmax(1), classes)
+        results[f"v0 zero-shot · {name}"] = report(y[m], (X[m] @ text.T).argmax(1), classes)
 
     # v1: pick C and T on val (its real-liner rows, when there are any), then refit on train + val.
     tune = va & real if (va & real).sum() >= 50 else va
@@ -212,8 +212,8 @@ def main(argv=None) -> int:
     for name, m in tests.items():
         results[f"v1 linear head (C={C}) · {name}"] = report(y[m], clf.predict(X[m]), classes)
     if args.final and lk.any():
-        results["v0 zero-shot · LOCKED own cards"] = report(y[lk], (X[lk] @ T.T).argmax(1), classes)
-        results[f"v1 linear head · LOCKED own cards"] = report(y[lk], clf.predict(X[lk]), classes)
+        results["v0 zero-shot · LOCKED own cards"] = report(y[lk], (X[lk] @ text.T).argmax(1), classes)
+        results["v1 linear head · LOCKED own cards"] = report(y[lk], clf.predict(X[lk]), classes)
 
     args.out.mkdir(parents=True, exist_ok=True)
     np.savez(args.out / "head.npz", classes=np.array(classes), W=clf.coef_.astype(np.float32),

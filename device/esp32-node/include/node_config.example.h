@@ -1,7 +1,7 @@
 // Copy to node_config.h (gitignored) and fill in for this trap.
 #pragma once
 
-// From `sentinel-server add-trap T2 ...`; the same id and key go in the hub's [hub.nodes.T2].
+// From the dashboard's Set up traps page; flash-camera.sh T2 <key> fills in these two.
 #define TRAP_ID "T2"
 #define API_KEY "paste-the-key-printed-by-add-trap"
 
@@ -36,4 +36,10 @@
 #define LED_SETTLE_MS 300
 
 // Button that wakes the trap to mean "fresh liner installed" (GPIO0 is the BOOT button), or -1.
+// Held for SETUP_HOLD_MS it also starts setup mode: a live preview before the photo.
 #define BUTTON_PIN 0
+
+// Setup mode (after power-on, or the button held): a live preview on the hub's Wi-Fi, for aiming the camera.
+#define SETUP_PREVIEW_S 120               // how long the preview runs before the camera takes its photo
+#define PREVIEW_FRAMESIZE FRAMESIZE_VGA   // preview size (640x480); the page's full-size photo uses CAM_FRAMESIZE
+#define SETUP_HOLD_MS 3000

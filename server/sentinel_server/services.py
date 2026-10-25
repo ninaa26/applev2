@@ -6,7 +6,7 @@ import hashlib
 import re
 import secrets
 from collections import Counter, defaultdict
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import and_, func, or_, select
@@ -59,7 +59,7 @@ def next_trap_id(db: Session) -> str:
 
 
 def create_trap(db: Session, trap_id: str, name: str = "", block: str = "", lure: str = "CM",
-                kind: str = "pi", hub_id: str | None = None) -> str:
+                kind: str = "pi", hub_id: str | None = None, lat: float | None = None, lon: float | None = None) -> str:
     """Register a trap and return its API key (only its hash is stored, so this is the one chance to see it)."""
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,31}", trap_id):
         raise ValueError("trap id: letters, digits, _ and - only (max 32)")
@@ -75,7 +75,7 @@ def create_trap(db: Session, trap_id: str, name: str = "", block: str = "", lure
             raise ValueError("an ESP32 camera needs a hub in the orchard: add the hub first")
     key = new_api_key()
     db.add(Trap(id=trap_id, name=name, block=block, lure=lure, kind=kind,
-                hub_id=hub_id if kind == "esp32" else None, api_key_hash=hash_key(key)))
+                hub_id=hub_id if kind == "esp32" else None, api_key_hash=hash_key(key), lat=lat, lon=lon))
     db.flush()  # the trap row before the event that points at it
     db.add(Event(trap_id=trap_id, kind="trap_added", payload={"note": f"{TRAP_KINDS[kind]}{f' via {hub_id}' if kind == 'esp32' else ''}"}))
     db.flush()
@@ -99,6 +99,18 @@ def set_kind(db: Session, trap: Trap, kind: str) -> None:
     if trap.kind != kind:
         trap.kind = kind
         db.add(Event(trap_id=trap.id, kind="trap_changed", payload={"note": TRAP_KINDS[kind]}))
+
+
+def request_photo(trap: Trap) -> None:
+    if trap.kind != "esp32" or trap.retired_at is not None:
+        raise ValueError("only an ESP32 camera in the orchard can be asked for a photo")
+    trap.photo_requested_at = utcnow()
+
+
+def photo_requests(db: Session, hub_id: str) -> dict[str, str]:
+    """ESP32 traps on this hub with a photo asked for on the dashboard: {trap_id: when it was asked, UTC}."""
+    return {t.id: t.photo_requested_at.replace(tzinfo=UTC).isoformat() for t in db.scalars(select(Trap).where(
+        Trap.hub_id == hub_id, Trap.kind == "esp32", Trap.retired_at.is_(None), Trap.photo_requested_at.is_not(None)))}
 
 
 def hub_nodes(db: Session, hub_id: str) -> dict[str, str]:
@@ -131,7 +143,7 @@ def orchard_summary(db: Session, traps: list[Trap]) -> dict:
 
 
 def local_date(dt_utc: datetime) -> date:
-    return dt_utc.replace(tzinfo=timezone.utc).astimezone(ZoneInfo(get_settings().timezone)).date()
+    return dt_utc.replace(tzinfo=UTC).astimezone(ZoneInfo(get_settings().timezone)).date()
 
 
 def open_card(db: Session, trap_id: str) -> Card | None:
@@ -140,12 +152,28 @@ def open_card(db: Session, trap_id: str) -> Card | None:
     )
 
 
-def start_new_card(db: Session, trap_id: str, at: datetime | None = None, note: str = "") -> Card:
+def card_at(db: Session, trap_id: str, at: datetime) -> Card | None:
+    """The liner that was in the trap at `at`: the last one put in at or before then. A photo older than every
+    liner on record (it waited in a queue while the first one was opened) goes on the first."""
+    return db.scalar(
+        select(Card).where(Card.trap_id == trap_id, Card.installed_at <= at).order_by(Card.installed_at.desc(), Card.id.desc())
+    ) or db.scalar(select(Card).where(Card.trap_id == trap_id).order_by(Card.installed_at, Card.id))
+
+
+def start_new_card(db: Session, trap_id: str, at: datetime | None = None, note: str = "",
+                   lure: str | None = None) -> Card:
+    """`lure`: a new lure went in with the liner (the trap's lure changes from this liner on)."""
     at = at or utcnow()
+    trap = db.get(Trap, trap_id)
+    if lure is not None and lure not in phenology.MODELS:
+        raise ValueError(f"unknown lure {lure!r}")
     current = open_card(db, trap_id)
     if current is not None:
         current.removed_at = at
-    card = Card(trap_id=trap_id, installed_at=at, note=note)
+        current.lure = current.lure or trap.lure
+    if lure:
+        trap.lure = lure
+    card = Card(trap_id=trap_id, installed_at=at, note=note, lure=trap.lure)
     db.add(card)
     db.add(Event(trap_id=trap_id, kind="new_card", payload={"note": note}, at=at))
     db.flush()
@@ -258,11 +286,17 @@ def trap_health(db: Session, trap: Trap) -> dict:
     age_h = (utcnow() - last.received_at).total_seconds() / 3600
     state = "online" if age_h <= get_settings().offline_after_h else "offline"
     err = (last.meta or {}).get("device", {}).get("last_error")
+    failed = last.status == "failed"
+    # Shown when the dashboard's "Error" is hovered; clicking it opens the photo, or the trap's page.
+    reason = "; ".join(r for r in (f"Camera reported: {err}" if err else "",
+                                   f"Newest photo failed: {last.error or 'no reason saved'}" if failed else "") if r)
     return {
-        "state": "error" if (state == "online" and (err or last.status == "failed")) else state,
+        "state": "error" if (state == "online" and (err or failed)) else state,
         "age_h": age_h,
         "last": last,
         "device_error": err,
+        "reason": reason,
+        "reason_url": f"/captures/{last.id}" if failed else f"/traps/{trap.id}",
     }
 
 
@@ -278,12 +312,17 @@ def weather_days(db: Session, trap_id: str) -> tuple[dict[date, tuple[float, flo
     return phenology.daily_extremes_f(readings), f"trap:{trap_id}"
 
 
-def lure_catch_dates(db: Session, trap: Trap, card_ids: set[int] | None = None, sure_only: bool = False) -> list[date]:
-    """Local date of each catch of the trap's lure species, one entry per insect. `sure_only` leaves out
-    catches whose species is still the model's unsure guess (waiting in the review queue)."""
-    return sorted(local_date(t.first_seen_at) for t in counted_tracks(db, trap.id)
-                  if t.label == trap.lure and (card_ids is None or t.card_id in card_ids)
+def lure_catch_dates(db: Session, trap: Trap, card_ids: set[int] | None = None, sure_only: bool = False,
+                     season: int | None = None) -> list[date]:
+    """Local date of each catch of the trap's lure species, one entry per insect: the lure in the trap
+    when it was caught (its liner's), so catches from before a lure change keep their meaning. `sure_only`
+    leaves out catches whose species is still the model's unsure guess (waiting in the review queue);
+    `season` keeps only catches from that calendar year."""
+    lure_of = {c.id: c.lure or trap.lure for c in db.scalars(select(Card).where(Card.trap_id == trap.id))}
+    return sorted(d for t in counted_tracks(db, trap.id)
+                  if t.label == trap.lure == lure_of[t.card_id] and (card_ids is None or t.card_id in card_ids)
                   and (not sure_only or t.reviewed or t.review_status == "auto")
+                  for d in [local_date(t.first_seen_at)] if season is None or d.year == season
                   for _ in range(t.n_insects))
 
 
@@ -291,18 +330,24 @@ def phenology_status(db: Session, trap: Trap) -> dict | None:
     model = phenology.MODELS.get(trap.lure)
     if model is None:
         return None
-    catch_dates = lure_catch_dates(db, trap)
-    biofix = phenology.sustained_biofix(catch_dates)
-    days, source = weather_days(db, trap.id)
     today = local_date(utcnow())
-    out = {"model": model, "biofix": biofix, "catches": len(catch_dates), "weather_source": source}
+    # A biofix belongs to one season: last year's catches must not start this year's clock.
+    catch_dates = lure_catch_dates(db, trap, season=today.year)
+    auto = phenology.sustained_biofix(catch_dates)
+    # A person's date wins (one false catch can start the clock early), for the season it was set in.
+    by_person = trap.biofix_date if trap.biofix_date and trap.biofix_date.year == today.year else None
+    biofix = by_person or auto
+    days, source = weather_days(db, trap.id)
+    out = {"model": model, "biofix": biofix, "biofix_auto": auto, "biofix_set": by_person is not None,
+           "catches": len(catch_dates), "weather_source": source}
     # The biofix starts the season's clock, so say when it rests on catches nobody has confirmed.
-    sure = lure_catch_dates(db, trap, sure_only=True)
+    sure = lure_catch_dates(db, trap, sure_only=True, season=today.year)
     out["unsure_catches"] = len(catch_dates) - len(sure)
     out["biofix_sure"] = phenology.sustained_biofix(sure)
     if biofix:
         dd, missing = phenology.cumulative_dd(days, biofix, today, model.base_f)
         out.update(dd=dd, missing_days=missing, next=phenology.next_milestone(model, dd))
+    out["outlook"] = phenology.outlook(model, biofix, out.get("dd"), days, today)
     if trap.lure == "OFM":
         jan1 = date(today.year, 1, 1)
         out["dd_jan1"], out["missing_jan1"] = phenology.cumulative_dd(days, jan1, today, model.base_f)

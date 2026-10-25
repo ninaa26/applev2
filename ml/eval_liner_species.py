@@ -31,7 +31,6 @@ from collections import Counter
 from pathlib import Path
 
 import numpy as np
-
 from train_v1 import embeddings, load_rows, softmax
 
 AUTO, REVIEW = 0.80, 0.50  # server/sentinel_server/pipeline/track.py

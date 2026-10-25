@@ -82,7 +82,7 @@ worked. **Not ours** = about light traps, other hardware or other pests. **Open*
 | Resolution sets the taxonomic ceiling | Done | `evaluate` reports px/mm and the OFM's length in px against the 50 px minimum |
 | Report results by object size | Done | Recall and species accuracy in four size bins |
 | Glare and landing surface | Done / Open 4 | Glare measured per photo, `glare` event over 2% |
-| Unusable frames | Done | Blurred or mis-scaled photos are left out and counted in the report |
+| Unusable frames | Done | Too-dark, blurred or mis-scaled photos are left out and counted in the report |
 | Decay after ~72 h | Done | Species vote only from a moth's first 72 hours; confirmed moths stay counted when later missed |
 | Non-insect objects | Done | Off-card boxes dropped; lure mask; `debris` class; false moths reported by cause |
 | Background colour, discolouring | Open 13 | Card colour logged per photo |

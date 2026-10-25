@@ -5,14 +5,13 @@ from __future__ import annotations
 import logging
 import math
 import time
-from pathlib import Path
 
 import cv2
 from PIL import Image
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .. import services
+from .. import services, weather
 from ..db import session_scope
 from ..models import Capture, Card, Detection, Event, Track, Trap, utcnow
 from ..settings import get_settings
@@ -24,6 +23,7 @@ log = logging.getLogger(__name__)
 
 SCALE_TOLERANCE = 0.20  # a photo whose px/mm is further than this from the liner's other photos is not trusted
 BLURRED_BELOW = 0.4     # ... or whose sharpness is under this share of theirs (repeat shots vary by ~30%)
+DARK_BELOW = 40         # ... or whose card's median grey level (0-255) is under this: a night frame
 GLARE_WARN = 0.02       # share of the card blown out to white that raises a "glare" event
 
 
@@ -32,6 +32,16 @@ def moon_illumination(when) -> float:
     since moonlight changes how many moths fly."""
     days = (when - type(when)(2000, 1, 6, 18, 14)).total_seconds() / 86400
     return round((1 - math.cos(2 * math.pi * (days % 29.530588853) / 29.530588853)) / 2, 2)
+
+
+def dark_problem(brightness: float) -> str | None:
+    """Why this photo is too dark to use, or None. A fixed bar, unlike sharpness: nothing on the card can be
+    seen at all below it. T2's night frames (ESP32, Oct 2026) read 17-23 and every lit photo 80 or more. A
+    grid read off such a frame is noise, and one that happened to land near the right scale let a black
+    photo through as "0 insects"."""
+    if brightness < DARK_BELOW:
+        return f"too dark: the card's brightness is {brightness:.0f} of 255 (needs {DARK_BELOW})"
+    return None
 
 
 def blur_problem(earlier: list[float], now: float) -> str | None:
@@ -45,12 +55,23 @@ def blur_problem(earlier: list[float], now: float) -> str | None:
     return None
 
 
-def scale_problem(earlier: list[float], now: float | None) -> str | None:
+def scale_problem(earlier: list[float], now: float | None, camera: float | None = None) -> str | None:
     """Why this photo's scale can't be right, or None. The camera and liner don't move, so every photo of
     a liner has the same px/mm; one that reads differently (or shows no grid at all, when the others did)
     is blurred, mis-exposed, knocked, or had its grid misread, and its boxes would be sized wrongly. Such a
-    photo is left out rather than allowed to drop real insects and add false ones. A new liner starts afresh,
-    so a camera that really was changed is believed from the next liner on."""
+    photo is left out rather than allowed to drop real insects and add false ones.
+
+    `camera` is the trap's measured px/mm (Trap.px_per_mm). With it, every photo is checked against the
+    camera, from a liner's first photo on. Without it, photos are checked against the liner's others, so
+    the first ones set the scale: if they misread the grid (T2, Oct 2026: a third of the true scale), every
+    right reading after them is rejected. A new liner starts afresh, so a camera that really was changed is
+    believed from the next liner on."""
+    if camera:
+        if now is None:
+            return f"no liner grid found (the camera reads {camera:.1f} px/mm)"
+        if abs(now / camera - 1) > SCALE_TOLERANCE:
+            return f"scale reads {now:.1f} px/mm, the camera reads {camera:.1f}"
+        return None
     if len(earlier) < 2:  # one photo is not enough to say which of two is the odd one
         return None
     usual = sorted(earlier)[len(earlier) // 2]
@@ -71,33 +92,59 @@ class Pipeline:
     def version(self) -> str:
         return f"{self.detector.version}+{self.classifier.version}"
 
-    def process(self, db: Session, cap: Capture, check_liner: bool = True) -> None:
+    def _detect(self, db: Session, cap: Capture) -> dict:
+        """Detection and the photo checks' measurements. Reads only."""
         trap = db.get(Trap, cap.trap_id)
         path = get_settings().media_dir / cap.image_path
         boxes = self.detector.detect(path, key=(cap.trap_id, cap.card_id))
-        info = getattr(self.detector, "last", {})
-        before = [c.meta or {} for c in db.scalars(select(Capture).where(
-            Capture.card_id == cap.card_id, Capture.status == "processed", Capture.id != cap.id))]
+        info = dict(getattr(self.detector, "last", {}))
         bgr = cv2.imread(str(path))
         quality = photo_quality(bgr, info["card"] if "card" in info else card_outline(bgr))
+        with Image.open(path) as img:
+            w, h = img.size
+        boxes = [b for b in boxes if not in_mask(b, trap.mask, w, h)]
+        return {"path": path, "boxes": boxes, "info": info, "quality": quality, "size": (w, h), "probs": None}
+
+    def _classify(self, found: dict) -> list:
+        with Image.open(found["path"]) as img:
+            return self.classifier.classify([crop(img, b) for b in found["boxes"]])
+
+    def analyse(self, db: Session, cap: Capture) -> dict:
+        """Detection and classification, the slow part, ahead of process(). Reads only, so it can run
+        without holding the database's write lock."""
+        found = self._detect(db, cap)
+        found["probs"] = self._classify(found)
+        return found
+
+    def process(self, db: Session, cap: Capture, check_liner: bool = True, found: dict | None = None) -> None:
+        """`found` is analyse()'s result for this photo, if it was run ahead."""
+        found = found or self._detect(db, cap)
+        boxes, info, quality = found["boxes"], found["info"], found["quality"]
+        before = [c.meta or {} for c in db.scalars(select(Capture).where(
+            Capture.card_id == cap.card_id, Capture.status == "processed", Capture.id != cap.id))]
         problem = blur_problem([m["sharpness"] for m in before if m.get("sharpness")], quality["sharpness"])
         ppm = None
         if info.get("grid") is not None:  # detectors that measure the liner's grid
             ppm = float(info["px_per_mm"]) if info["grid"].score > 0 and info.get("px_per_mm") else None
-            problem = scale_problem([m["px_per_mm"] for m in before if m.get("px_per_mm")], ppm) or problem
+            scale = scale_problem([m["px_per_mm"] for m in before if m.get("px_per_mm")], ppm,
+                                  db.get(Trap, cap.trap_id).px_per_mm)
+            if scale and getattr(info["grid"], "fraction", 1) > 1:  # the lead on the ⅓-scale misreads (L-01)
+                scale += f" (grid spacing taken as 1/{info['grid'].fraction} of a measured one)"
+            problem = scale or problem
+        problem = dark_problem(quality["brightness"]) or problem  # the plainest reason, ahead of what it causes
         if problem:
             log.warning("capture %s left out: %s", cap.id, problem)
             cap.status, cap.processed_at, cap.model_version = "failed", utcnow(), self.version
             cap.error = f"photo not used: {problem}"
             return
-        with Image.open(path) as img:
-            w, h = img.size
-            boxes = [b for b in boxes if not in_mask(b, trap.mask, w, h)]
-            probs = self.classifier.classify([crop(img, b) for b in boxes])
+        w, h = found["size"]
+        probs = found["probs"] if found["probs"] is not None else self._classify(found)
 
         # Writes from here on. Nothing above may change the session: the first query after a change
         # autoflushes it and takes SQLite's write lock, and uploads would then wait out the busy timeout
         # while the classifier (minutes for a cluttered photo on the Pi's CPU) runs.
+        if check_liner:  # first: it can move this photo back onto the liner before, which its age is counted on
+            _keep_liner_if_unchanged(db, cap, [trk.Rect(b.x1, b.y1, b.x2, b.y2) for b in boxes])
         card = db.get(Card, cap.card_id)
         liner_days = round((cap.captured_at - card.installed_at).total_seconds() / 86400, 1)
         cap.meta = {**(cap.meta or {}), **quality, **({"px_per_mm": round(ppm, 2)} if ppm else {}),
@@ -107,8 +154,6 @@ class Pipeline:
         if liner_days > get_settings().liner_max_days:
             _event_once(db, cap, "card_old", {"days": liner_days})
         cap.width, cap.height = w, h
-        if check_liner:
-            _keep_liner_if_unchanged(db, cap, [trk.Rect(b.x1, b.y1, b.x2, b.y2) for b in boxes])
 
         # Tracks on this card that are still alive.
         live = list(
@@ -158,7 +203,8 @@ class Pipeline:
             ))
 
         for t in live:
-            if t.id not in seen_tracks:
+            # A photo from before it landed (a reprocess replays them all) isn't a miss.
+            if t.id not in seen_tracks and cap.captured_at >= t.first_seen_at:
                 t.misses += 1
                 if t.status == "candidate" and t.misses >= trk.DROP_CANDIDATE_AFTER:
                     t.status = "dropped"
@@ -167,8 +213,10 @@ class Pipeline:
         _card_full_check(db, cap, len(boxes))
 
     def reprocess_card(self, db: Session, card_id: int) -> int:
-        """Re-run every photo of a card from scratch (e.g. after a model upgrade)."""
+        """Re-run every photo of a card from scratch (e.g. after a model upgrade). Every photo is detected and
+        classified before anything is written, so uploads aren't locked out for the whole liner."""
         caps = list(db.scalars(select(Capture).where(Capture.card_id == card_id).order_by(Capture.captured_at)))
+        found = {c.id: self.analyse(db, c) for c in caps}
         for c in caps:  # detections first: they reference the tracks
             for d in list(c.detections):
                 db.delete(d)
@@ -177,9 +225,11 @@ class Pipeline:
         for t in db.scalars(select(Track).where(Track.card_id == card_id)):
             if not t.reviewed:  # people's labels and rejections are kept (and reviews point at them)
                 db.delete(t)
+            else:  # ... and replayed from scratch like the rest, not counted on top of the first run
+                t.n_seen, t.misses, t.prob_sum, t.n_classified = 0, 0, {}, 0
         db.flush()
         for c in caps:
-            self.process(db, c, check_liner=False)  # which liner each photo is on was settled the first time
+            self.process(db, c, check_liner=False, found=found[c.id])  # which liner each photo is on was settled the first time
             db.flush()
         return len(caps)
 
@@ -243,23 +293,66 @@ def process_pending(pipeline: Pipeline, limit: int = 10) -> int:
     with session_scope() as db:
         ids = list(db.scalars(select(Capture.id).where(Capture.status == "new").order_by(Capture.captured_at).limit(limit)))
     for cid in ids:
-        with session_scope() as db:
-            cap = db.get(Capture, cid)
-            try:
-                pipeline.process(db, cap)
-            except Exception as e:  # keep the worker alive; the capture shows the error on the dashboard
-                log.exception("capture %s failed", cid)
-                db.rollback()
+        # Saving can fail too (e.g. "database is locked"), not only processing: either way the capture is
+        # marked failed in a fresh session, so the worker moves on and the dashboard shows the error.
+        try:
+            with session_scope() as db:
                 cap = db.get(Capture, cid)
-                cap.status, cap.error = "failed", f"{e.__class__.__name__}: {e}"
+                if cap is not None and cap.status == "new":
+                    _process_in_order(pipeline, db, cap)
+        except Exception as e:
+            log.exception("capture %s failed", cid)
+            try:
+                with session_scope() as db:
+                    cap = db.get(Capture, cid)
+                    if cap is not None:
+                        cap.status, cap.error = "failed", f"{e.__class__.__name__}: {e}"[:2000]
+            except Exception:
+                log.exception("could not mark capture %s failed", cid)
         done += 1
     return done
+
+
+def _process_in_order(pipeline: Pipeline, db: Session, cap: Capture) -> None:
+    """Tracking assumes a liner's photos come in the order they were taken. A photo that arrives after a later
+    one was already processed (it sat in a trap's or hub's queue) has its whole liner re-run in order."""
+    later = db.scalar(select(Capture.id).where(
+        Capture.card_id == cap.card_id, Capture.id != cap.id, Capture.status == "processed",
+        Capture.captured_at > cap.captured_at).limit(1))
+    if later is None:
+        pipeline.process(db, cap)
+    else:
+        log.info("capture %s arrived after later photos of liner %s: re-running the liner", cap.id, cap.card_id)
+        pipeline.reprocess_card(db, cap.card_id)
+
+
+WEATHER_EVERY_S = 600  # how often photos without a sensor reading are looked up (they come in a few a day)
+
+
+def fill_weather() -> int:
+    """Weather-service temperature and humidity for photos with no sensor reading (see weather.py)."""
+    try:
+        with session_scope() as db:
+            return weather.fill(db)
+    except Exception:
+        log.exception("weather lookup failed")
+        return 0
 
 
 def run_forever(stop_flag=None) -> None:
     pipeline = Pipeline()
     log.info("worker started (%s)", pipeline.version)
     poll = get_settings().worker_poll_s
+    weather_at = 0.0
     while not (stop_flag and stop_flag.is_set()):
-        if process_pending(pipeline) == 0:
+        if time.monotonic() - weather_at >= WEATHER_EVERY_S:
+            weather_at = time.monotonic()
+            if n := fill_weather():
+                log.info("weather filled in for %d photos", n)
+        try:
+            busy = process_pending(pipeline) > 0
+        except Exception:  # e.g. the database is unreachable: try again rather than end the thread
+            log.exception("worker pass failed")
+            busy = False
+        if not busy:
             time.sleep(poll)

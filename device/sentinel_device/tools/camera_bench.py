@@ -30,7 +30,7 @@ import json
 import platform
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
@@ -256,7 +256,7 @@ def main(argv: list[str] | None = None) -> int:
         image = args.image
     liner = tuple(float(v) for v in args.liner.lower().split("x"))
     result = {"camera": args.camera, "tag": args.tag, "distance_mm": args.distance_mm,
-              "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+              "at": datetime.now(UTC).isoformat(timespec="seconds"),
               "capture": capture, "score": score(image, liner)}
     (folder / f"{args.tag}.json").write_text(json.dumps(result, indent=2))
     print(json.dumps(result["score"], indent=2))

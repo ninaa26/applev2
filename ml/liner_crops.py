@@ -45,9 +45,8 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-from PIL import Image
-
 from build_dataset import CLASS_OF
+from PIL import Image
 
 FIELDS = ["path", "label", "set", "photo", "group", "split", "ppm", "length_mm"]
 # Photo-name prefixes of the held-out liners and cards (a liner's other days go with it).
@@ -80,7 +79,6 @@ def cm_card_rows(data: Path, grid_mm: float) -> list[dict]:
     if not root.exists():
         return []
     import cv2
-
     from crop_field_cards import server_crop
     from eval_detector_roboflow import grid_px_per_mm, load_coco
 
@@ -161,7 +159,7 @@ def ptm_liner_rows(data: Path, per_photo: int) -> list[dict]:
                 server_crop(img, [int(x), int(y), int(x + w), int(y + h)]).save(dest, quality=92)
             out.append({"set": "ptm-liners", "photo": im["file_name"], "crop": str(dest), "label": "other_moth",
                         "group": stem, "src_ppm": 7.0, "length_mm": "",  # the set's median; per-photo grids misread
-                        "held_out": int(hashlib.sha1(stem.encode()).hexdigest()[:8], 16) % 4 == 0})
+                        "held_out": int(hashlib.sha1(stem.encode(), usedforsecurity=False).hexdigest()[:8], 16) % 4 == 0})
     return out
 
 

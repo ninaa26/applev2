@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 from sqlalchemy import JSON, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -25,7 +25,7 @@ NOT_CATCHES = {"other_insect", "debris"}  # kept on the liner record, left out o
 
 
 def utcnow() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 class Trap(Base):
@@ -41,6 +41,10 @@ class Trap(Base):
     device_config: Mapped[dict] = mapped_column(JSON, default=dict)
     # Areas to ignore, as [x1, y1, x2, y2] fractions of the image (the lure spot).
     mask: Mapped[list] = mapped_column(JSON, default=lambda: [[0.45, 0.46, 0.55, 0.54]])
+    # The camera's measured scale at the card centre (px/mm on the straightened photo), e.g. 10.3 for the
+    # 130° OV5640 110 mm over the card at 2048 × 1536. Photos whose grid reads far from it are left out.
+    # None: each liner's photos are checked against each other instead.
+    px_per_mm: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     # "esp32" is an ESP32 camera that uploads through hub_id's gateway; "hub" is a Pi with no camera that
     # only relays ESP32 photos; "pi" is a Pi camera trap that uploads by itself (and can also be a hub)
@@ -48,9 +52,19 @@ class Trap(Base):
     hub_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     # Last time the device used its key (a hub asks for its camera list every minute or so).
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # "Take a photo now" from the dashboard (ESP32 cameras): the hub passes it on at the camera's next
+    # check-in, and it is cleared when a photo taken after it arrives.
+    photo_requested_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # Taken out of the orchard from the dashboard: hidden, and its key stops working. Photos are kept.
     retired_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    cards: Mapped[list["Card"]] = relationship(back_populates="trap", order_by="Card.installed_at")
+    # Biofix confirmed or set by a person on the trap page, in place of the one from the catches. It counts
+    # for its own season only.
+    biofix_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # ESP32 cameras: the firmware version its photos last reported, and the one picked on the dashboard for it
+    # to install. Its hub offers the target at each contact until the camera reports running it.
+    firmware_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    firmware_target: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    cards: Mapped[list[Card]] = relationship(back_populates="trap", order_by="Card.installed_at")
 
 
 class Card(Base):
@@ -62,6 +76,9 @@ class Card(Base):
     installed_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     removed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     note: Mapped[str] = mapped_column(String(200), default="")
+    # The lure in the trap while this liner was in: its catches are read against it, so changing a trap's
+    # lure doesn't reinterpret earlier liners. None only on a liner made outside start_new_card.
+    lure: Mapped[str | None] = mapped_column(String(16), nullable=True)
     trap: Mapped[Trap] = relationship(back_populates="cards")
 
 
@@ -86,7 +103,7 @@ class Capture(Base):
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     processed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     model_version: Mapped[str | None] = mapped_column(String(80), nullable=True)
-    detections: Mapped[list["Detection"]] = relationship(back_populates="capture", cascade="all, delete-orphan")
+    detections: Mapped[list[Detection]] = relationship(back_populates="capture", cascade="all, delete-orphan")
 
 
 class Track(Base):
@@ -175,3 +192,41 @@ class Event(Base):
     kind: Mapped[str] = mapped_column(String(40))
     payload: Mapped[dict] = mapped_column(JSON, default=dict)
     at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class Firmware(Base):
+    """An ESP32 camera firmware build (a release build: no trap id or key in it), uploaded on the dashboard.
+    The file is data_dir/firmware/<version>.bin. The version is read from the file itself."""
+
+    __tablename__ = "firmware"
+    version: Mapped[str] = mapped_column(String(32), primary_key=True)
+    size: Mapped[int] = mapped_column(Integer)
+    md5: Mapped[str] = mapped_column(String(32))
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    note: Mapped[str] = mapped_column(String(200), default="")
+
+
+class PendingCamera(Base):
+    """An ESP32 with no trap id or key yet that asked a hub to be added (pairing). It shows on Set up traps;
+    when it is added there, its new key waits here until the hub has handed it to the camera."""
+
+    __tablename__ = "pending_cameras"
+    code: Mapped[str] = mapped_column(String(12), primary_key=True)  # last 6 hex digits of its MAC, on its sticker
+    hub_id: Mapped[str] = mapped_column(String(32))
+    fw: Mapped[str] = mapped_column(String(32), default="")
+    rssi: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    trap_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    api_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
+class HubClaim(Base):
+    """A hub added on the dashboard with the pairing code from its sticker. The hub asks with that code
+    and gets its trap id and key; the row goes once the hub has used the key."""
+
+    __tablename__ = "hub_claims"
+    code: Mapped[str] = mapped_column(String(16), primary_key=True)
+    trap_id: Mapped[str] = mapped_column(String(32))
+    api_key: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
