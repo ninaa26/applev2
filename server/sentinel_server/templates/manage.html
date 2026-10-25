@@ -54,7 +54,7 @@ server_url = "{{ server_url }}"</pre>
     <label id="lure-field">Lure
       <select name="lure">{% for sp in PESTS %}<option value="{{ sp }}">{{ SPECIES_LABELS[sp] }} ({{ sp }})</option>{% endfor %}</select></label>
     <div id="loc-field" class="wide">
-      <p class="muted small">Where it is: its cameras' photos get the temperature and humidity from a weather service there. Optional, and it can be set later on its page.</p>
+      <p class="muted small">Where it is: its cameras' photos get the temperature and humidity from the nearest National Weather Service station. Optional, and it can be set later on its page.</p>
       {{ location_fields() }}
     </div>
     <div><button class="primary" type="submit">Add</button></div>

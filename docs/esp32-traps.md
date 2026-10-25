@@ -25,10 +25,15 @@ ESP32 trap T4 ─┘  or the fieldhouse Wi-Fi)        gateway.py, always on:    
   it are left out, from a liner's first photo on.
   The ESP32s have no temperature or humidity sensor, so give the hub its location (on **Set up traps**
   when adding it, on the hub's page later, or `sentinel-server set-location T1 42.4534 -76.4735`): the
-  server's worker then looks up the air temperature and humidity at the hour of each of its cameras'
-  photos from Open-Meteo (free, no key; every 10 min, photos up to 60 days old; `sentinel-server
-  fill-weather` does it at once). They show on the photo's page marked as from the weather service, and
-  are kept apart from a sensor's readings (`meta["weather"]`), so they do not feed the degree days.
+  server's worker then takes the air temperature and humidity for each of its cameras' photos from the
+  nearest National Weather Service station ([api.weather.gov](https://www.weather.gov/documentation/services-web-api):
+  free, no key, US only), the observation nearest the photo's time and within 90 min, trying the next
+  nearest of 3 stations when one has a gap (KITH, the Ithaca airport, had none on Oct 22 2026). It runs
+  every 10 min; `sentinel-server fill-weather` does it at once. The service keeps only about a week of
+  observations, so photos older than 7 days can't be filled. The readings show on the photo's page with
+  the station they came from, and are kept apart from a sensor's (`meta["weather"]`), so they do not feed
+  the degree days. The town search on the location form uses Open-Meteo's place search, since the
+  weather service has none.
 - **Hub:** `sentinel_device/gateway.py`, run always on by `systemd/sentinel-gateway.service`. Every 30 s
   it asks the server which ESP32 traps are its own (`GET /api/v1/hub/nodes`: their ids and key hashes,
   cached for when the server can't be reached), so the hub needs no change when cameras are added or

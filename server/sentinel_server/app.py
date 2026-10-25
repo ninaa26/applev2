@@ -413,6 +413,7 @@ def create_app(start_worker: bool = False) -> FastAPI:
         trap = db.get(Trap, cap.trap_id)
         return templates.TemplateResponse(request, "capture.html", {
             "cap": cap, "tracks": tracks, "trap": trap, "located": weather.location(db, trap) is not None,
+            "wx_pending": cap.captured_at >= utcnow() - weather.LOOK_BACK,
             "hub": db.get(Trap, trap.hub_id) if trap.hub_id else None,
         })
 

@@ -1,4 +1,4 @@
-"""A hub's location, and the weather service's temperature and humidity on its ESP32 cameras' photos."""
+"""A hub's location, and the National Weather Service's temperature and humidity on its ESP32 cameras' photos."""
 import json
 from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, urlparse
@@ -13,17 +13,29 @@ from sentinel_server.models import Capture, Trap
 from test_manage import _add, _upload
 
 
-def _fake_service(monkeypatch, temp_c=11.5, rh=64.0):
-    """Open-Meteo's reply: every hour of the days asked for. Records the requests."""
+def _fake_service(monkeypatch, temp_c=11.5, rh=64.0, gaps=()):
+    """api.weather.gov's replies: two stations, listed farthest first (as the service may), each reporting
+    every hour at :56 except those in `gaps`. Records the requests."""
+    monkeypatch.setattr(weather, "_stations", {})
     asked = []
 
     def get_json(url):
-        q = parse_qs(urlparse(url).query)
-        asked.append(q)
-        day = datetime.fromisoformat(q["start_date"][0])
-        hours = [day + timedelta(hours=i) for i in range(24 * 3)]
-        return {"hourly": {"time": [h.strftime("%Y-%m-%dT%H:%M") for h in hours],
-                           "temperature_2m": [temp_c] * len(hours), "relative_humidity_2m": [rh] * len(hours)}}
+        asked.append(url)
+        u = urlparse(url)
+        if u.path.startswith("/points/"):
+            return {"properties": {"observationStations": f"{weather.API}/gridpoints/BGM/45,71/stations"}}
+        if u.path.endswith("/stations"):
+            return {"features": [
+                {"properties": {"stationIdentifier": "KFAR", "name": "Far Field"}, "geometry": {"coordinates": [-76.2, 42.6]}},
+                {"properties": {"stationIdentifier": "KNEAR", "name": "Near Airport"}, "geometry": {"coordinates": [-76.46, 42.49]}}]}
+        station = u.path.split("/")[2]
+        q = parse_qs(u.query)
+        start = datetime.fromisoformat(q["start"][0].rstrip("Z")).replace(minute=56, second=0)
+        end = datetime.fromisoformat(q["end"][0].rstrip("Z"))
+        hours = [] if station in gaps else [start + timedelta(hours=i) for i in range(int((end - start).total_seconds() // 3600) + 1)]
+        return {"features": [{"properties": {"timestamp": h.strftime("%Y-%m-%dT%H:%M:%S+00:00"),
+                                             "temperature": {"value": temp_c}, "relativeHumidity": {"value": rh}}}
+                             for h in hours]}
 
     monkeypatch.setattr(weather, "_get_json", get_json)
     return asked
@@ -62,13 +74,13 @@ def test_photos_without_a_sensor_get_the_weather_at_their_hub(monkeypatch):
         client.post("/traps/T1/location", data={"lat": "42.45", "lon": "-76.47"})
         with session_scope() as db:
             assert weather.fill(db) == 1
-        assert asked[0]["latitude"] == ["42.45"]
+        assert asked[0].endswith("/points/42.4500,-76.4700")
         with session_scope() as db:
             cap = db.get(Capture, cap_id)
             assert cap.temp_c is None and cap.meta["weather"]["temp_c"] == 11.5  # never taken for a sensor
             assert weather.fill(db) == 0  # done once
         page = client.get(f"/captures/{cap_id}").text
-        assert "11.5 °C" in page and "64%" in page and "Open-Meteo" in page
+        assert "11.5 °C" in page and "64%" in page and "KNEAR (Near Airport, 4 km away)" in page
 
 
 def test_a_sensor_reading_is_kept_and_not_looked_up(monkeypatch):
@@ -84,7 +96,7 @@ def test_a_sensor_reading_is_kept_and_not_looked_up(monkeypatch):
             assert weather.fill(db) == 0 and asked == []
             cap_id = db.query(Capture).one().id
         page = client.get(f"/captures/{cap_id}").text
-        assert "20.0 °C" in page and "Open-Meteo" not in page
+        assert "20.0 °C" in page and "Weather Service" not in page
 
 
 def test_service_down_leaves_the_photo_for_next_time(monkeypatch):
@@ -101,3 +113,18 @@ def test_service_down_leaves_the_photo_for_next_time(monkeypatch):
         _fake_service(monkeypatch)
         with session_scope() as db:
             assert weather.fill(db) == 1
+
+
+def test_a_station_with_a_gap_falls_back_to_the_next_nearest(monkeypatch):
+    _fake_service(monkeypatch, gaps={"KNEAR"})
+    with TestClient(create_app()) as client:
+        _add(client, trap_id="T1", kind="hub", lat="42.45", lon="-76.47")
+        _, key = _add(client, trap_id="T2", kind="esp32", hub_id="T1")
+        _upload(client, key, "T2", "a1", datetime.now(timezone.utc) - timedelta(hours=2))
+        _upload(client, key, "T2", "old", datetime.now(timezone.utc) - timedelta(days=8))
+        with session_scope() as db:
+            assert weather.fill(db) == 1  # the week-old photo is past what the service keeps
+            cap = db.query(Capture).filter_by(uid="a1").one()
+            assert cap.meta["weather"]["station"] == "KFAR"
+            old_id = db.query(Capture).filter_by(uid="old").one().id
+        assert "no National Weather Service station reported" in client.get(f"/captures/{old_id}").text
