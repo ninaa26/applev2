@@ -9,7 +9,7 @@ DataCamp's Python backend tutorial, and three dev.to articles (repository practi
 securing code). Round 10 (Oct 25): [PR #60](https://github.com/ninaa26/applev2/pull/60) landed
 items 1, 2, 6 and 11 and was checked; this branch did items 4, 7, 8 (rate limiting), 14
 (`SECURITY.md`), 15 and 16. Round 11 (Oct 25): dismissed the CodeQL alerts and set the
-GitHub settings for items 10, 14 and 17.
+GitHub settings for items 10, 14 and 17. Round 12: checked Dependabot PRs #61–#63 (item 6).
 
 ## Already in place
 
@@ -94,6 +94,10 @@ GitHub settings for items 10, 14 and 17.
 6. **Automate dependency and security updates.** Add `.github/dependabot.yml` for pip and GitHub
    Actions, and optionally run `pip-audit` in CI. GitHub's `actions/dependency-review-action` can also
    flag a PR that adds a dependency with a known vulnerability.
+   The first three Dependabot PRs (Oct 25) were checked: #61 moves CI to `actions/checkout@v7` and
+   `setup-uv@v7`; #62 (uvicorn) and #63 (psycopg) only raise the minimum in `pyproject.toml` to the
+   version `uv.lock` already had, so nothing installed changes. They also rewrite `uv.lock` in uv's
+   newer format (`revision = 5`), which the team's uv 0.12.10 reads fine.
 7. **Pre-commit hooks**: a `.pre-commit-config.yaml` running ruff plus a check for large files, so
    photos or `.pt` files can't slip into a commit.
 8. **Require authentication on anything exposed.** `SENTINEL_DASHBOARD_PASSWORD` is optional.
