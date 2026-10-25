@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import re
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
@@ -59,17 +60,38 @@ def location(db: Session, trap: Trap) -> tuple[float, float] | None:
     return None
 
 
+def _coord(text: str) -> float:
+    """"-76.4712", "76.4712 W" or "76.4712°W": the hemisphere letter signs it (S and W are negative)."""
+    m = re.fullmatch(r"\s*([-+]?\d+(?:\.\d+)?)\s*°?\s*([NSEWnsew])?\s*", text)
+    if m is None:
+        raise ValueError(text)
+    v = float(m.group(1))
+    return -abs(v) if m.group(2) and m.group(2).upper() in "SW" else v
+
+
 def parse_location(lat: str, lon: str) -> tuple[float | None, float | None]:
     """Form fields to (lat, lon); both empty is no location. Raises ValueError on anything else."""
     if not lat.strip() and not lon.strip():
         return None, None
     try:
-        la, lo = float(lat), float(lon)
+        la, lo = _coord(lat), _coord(lon)
     except ValueError:
-        raise ValueError("location: give both latitude and longitude as numbers, e.g. 42.45 and -76.48")
+        raise ValueError("location: give both latitude and longitude as numbers, e.g. 42.4459 and -76.4712")
     if not (-90 <= la <= 90 and -180 <= lo <= 180):
         raise ValueError("location: latitude is -90 to 90 and longitude -180 to 180")
     return round(la, 4), round(lo, 4)
+
+
+def forget(db: Session, trap: Trap) -> int:
+    """The trap (or hub) moved: drop the weather looked up for its photos and its cameras' at the old
+    location, so the next pass looks it up again at the new one. Returns how many photos were dropped."""
+    ids = [trap.id] + list(db.scalars(select(Trap.id).where(Trap.hub_id == trap.id, Trap.lat.is_(None))))
+    n = 0
+    for c in db.scalars(select(Capture).where(Capture.trap_id.in_(ids), Capture.captured_at >= utcnow() - LOOK_BACK)):
+        if "weather" in (c.meta or {}):
+            c.meta = {k: v for k, v in c.meta.items() if k != "weather"}
+            n += 1
+    return n
 
 
 def _get_json(url: str) -> dict:

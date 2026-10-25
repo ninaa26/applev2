@@ -233,7 +233,7 @@ def cmd_import_weather(args) -> int:
 
 
 def cmd_set_location(args) -> int:
-    from .weather import parse_location
+    from .weather import forget, parse_location
 
     init_db()
     with session_scope() as db:
@@ -243,12 +243,17 @@ def cmd_set_location(args) -> int:
             return 1
         if args.none:
             trap.lat, trap.lon = None, None
+            forget(db, trap)
         elif args.lat is not None:
             try:
-                trap.lat, trap.lon = parse_location(args.lat, args.lon or "")
+                where = parse_location(args.lat, args.lon or "")
             except ValueError as e:
                 print(e, file=sys.stderr)
                 return 1
+            if where != (trap.lat, trap.lon):
+                trap.lat, trap.lon = where
+                n = forget(db, trap)
+                print(f"{n} photos' weather is looked up again at the new location")
         print(f"{trap.id} location: {f'{trap.lat}, {trap.lon}' if trap.lat is not None else 'not set'}")
     return 0
 
