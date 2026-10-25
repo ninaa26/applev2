@@ -2,7 +2,7 @@ import json
 import socket
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -12,7 +12,7 @@ from sentinel_device import config as config_mod, gateway, uploader
 
 JPEG = b"\xff\xd8" + b"\x00" * 100 + b"\xff\xd9"
 # 2026-10-05 19:31:30 in New York: the hub's 19:30 slot opened 90 s ago
-NOW = datetime(2026, 10, 5, 23, 31, 30, tzinfo=timezone.utc).timestamp()
+NOW = datetime(2026, 10, 5, 23, 31, 30, tzinfo=UTC).timestamp()
 
 
 def _gw(tmp_path: Path, port: int = 0, **hub) -> gateway.Gateway:

@@ -48,7 +48,7 @@ def score_image(path: Path) -> dict[str, float]:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--config", type=Path, default=None)
-    ap.add_argument("--out", type=Path, default=Path("/tmp/focus_sweep"))
+    ap.add_argument("--out", type=Path, default=Path("/tmp/focus_sweep"))  # noqa: S108 (bench tool output)
     ap.add_argument("--start", type=float, default=3.0, help="dioptres (1/m); 3 = 33 cm")
     ap.add_argument("--stop", type=float, default=12.0, help="dioptres; 12 = 8 cm")
     ap.add_argument("--step", type=float, default=0.5)

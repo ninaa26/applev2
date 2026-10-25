@@ -23,6 +23,21 @@ ESP32 trap T4 ─┘  or the fieldhouse Wi-Fi)        gateway.py, always on:    
   Once a camera is in its trap, set its measured scale (`sentinel-server set-scale T2 10.3`, the px/mm its
   photos read at the card centre when the grid is found right): photos whose grid reads more than 20% off
   it are left out, from a liner's first photo on.
+  The ESP32s have no temperature or humidity sensor, so give the hub its location (on **Set up traps**
+  when adding it, on the hub's page later, or `sentinel-server set-location T1 42.4534 -76.4735`): the
+  server's worker then takes the air temperature and humidity for each of its cameras' photos from the
+  nearest National Weather Service station ([api.weather.gov](https://www.weather.gov/documentation/services-web-api):
+  free, no key, US only), the observation nearest the photo's time and within 90 min, trying the next
+  nearest of 3 stations when one has a gap (KITH, the Ithaca airport, had none on Oct 22 2026). It runs
+  every 10 min; `sentinel-server fill-weather` does it at once. When none of the 3 has a reading (or the
+  place is outside the US, or the service is down), the photo gets [Open-Meteo](https://open-meteo.com)'s
+  hourly value for the spot instead (free, no key; a weather model, not a measurement), once it is 3 h old
+  so a late station report still wins. The weather service keeps only about a week of observations, so
+  older photos go straight to Open-Meteo; photos older than 60 days aren't looked up. The readings show on the photo's page with
+  the station they came from, and are kept apart from a sensor's (`meta["weather"]`), so they do not feed
+  the degree days. The location form suggests addresses as you type (Photon, OpenStreetMap
+  addresses, free, no key), reads "76.4712° W" as -76.4712, and shows the place the numbers point to.
+  Changing a hub's location looks its cameras' weather up again.
 - **Hub:** `sentinel_device/gateway.py`, run always on by `systemd/sentinel-gateway.service`. Every 30 s
   it asks the server which ESP32 traps are its own (`GET /api/v1/hub/nodes`: their ids and key hashes,
   cached for when the server can't be reached), so the hub needs no change when cameras are added or
@@ -73,17 +88,29 @@ through resets it), so a hub outage doesn't keep Wi-Fi on for 5 min every photo.
 
 ## Setting up a hub
 
-On a Raspberry Pi 4 or 5 (2 GB is plenty) with Raspberry Pi OS:
+On a Raspberry Pi 4 or 5 (2 GB is plenty) with Raspberry Pi OS. There are two ways; the first is for a hub
+that goes to someone else (a grower), the second for one the team sets up itself.
+
+**Prepared for a grower (pairing code).** The team does steps 1–2; the grower only plugs it in and types a code.
 
 1. Network and remote access: get it online (below), install Tailscale (`curl -fsSL https://tailscale.com/install.sh | sh`,
-   then `sudo tailscale up --ssh --hostname <name>`) and log it into the team account.
-2. Dashboard → **Set up traps** → add it as a **Hub (Raspberry Pi, no camera)**. The page shows its
-   `trap_id`, `api_key` and `server_url` **once**.
-3. From the repo's `device/` folder: `sudo ./install-hub.sh`. Paste the three lines into
-   `/etc/sentinel/config.toml` and set `[schedule] times`
-   ([hub.example.toml](../device/hub.example.toml)).
-4. `sudo systemctl enable --now sentinel-gateway`, then `journalctl -u sentinel-gateway -f` should show
-   `gateway listening on 0.0.0.0:8080 for ...`, and the dashboard shows the hub as online within a minute.
+   then `sudo tailscale up --ssh --hostname <name>`) and log it into the team account, so the team can
+   still reach it to fix it once it is in the field.
+2. From the repo's `device/` folder: `sudo ./install-hub.sh` (no arguments). It installs the gateway and
+   prints a **pairing code** such as `K7QM-3XTP9R`: write it on a sticker on the hub. The gateway starts
+   and waits for that code. `server_url` in `/etc/sentinel/config.toml` must be the server
+   (hub.example.toml has `http://apple-pi-server:8000`).
+3. The grower: plug the hub into power and its internet connection, then dashboard → **Set up traps** →
+   **Hub (Raspberry Pi, no camera)**, fill in the **Pairing code** from the sticker, and Add. Within a
+   minute the hub fetches its trap id and key (kept in `/var/lib/sentinel/identity.json`) and shows as online.
+
+**Set up by the team (key on the command line).** Dashboard → **Set up traps** → add it as a Hub with no
+pairing code: the page shows the key once, in a command to run from `device/` on the hub,
+`sudo ./install-hub.sh T1 <key> http://apple-pi-server:8000`. It writes the id, key and server into
+`/etc/sentinel/config.toml` and starts `sentinel-gateway`.
+
+Either way, `journalctl -u sentinel-gateway -f` should show `gateway listening on 0.0.0.0:8080 for ...`.
+The photo times are `[schedule] times` in the config ([hub.example.toml](../device/hub.example.toml)).
 
 To change the schedule: edit `times` in `/etc/sentinel/config.toml` and
 `sudo systemctl restart sentinel-gateway`. Each camera picks up the new times at its next wake.
@@ -123,20 +150,33 @@ or a second hub.
 
 ## Adding and removing ESP32 traps
 
-For each camera:
+**A new camera (pairing, no laptop for the grower).** Firmware 0.3.0 keeps the trap id and key in the
+board's flash, not in the firmware, so a camera can leave the bench with none and be added in the orchard:
 
-1. Dashboard → **Set up traps** → Add: ESP32 camera, its hub, trap id, name, block and lure.
-   The page shows the camera's key **once**, as the two lines for `node_config.h`.
-2. Firmware: `cd device/esp32-node && cp include/node_config.example.h include/node_config.h`. Paste
-   those two lines, fill in the hub's Wi-Fi name and password, `HUB_URL` and the LED pin, and flash it:
-   `pio run -t upload` ([esp32-node/README.md](../device/esp32-node/README.md)).
-3. Hang it and power it. The hub accepts it within a minute. Powering it on starts **setup mode**: for
-   2 min it streams a live preview, with the LED on, so you can aim it. On a phone on the hub's Wi-Fi,
-   open the hub's page, `http://10.42.0.1:8080/` (or `http://<hub's address>:8080/` on other Wi-Fi), and
-   follow the camera's **live preview** link. It has a full-size photo for checking focus. When the
-   preview ends the camera takes its first photo.
+1. The team, once per board: plug it in and run `device/esp32-node/flash-camera.sh` with no arguments.
+   It wipes the board, flashes the release build and prints the camera's **pairing code** (the last 6
+   hex digits of its MAC, e.g. `7F3A2C`): write it on a sticker on the camera. The first time on a
+   computer it makes `include/node_config.h` from the example and stops: fill in the hub's Wi-Fi name and
+   password, `HUB_URL` and the LED pin, and run it again. Later cameras reuse them. All hubs a camera may
+   join need that same Wi-Fi name and password.
+2. The grower: hang it and switch it on near the hub. It asks the hub to be added every 30 s for 15 min
+   (then every 10 min), and within a minute the dashboard's **Set up traps** shows it under **New cameras
+   waiting**, with its code and signal strength. Fill in the trap id, name, block and lure, and press
+   **Add this camera**. At its next try the hub hands the camera its key, and it starts as if just
+   switched on: setup mode (below), then its first photo.
+3. Setup mode: for 2 min it streams a live preview, with the LED on, so it can be aimed. On a phone on
+   the hub's Wi-Fi, open the hub's page, `http://10.42.0.1:8080/` (or `http://<hub's address>:8080/` on
+   other Wi-Fi), and follow the camera's **live preview** link. It has a full-size photo for checking
+   focus. When the preview ends the camera takes its first photo.
 4. Once it points at its liner, **hold BOOT for 3 s**: another preview, then a photo that starts a fresh
    liner on the server. A short press skips the preview and just starts the fresh liner.
+
+**Holding BOOT for 10 s** makes a camera forget its trap id, key and queued photos and pair again: for
+moving it to another orchard, or after it was removed on the dashboard.
+
+**Set up by hand (a dev build).** Dashboard → **Set up traps** → Add: ESP32 camera, its hub, trap id,
+name, block and lure. The page shows the key once, in `device/esp32-node/flash-camera.sh T3 <key>`, which
+writes the id and key into `node_config.h` and flashes the dev build (it stores them in flash on boot).
 
 To see a camera's liner between scheduled photos, press **Take a photo now** on its page on the
 dashboard. It comes at the camera's next check-in (within `checkin_min`, see Timing).
@@ -147,6 +187,38 @@ reflashed board can get a **New key**.
 
 Cameras can also be listed by hand in the hub's config (`[hub.nodes.T2] api_key = "..."`), for a
 bench hub that has no server to ask.
+
+## Fixing and updating in the field
+
+Every piece can be updated without visiting it, and goes back to the version before by itself if the new
+one doesn't come up.
+
+| What | How | If the new one doesn't work |
+|---|---|---|
+| Server | `server/deploy.sh` from the Mac, on the merged commit | It waits for `/healthz` and puts the old code back. `server/deploy.sh --rollback` restores the code and database from before the last deploy |
+| Hub | `device/deploy-hub.sh pi@<hub>` from the Mac, over Tailscale | It waits for the gateway and reinstalls the version before. `--rollback` does it by hand |
+| ESP32 camera | Dashboard → **Set up traps** → **Camera firmware** | The camera goes back to its old firmware by itself (below) |
+
+**Camera firmware (0.3.0 and later).** Raise `FW_VERSION` in `src/main.cpp`, run
+`device/esp32-node/release.sh`, and upload the `.bin` it names under **Camera firmware**. The server reads
+the version from the file and refuses a dev build (that has one camera's key compiled in). **Send update**
+to one camera first; once its row on Set up traps shows the new `fw` (after its next photo), send it to
+all. The hub fetches the file from the server, checks its size and md5, and offers it in its replies; each
+camera downloads it at its next contact (a check-in, within `checkin_min`), writes it to the app slot it
+isn't running, and restarts into it. That first boot only uploads and asks the hub for the schedule: if
+the hub answers, the camera keeps the new firmware; if it can't reach the hub, or crashes before then,
+the bootloader starts the old firmware again. A version that failed twice on a camera isn't tried there
+again (its status to the hub says `fw_failed`). To go back on purpose, send the older version.
+
+**The one USB flash.** Boards on firmware 0.2.x have a single app slot (the old `partitions.csv`), so
+they can't update over the air. Flash each one once over USB with 0.3.0 (`flash-camera.sh`): that brings
+the two-slot layout, and every update after goes through the dashboard. The new layout reformats the
+photo queue (3.9 MB from 5.9 MB, roughly 25–40 photos): upload its photos first. Do it before the
+cameras go out.
+
+Not tried on a board yet (Oct 25 2026): pairing, the over-the-air update and the rollback were checked
+against the real server and hub code with a script acting as the camera, and the firmware builds, but
+no ESP32 has run 0.3.0.
 
 ## Bench test without the orchard
 

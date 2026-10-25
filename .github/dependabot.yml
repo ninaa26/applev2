@@ -1,0 +1,27 @@
+# Dependabot: weekly pull requests to update the versions locked in uv.lock and the GitHub Actions.
+# Security fixes arrive as their own pull requests as soon as an advisory is published.
+# Minor and patch updates are grouped into one PR per folder so they don't bury the review queue.
+# Each PR runs tests.yml; a merged one reaches the Pis only at the next server/deploy.sh or device/deploy-hub.sh.
+version: 2
+updates:
+  - package-ecosystem: uv
+    directory: /server
+    schedule: {interval: weekly, day: monday}
+    commit-message: {prefix: "Server:"}
+    groups:
+      server-minor:
+        update-types: [minor, patch]
+  - package-ecosystem: uv
+    directory: /device
+    schedule: {interval: weekly, day: monday}
+    commit-message: {prefix: "Device:"}
+    groups:
+      device-minor:
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: {interval: monthly}
+    commit-message: {prefix: "CI:"}
+    groups:
+      actions:
+        patterns: ["*"]

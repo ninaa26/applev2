@@ -5,14 +5,13 @@ from __future__ import annotations
 import logging
 import math
 import time
-from pathlib import Path
 
 import cv2
 from PIL import Image
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .. import services
+from .. import services, weather
 from ..db import session_scope
 from ..models import Capture, Card, Detection, Event, Track, Trap, utcnow
 from ..settings import get_settings
@@ -95,12 +94,12 @@ class Pipeline:
 
     def _detect(self, db: Session, cap: Capture) -> dict:
         """Detection and the photo checks' measurements. Reads only."""
-        trap = db.get(Trap, cap.trap_id)
+        trap = db.get_one(Trap, cap.trap_id)
         path = get_settings().media_dir / cap.image_path
         boxes = self.detector.detect(path, key=(cap.trap_id, cap.card_id))
         info = dict(getattr(self.detector, "last", {}))
         bgr = cv2.imread(str(path))
-        quality = photo_quality(bgr, info["card"] if "card" in info else card_outline(bgr))
+        quality = photo_quality(bgr, info["card"] if "card" in info else card_outline(bgr))  # type: ignore[arg-type]  # the detector just read it
         with Image.open(path) as img:
             w, h = img.size
         boxes = [b for b in boxes if not in_mask(b, trap.mask, w, h)]
@@ -128,7 +127,7 @@ class Pipeline:
         if info.get("grid") is not None:  # detectors that measure the liner's grid
             ppm = float(info["px_per_mm"]) if info["grid"].score > 0 and info.get("px_per_mm") else None
             scale = scale_problem([m["px_per_mm"] for m in before if m.get("px_per_mm")], ppm,
-                                  db.get(Trap, cap.trap_id).px_per_mm)
+                                  db.get_one(Trap, cap.trap_id).px_per_mm)
             if scale and getattr(info["grid"], "fraction", 1) > 1:  # the lead on the ⅓-scale misreads (L-01)
                 scale += f" (grid spacing taken as 1/{info['grid'].fraction} of a measured one)"
             problem = scale or problem
@@ -146,7 +145,7 @@ class Pipeline:
         # while the classifier (minutes for a cluttered photo on the Pi's CPU) runs.
         if check_liner:  # first: it can move this photo back onto the liner before, which its age is counted on
             _keep_liner_if_unchanged(db, cap, [trk.Rect(b.x1, b.y1, b.x2, b.y2) for b in boxes])
-        card = db.get(Card, cap.card_id)
+        card = db.get_one(Card, cap.card_id)
         liner_days = round((cap.captured_at - card.installed_at).total_seconds() / 86400, 1)
         cap.meta = {**(cap.meta or {}), **quality, **({"px_per_mm": round(ppm, 2)} if ppm else {}),
                     "liner_days": liner_days, "moon": moon_illumination(cap.captured_at)}
@@ -258,6 +257,7 @@ def _keep_liner_if_unchanged(db: Session, cap: Capture, boxes: list[trk.Rect]) -
     meta = cap.meta or {}
     if not meta.get("new_card") or meta.get("new_card_source", "button") != "button":
         return  # an ordinary photo, or someone asked for the new liner outright
+    assert card is not None  # the photo's liner
     if card.installed_at != cap.captured_at or db.scalar(select(Track.id).where(Track.card_id == card.id)) is not None:
         return  # not the photo that opened this liner, or the liner is already in use
     before = services.previous_card(db, card)
@@ -327,11 +327,29 @@ def _process_in_order(pipeline: Pipeline, db: Session, cap: Capture) -> None:
         pipeline.reprocess_card(db, cap.card_id)
 
 
+WEATHER_EVERY_S = 600  # how often photos without a sensor reading are looked up (they come in a few a day)
+
+
+def fill_weather() -> int:
+    """Weather-service temperature and humidity for photos with no sensor reading (see weather.py)."""
+    try:
+        with session_scope() as db:
+            return weather.fill(db)
+    except Exception:
+        log.exception("weather lookup failed")
+        return 0
+
+
 def run_forever(stop_flag=None) -> None:
     pipeline = Pipeline()
     log.info("worker started (%s)", pipeline.version)
     poll = get_settings().worker_poll_s
+    weather_at = 0.0
     while not (stop_flag and stop_flag.is_set()):
+        if time.monotonic() - weather_at >= WEATHER_EVERY_S:
+            weather_at = time.monotonic()
+            if n := fill_weather():
+                log.info("weather filled in for %d photos", n)
         try:
             busy = process_pending(pipeline) > 0
         except Exception:  # e.g. the database is unreachable: try again rather than end the thread

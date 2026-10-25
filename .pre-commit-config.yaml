@@ -1,0 +1,18 @@
+# Checks run on each commit, before it's made. Set up once per clone: uvx pre-commit install
+# CI runs the same Ruff check (tests.yml), so these only catch problems sooner.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.2  # same Ruff as tests.yml
+    hooks:
+      - id: ruff-check
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      # photos, datasets and weights are gitignored; this catches one added by name anyway
+      - id: check-added-large-files
+        args: [--maxkb=1000]
+        exclude: (^|/)uv\.lock$
+      - id: detect-private-key
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: check-toml

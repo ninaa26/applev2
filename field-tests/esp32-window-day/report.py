@@ -15,7 +15,7 @@ import csv
 import html
 import json
 from collections import Counter
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -25,7 +25,7 @@ SLOT_OFFSET_S = 60  # [hub] node_offset_s: cameras aim for 60 s after each slot
 
 def utc(s: str) -> datetime:
     d = datetime.fromisoformat(s.replace("Z", "+00:00"))
-    return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+    return d if d.tzinfo else d.replace(tzinfo=UTC)
 
 
 def env(path: Path) -> dict[str, str]:
@@ -113,7 +113,7 @@ def main() -> None:
     cfg = env(Path(__file__).with_name("test.env"))
     meta = env(run / "run.env")
     start = utc(meta["START"])
-    end = utc(meta["END"]) if "END" in meta else datetime.now(timezone.utc)
+    end = utc(meta["END"]) if "END" in meta else datetime.now(UTC)
     every = int(cfg.get("PHOTO_EVERY_MIN", 30))
 
     data = json.loads((run / "captures.json").read_text()) if (run / "captures.json").exists() else {"captures": [], "new_cards": []}

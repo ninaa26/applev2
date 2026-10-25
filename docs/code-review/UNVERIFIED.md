@@ -1,6 +1,6 @@
 # Unverified
 
-Everything Gemini claimed that Claude **hasn't checked yet**. Treat these as leads, not facts. When one is checked, it moves to the Ledger tab (as a to-do, a fact, or a wrong claim) and leaves this list. Source files are in `code-review/gemini-raw/`.
+Everything Gemini claimed that Claude **hasn't checked yet**. Treat these as leads, not facts. When one is checked, it moves to the Ledger tab (as a to-do, a fact, or a wrong claim) and leaves this list. Source files are in `docs/code-review/gemini-raw/`.
 
 ## 1. High-severity code claims not checked (Flash)
 

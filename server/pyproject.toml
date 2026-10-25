@@ -5,18 +5,19 @@ description = "Orchard Sentinel server: receives trap photos, detects and tracks
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.110",
-    "uvicorn[standard]>=0.29",
+    "uvicorn[standard]>=0.54.0",
     "sqlalchemy>=2.0",
     "python-multipart>=0.0.9",
     "jinja2>=3.1",
     "pillow>=10.0",
     "numpy>=1.26",
     "opencv-python-headless>=4.9",
+    "alembic>=1.13",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "httpx>=0.27"]
-postgres = ["psycopg[binary]>=3.1"]
+dev = ["pytest>=8", "httpx>=0.27", "mypy>=1.13"]
+postgres = ["psycopg[binary]>=3.3.6"]
 # Heavy ML extras: install only on the machine that runs the worker.
 bioclip = ["open_clip_torch>=2.24", "torch>=2.2"]
 flatbug = ["flat-bug @ git+https://github.com/darsa-group/flat-bug.git"]
@@ -33,7 +34,17 @@ build-backend = "setuptools.build_meta"
 include = ["sentinel_server*"]
 
 [tool.setuptools.package-data]
-sentinel_server = ["templates/*.html", "static/*"]
+sentinel_server = ["templates/*.html", "static/*", "migrations/*.py", "migrations/*.mako", "migrations/versions/*.py"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+# Loose to start: no strict mode. Tighten one module at a time with [[tool.mypy.overrides]].
+[tool.mypy]
+python_version = "3.12"
+files = ["sentinel_server"]
+
+# no type stubs for these (and on most machines they aren't installed)
+[[tool.mypy.overrides]]
+module = ["cv2", "cv2.*", "torch", "torch.*", "torchvision", "torchvision.*", "ultralytics", "ultralytics.*", "open_clip", "open_clip.*", "flat_bug", "flat_bug.*"]
+ignore_missing_imports = true

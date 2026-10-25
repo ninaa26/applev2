@@ -130,7 +130,7 @@ def outlook(model: PestModel, biofix: date | None, dd: float | None, days: dict[
     nxt = next_milestone(model, dd)
     rate = recent_dd_per_day(days, today, model.base_f)
     to_go = round(nxt.dd - dd) if nxt else None
-    days_to_go = math.ceil(to_go / rate) if nxt and rate and rate >= 0.5 else None
+    days_to_go = math.ceil(to_go / rate) if to_go is not None and rate and rate >= 0.5 else None
     detail = ""
     if nxt and days_to_go is None:
         detail = "Too cool this week for degree days to build up." if rate is not None else "No recent weather data."

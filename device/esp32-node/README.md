@@ -31,12 +31,21 @@ pio run -t upload
 pio device monitor                                        # 115200 baud
 ```
 
+`flash-camera.sh` does the copy and the upload. With no arguments it wipes the board and flashes the
+**release build** (`pio run -e release`), which has no trap id or key: the camera pairs with its hub and is
+added on the dashboard, and the script prints its pairing code. With `T3 <key>` (the command the dashboard
+shows for a camera added by hand) it flashes the dev build with that id and key. Either way the Wi-Fi and
+pins stay in `node_config.h`. `release.sh` builds the file for updating cameras over the air from the
+dashboard. How both work: [docs/esp32-traps.md](../../docs/esp32-traps.md#adding-and-removing-esp32-traps).
+
 The board this was written for: a Freenove-style ESP32-S3 CAM (N8R8: 8 MB flash, 8 MB octal PSRAM,
 CH343 USB serial, ESP32-S3-EYE camera pins) with an OV3660. On a Mac the CH343 garbles uploads above
 115200 baud, which is why `upload_speed` is 115200 (about 20 s per flash). Other boards need their
 camera pins in `node_config.h` and maybe `board_build.arduino.memory_type` in `platformio.ini`.
 
-`partitions.csv` keeps one 2 MB app slot and gives the rest of the flash (5.9 MB) to the photo queue.
+`partitions.csv` has two 2 MB app slots, for over-the-air updates (firmware 0.3.0), and gives the rest
+of the flash (3.9 MB) to the photo queue. Before 0.3.0 it had one slot and a 5.9 MB queue: a board on 0.2.x
+needs one flash over USB to change it.
 
 ## Serial output
 
@@ -60,6 +69,13 @@ while the check-ins between them sent 3 photos in a second.
 
 A check-in wake prints `wake=checkin` and no `captured` line, unless the hub says
 `photo asked for on the dashboard`. Setup mode prints `wake=setup` and `live preview at http://10.42.0.23/ for 120 s`.
+
+Since 0.3.0 each boot first prints `SENTINEL_FW_VERSION=0.3.0;release` (or `;dev`). A camera not added yet
+prints `sentinel node (not added) ...`, `not added yet: pairing code 7F3A2C` and `pair -> 202` until it is
+added on the dashboard, then `added on the dashboard as T3` and restarts into setup mode. An update prints
+`updating firmware 0.3.0 -> 0.3.1`, `firmware written: restarting into it`, then `wake=update` and
+`firmware 0.3.1 reached the hub: keeping it`; if that wake can't reach the hub it prints `ERROR new firmware
+didn't reach the hub: going back` and the old firmware starts. `button held 10 s` means it forgot its id and key.
 
 If the hub's Wi-Fi is up but its gateway is not open yet (`upload ... -> -1`), the node tries again every
 5 s until the end of its connect window (2–5 min), then sleeps. A node with no schedule from the hub

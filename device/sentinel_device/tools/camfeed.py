@@ -46,7 +46,7 @@ def main(argv: list[str] | None = None) -> int:
 
     host = args.host or tailscale_ip()
     try:
-        server = ThreadingHTTPServer((host, args.port), None)
+        server = ThreadingHTTPServer((host, args.port), None)  # type: ignore[arg-type]  # Handler is set further down
     except OSError as e:
         if e.errno == errno.EADDRINUSE:
             print(f"Live view is already running: http://{host}:{args.port}")

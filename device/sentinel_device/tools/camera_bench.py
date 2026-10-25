@@ -30,7 +30,7 @@ import json
 import platform
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
@@ -145,7 +145,8 @@ def _edge_widths(gray: np.ndarray, corners: np.ndarray) -> list[float]:
 def _contrast_noise(gray: np.ndarray, corners: np.ndarray) -> float:
     """Mean white-minus-black level over the pixel noise inside the squares."""
     grid = corners.reshape(INNER[1], INNER[0], 2)
-    means, noise = {0: [], 1: []}, []
+    means: dict[int, list[float]] = {0: [], 1: []}
+    noise: list[float] = []
     for r in range(INNER[1] - 1):
         for c in range(INNER[0] - 1):
             quad = np.array([grid[r, c], grid[r, c + 1], grid[r + 1, c + 1], grid[r + 1, c]])
@@ -256,8 +257,8 @@ def main(argv: list[str] | None = None) -> int:
         image = args.image
     liner = tuple(float(v) for v in args.liner.lower().split("x"))
     result = {"camera": args.camera, "tag": args.tag, "distance_mm": args.distance_mm,
-              "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-              "capture": capture, "score": score(image, liner)}
+              "at": datetime.now(UTC).isoformat(timespec="seconds"),
+              "capture": capture, "score": score(image, liner)}  # type: ignore[arg-type]  # --liner is WxH
     (folder / f"{args.tag}.json").write_text(json.dumps(result, indent=2))
     print(json.dumps(result["score"], indent=2))
     return 1 if "error" in result["score"] else 0

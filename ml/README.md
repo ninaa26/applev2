@@ -338,6 +338,7 @@ never to report accuracy. Accuracy numbers come from our own staged-card photos,
 
 | Version | Detector | Species ID | Where it lives |
 |---|---|---|---|
+| (Sep 24) | none | Patti's first classifier: MobileNetV3-Small, codling moth vs not, on an ImageFolder (`mobilenet_cm_patti.py`). Kept for the record; `train_v2.py` grew out of it | `ml/mobilenet_cm_patti.py` → `models/codling_moth_model.pth` |
 | v0 | baseline OpenCV → flatbug | none → BioCLIP 2 zero-shot | `server/sentinel_server/pipeline/` (`SENTINEL_DETECTOR`, `SENTINEL_CLASSIFIER`) |
 | v1 | flatbug | BioCLIP 2 features + logistic regression (`train_v1.py`); InsectNet / DINOv2 comparison still to do | `ml/train_v1.py` → `models/v1/head.npz`, server `SENTINEL_CLASSIFIER=bioclip-v1` |
 | v2 | fine-tuned flatbug or YOLO11 (YOLO11: three scored runs, the latest Oct 8 2026; playground and `SENTINEL_DETECTOR=yolo`) | fine-tuned EfficientNet-B0 / ConvNeXt-T / MobileNetV3-L (`train_v2.py`, from Patti's MobileNet script); trained Oct 8 2026, none beats v1 on OFM from a second camera | `models/yolo11/<run>/`, `models/v2/<arch>.pt` (server `SENTINEL_CLASSIFIER=cnn-v2`) |

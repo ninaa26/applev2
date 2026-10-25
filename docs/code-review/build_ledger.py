@@ -1,6 +1,6 @@
 """Builds ledger.html (the published page) from LEDGER.md and UNVERIFIED.md (two tabs). Run after every edit to the ledger:
 
-    python3 code-review/build_ledger.py
+    python3 docs/code-review/build_ledger.py
 
 Then republish ledger.html to the same artifact. The page renders the Markdown in the browser.
 """

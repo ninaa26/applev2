@@ -108,7 +108,7 @@ def pick_val(data: Path, photos: list[str], frac: float) -> set[str]:
             groups.append(sorted(g & left))
             left -= g
     groups += [[p] for p in left]
-    groups.sort(key=lambda g: hashlib.sha1(g[0].encode()).hexdigest())
+    groups.sort(key=lambda g: hashlib.sha1(g[0].encode(), usedforsecurity=False).hexdigest())
     val: set[str] = set()
     for g in groups[:-1]:  # always leave something to train on
         if len(val) >= frac * len(photos):
@@ -227,9 +227,8 @@ def synth(out: Path, n: int, ppm: float, tile: int, seed: int = 0) -> dict:
     import random
 
     import numpy as np
-    from PIL import ImageFilter
-
     from make_trap_style import LENGTH_MM, degrade, load_liners
+    from PIL import ImageFilter
 
     rng = random.Random(seed)
     with open(HERE / "data/cutouts/manifest.csv", newline="") as f:

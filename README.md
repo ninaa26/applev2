@@ -25,13 +25,17 @@ device/     Raspberry Pi software: the hub for the ESP32 cameras (gateway.py, in
 server/     FastAPI + SQLite (Postgres later): upload API, detection/tracking/counting worker, dashboard
 ml/         training photos (AMI, iNaturalist, trap-style synthetic), labelling tool, detector and classifier training and scoring
 hardware/   trap dimensions (TRAP.md), mockup trap template, 3D-printable camera mount + liner tray, calibration prints
-docs/       ESP32 traps and the hub, the server on Linux or the Mac, Pi camera bring-up and wiring, camera bench test, measuring accuracy, security and privacy
+docs/       ESP32 traps and the hub, the server on Linux or the Mac, Pi camera bring-up and wiring, camera bench test,
+            measuring accuracy, security and privacy, research notes, and the code-review ledger (docs/code-review/)
 ```
+
+Every doc and what it's for: [docs/README.md](docs/README.md). How the team works (setup, `make check`,
+branches, deploying): [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Quick start (no hardware needed)
 
 ```bash
-cd server && uv venv --python 3.12 .venv && uv pip install -p .venv/bin/python -e '.[dev]'
+cd server && uv sync --locked --python 3.12 --extra dev
 .venv/bin/sentinel-server init && .venv/bin/sentinel-server add-trap T1 --lure CM --name Bench
 .venv/bin/sentinel-server serve          # http://localhost:8000
 ```

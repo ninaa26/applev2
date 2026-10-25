@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 from sqlalchemy import JSON, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -25,7 +25,7 @@ NOT_CATCHES = {"other_insect", "debris"}  # kept on the liner record, left out o
 
 
 def utcnow() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 class Trap(Base):
@@ -60,7 +60,11 @@ class Trap(Base):
     # Biofix confirmed or set by a person on the trap page, in place of the one from the catches. It counts
     # for its own season only.
     biofix_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-    cards: Mapped[list["Card"]] = relationship(back_populates="trap", order_by="Card.installed_at")
+    # ESP32 cameras: the firmware version its photos last reported, and the one picked on the dashboard for it
+    # to install. Its hub offers the target at each contact until the camera reports running it.
+    firmware_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    firmware_target: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    cards: Mapped[list[Card]] = relationship(back_populates="trap", order_by="Card.installed_at")
 
 
 class Card(Base):
@@ -99,7 +103,7 @@ class Capture(Base):
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     processed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     model_version: Mapped[str | None] = mapped_column(String(80), nullable=True)
-    detections: Mapped[list["Detection"]] = relationship(back_populates="capture", cascade="all, delete-orphan")
+    detections: Mapped[list[Detection]] = relationship(back_populates="capture", cascade="all, delete-orphan")
 
 
 class Track(Base):
@@ -188,3 +192,41 @@ class Event(Base):
     kind: Mapped[str] = mapped_column(String(40))
     payload: Mapped[dict] = mapped_column(JSON, default=dict)
     at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class Firmware(Base):
+    """An ESP32 camera firmware build (a release build: no trap id or key in it), uploaded on the dashboard.
+    The file is data_dir/firmware/<version>.bin. The version is read from the file itself."""
+
+    __tablename__ = "firmware"
+    version: Mapped[str] = mapped_column(String(32), primary_key=True)
+    size: Mapped[int] = mapped_column(Integer)
+    md5: Mapped[str] = mapped_column(String(32))
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    note: Mapped[str] = mapped_column(String(200), default="")
+
+
+class PendingCamera(Base):
+    """An ESP32 with no trap id or key yet that asked a hub to be added (pairing). It shows on Set up traps;
+    when it is added there, its new key waits here until the hub has handed it to the camera."""
+
+    __tablename__ = "pending_cameras"
+    code: Mapped[str] = mapped_column(String(12), primary_key=True)  # last 6 hex digits of its MAC, on its sticker
+    hub_id: Mapped[str] = mapped_column(String(32))
+    fw: Mapped[str] = mapped_column(String(32), default="")
+    rssi: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    trap_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    api_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
+class HubClaim(Base):
+    """A hub added on the dashboard with the pairing code from its sticker. The hub asks with that code
+    and gets its trap id and key; the row goes once the hub has used the key."""
+
+    __tablename__ = "hub_claims"
+    code: Mapped[str] = mapped_column(String(16), primary_key=True)
+    trap_id: Mapped[str] = mapped_column(String(32))
+    api_key: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

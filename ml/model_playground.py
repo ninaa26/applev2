@@ -34,6 +34,7 @@ from PIL import Image, ImageOps
 
 HERE = Path(__file__).parent
 from eval_detector_roboflow import Baseline, Flatbug, grid_px_per_mm  # noqa: E402  (puts server/ on sys.path)
+
 from sentinel_server.pipeline.detect import merge_tiles  # noqa: E402
 
 GRID_MM = 25.0

@@ -198,20 +198,20 @@ def evaluate(db: Session, counts: dict | None = None, boxes: dict | None = None,
             if card is not None:
                 by_trap[card.trap_id].append(cid)
         for trap_id, cids in sorted(by_trap.items()):
-            trap = db.get(Trap, trap_id)
-            lure_of = {cid: db.get(Card, cid).lure or trap.lure for cid in cids}  # as lure_catch_dates reads them
+            trap = db.get_one(Trap, trap_id)
+            lure_of = {cid: db.get_one(Card, cid).lure or trap.lure for cid in cids}  # as lure_catch_dates reads them
             manual_dates = sorted(d for cid in cids for d, label, n in counts[cid]
                                   if label == trap.lure == lure_of[cid] for _ in range(n))
-            m = phenology.sustained_biofix(manual_dates)
-            a = phenology.sustained_biofix(services.lure_catch_dates(db, trap, set(cids)))
-            if m is None and a is None:
+            m_fix = phenology.sustained_biofix(manual_dates)
+            a_fix = phenology.sustained_biofix(services.lure_catch_dates(db, trap, set(cids)))
+            if m_fix is None and a_fix is None:
                 ok, diff = True, None
-            elif m is None or a is None:
+            elif m_fix is None or a_fix is None:
                 ok, diff = False, None
             else:
-                diff = (a - m).days
+                diff = (a_fix - m_fix).days
                 ok = abs(diff) <= rep.targets.biofix_days
-            rep.biofix.append({"trap": trap_id, "lure": trap.lure, "manual": m, "auto": a, "days_off": diff, "pass": ok})
+            rep.biofix.append({"trap": trap_id, "lure": trap.lure, "manual": m_fix, "auto": a_fix, "days_off": diff, "pass": ok})
     return rep
 
 
@@ -374,9 +374,9 @@ def to_markdown(rep: Report) -> str:
         out += [f"## 3. Biofix (target: within {t.biofix_days} day{'s' if t.biofix_days != 1 else ''})", "",
                 "| trap | lure | from manual count | from automatic count | days off | pass |", "|---|---|---|---|---|---|"]
         for b in rep.biofix:
-            off = "" if b["days_off"] is None else f"{b['days_off']:+d}"
+            days_off = "" if b["days_off"] is None else f"{b['days_off']:+d}"
             out.append(f"| {b['trap']} | {b['lure']} | {b['manual'] or 'none yet'} | {b['auto'] or 'none yet'} | "
-                       f"{off} | {'PASS' if b['pass'] else 'FAIL'} |")
+                       f"{days_off} | {'PASS' if b['pass'] else 'FAIL'} |")
         out.append("")
     if rep.photos and rep.photos["photos"]:
         p = rep.photos
@@ -391,7 +391,7 @@ def to_markdown(rep: Report) -> str:
         out += [f"Most glare in one photo: {p['max_glare']:.1%} of the card blown out. "
                 f"Oldest liner photographed: {p['oldest_liner_days']:.0f} days.", ""]
     if rep.confirmation:
-        tot = Counter()
+        tot: Counter[str] = Counter()
         for r in rep.confirmation:
             tot.update({k: r[k] for k in ("confirmed", "pending", "dropped", "without_confirmation")})
         factor = tot["without_confirmation"] / tot["confirmed"] if tot["confirmed"] else None
