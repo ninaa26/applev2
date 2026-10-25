@@ -224,7 +224,7 @@ def upgrade() -> None:
             if col.server_default is None and not col.nullable:
                 raise RuntimeError(f"{table.name}.{col.name} is missing and has no default for the rows already "
                                    "there: this database is too old to take in")
-            default = col.server_default.arg if col.server_default is not None else None
+            default = col.server_default.arg if col.server_default is not None else None  # type: ignore[attr-defined]  # the baseline gives server_default as strings, so DefaultClauses
             op.add_column(table.name, sa.Column(col.name, col.type, nullable=col.nullable, server_default=default))
         indexes = {i["name"] for i in insp.get_indexes(table.name)}
         for index in table.indexes:

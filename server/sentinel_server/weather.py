@@ -155,7 +155,7 @@ def fill(db: Session, limit: int = 200) -> int:
         .order_by(Capture.captured_at.desc()).limit(limit * 5)) if needs_weather(c)][:limit]
     by_place: dict[tuple[float, float], list[Capture]] = {}
     for c in caps:
-        where = location(db, db.get(Trap, c.trap_id))
+        where = location(db, db.get_one(Trap, c.trap_id))
         if where is not None:
             by_place.setdefault(where, []).append(c)
     done = 0
@@ -195,7 +195,7 @@ def from_stations(lat: float, lon: float, caps: list[Capture]) -> list[Capture]:
                 still.append(c)
                 continue
             c.meta = {**(c.meta or {}), "weather": {
-                "temp_c": tc, "rh": round(rh), "source": SOURCE, "station": st["id"], "station_name": st["name"],
+                "temp_c": tc, "rh": round(rh), "source": SOURCE, "station": st["id"], "station_name": st["name"],  # type: ignore[arg-type]  # at is set, so rh is too
                 "km": st["km"], "at": at.isoformat()}}
         waiting = still
         if not waiting:

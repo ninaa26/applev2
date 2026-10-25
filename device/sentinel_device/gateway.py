@@ -307,8 +307,10 @@ class Gateway:
         return found
 
     def photo_wanted(self, trap_id: str | None) -> bool:
+        if not trap_id:
+            return False
         with self.lock:
-            asked = self.requests.get(trap_id) if trap_id else None
+            asked = self.requests.get(trap_id)
             return asked is not None and self.served.get(trap_id) != asked
 
     def schedule_reply(self, trap_id: str | None = None) -> dict:

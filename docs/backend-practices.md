@@ -60,9 +60,9 @@ GitHub settings for items 10, 14 and 17.
 |---|----------|--------|
 | 1 | Lock dependencies (`uv.lock`) | done in PR #60: `uv.lock` for `server/` and `device/`, `uv sync --locked` in CI, deploys install the locked versions |
 | 2 | Linter and formatter (`ruff`) | done in PR #60: `ruff.toml` and a lint job in CI (lint only; no formatter yet) |
-| 3 | Type checking (`mypy` or `pyright`) | to do |
+| 3 | Type checking (`mypy` or `pyright`) | done: loose `mypy` on `sentinel_server` and `sentinel_device` (settings in each `pyproject.toml`), a `types` job in CI |
 | 4 | Pydantic models for request bodies | done: `HubPairing` and `HubClaim` models in `app.py` |
-| 5 | Versioned schema migrations (Alembic) | to do |
+| 5 | Versioned schema migrations (Alembic) | done in PR #66: `server/sentinel_server/migrations/`, baseline `0001` |
 | 6 | Dependabot + `pip-audit` | done in PR #60: `.github/dependabot.yml` (weekly uv, monthly Actions); `pip-audit` not added |
 | 7 | Pre-commit hooks | done: `.pre-commit-config.yaml` (Ruff, large files, private keys); each person runs `uvx pre-commit install` once |
 | 8 | Require auth on anything exposed | rate limiting done (10 wrong passwords per address per 10 min); required password + HTTPS wait for a public host |
@@ -85,6 +85,17 @@ GitHub settings for items 10, 14 and 17.
    `ruff format --check` step to CI.
 3. **Add type checking with `mypy` or `pyright`.** Start loose and turn it on per module. FastAPI
    and SQLAlchemy 2.0 both have good type support.
+   *Done:* `mypy` (chosen over pyright because it installs from PyPI into the locked `.venv`; pyright
+   is a Node program that its pip package downloads on first run, outside `uv.lock`). It's in each
+   package's `[dev]` extra, configured under `[tool.mypy]` in `server/pyproject.toml` and
+   `device/pyproject.toml`, and runs in the `types` CI job. Loose for now: no `--strict`, and only
+   functions with type hints are checked (no `check_untyped_defs`). Packages without type hints (torch,
+   ultralytics, open_clip, flat_bug, picamera2, libcamera, gpiozero, smbus2) are skipped. The first
+   run found 64 errors, nearly all a value that might be `None` (`db.get`, `cv2.imread`). They were
+   fixed with `db.get_one`, `assert ... is not None` where a row or frame is known to exist, or a
+   `# type: ignore[code]` that says why; none changed behavior. Run it with
+   `cd server && uv run --no-sync mypy` (same in `device/`). To tighten one module, add a
+   `[[tool.mypy.overrides]]` for it with `check_untyped_defs = true` or `disallow_untyped_defs = true`.
 4. **Validate request bodies with Pydantic models instead of `dict`.** Endpoints like
    `api_hub_pairing(body: dict = Body(...))` in `server/sentinel_server/app.py` accept any shape.
    A `BaseModel` gives you validation, clear 422 errors and accurate `/docs` for free.
@@ -158,10 +169,10 @@ the reason below, and none is open now:
 | #9, #10 | path injection | the upload's uid must match `SAFE_UID`, and the trap id comes from the database |
 | #4–#8 | URL redirection | redirects go to `/traps/{id}` after the id was found, or to a `next` that must be a local path |
 
-**Left for a person:** item 13 needs a decision about the license. Items 3 (type checking) and 5 (Alembic) are bigger pieces
-of work, each worth its own PR.
+**Left for a person:** item 13 needs a decision about the license.
 
-**Next:** choose a license (item 13). Type checking (item 3) and Alembic (item 5) are being done in their own sessions.
+**Next:** choose a license (item 13). Item 3 (loose `mypy` in CI) is done; tightening it module by
+module (`check_untyped_defs` first) is the next step there. Alembic (item 5) is done in PR #66.
 
 ## Skipped on purpose
 
