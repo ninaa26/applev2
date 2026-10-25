@@ -11,7 +11,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "mypy>=1.13"]
 # Laptops only; on the Pi use apt python3-opencv (seen through --system-site-packages).
 bench = ["opencv-python>=4.8"]
 
@@ -32,3 +32,13 @@ include = ["sentinel_device*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+# Loose to start: no strict mode. Tighten one module at a time with [[tool.mypy.overrides]].
+[tool.mypy]
+python_version = "3.12"
+files = ["sentinel_device"]
+
+# no type stubs for these (and on most machines they aren't installed)
+[[tool.mypy.overrides]]
+module = ["cv2", "cv2.*", "picamera2", "picamera2.*", "libcamera", "libcamera.*", "gpiozero", "gpiozero.*", "smbus2", "smbus2.*"]
+ignore_missing_imports = true

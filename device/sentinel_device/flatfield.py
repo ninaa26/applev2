@@ -61,7 +61,7 @@ def _spread_card(gain: np.ndarray, card: np.ndarray) -> np.ndarray:
         total = sum(g[dy : dy + rows, dx : dx + cols] for dy in range(3) for dx in range(3))
         count = sum(k[dy : dy + rows, dx : dx + cols] for dy in range(3) for dx in range(3))
         grow = ~known & (count > 0)
-        gain[grow] = (total[grow] / count[grow][:, None]).astype(np.float32)
+        gain[grow] = (total[grow] / count[grow][:, None]).astype(np.float32)  # type: ignore[index]  # sums of arrays, not 0
         known |= grow
     return gain
 
@@ -71,14 +71,14 @@ def apply(img: Image.Image, gain: np.ndarray) -> Image.Image:
     img = img.convert("RGB")
     out = []
     for c, band in enumerate(img.split()):
-        g = Image.fromarray(gain[..., c], mode="F").resize(img.size, Image.BILINEAR)
+        g = Image.fromarray(gain[..., c], mode="F").resize(img.size, Image.Resampling.BILINEAR)
         out.append(Image.fromarray(np.clip(np.asarray(band, dtype=np.float32) * np.asarray(g), 0, 255).astype(np.uint8)))
     return Image.merge("RGB", out)
 
 
 def save(data_dir: Path, gain: np.ndarray, **info) -> Path:
     path = Path(data_dir) / FILENAME
-    np.savez(path, gain=gain, **{k: np.asarray(v) for k, v in info.items()})
+    np.savez(path, gain=gain, **{k: np.asarray(v) for k, v in info.items()})  # type: ignore[arg-type]  # mypy matches **info to allow_pickle
     return path
 
 
