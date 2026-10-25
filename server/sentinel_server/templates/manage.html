@@ -6,7 +6,7 @@
 {% block main %}
 <div>
   <h1>Set up traps</h1>
-  <p class="lede">Add a camera to the orchard or take one out. ESP32 cameras send their photos through a hub: a Raspberry Pi with no camera, on mains power, in Wi-Fi range of them. The hub picks up changes here within a minute.</p>
+  <p class="lede">Add a camera to the orchard or take one out. ESP32 cameras send their photos through a hub: a Raspberry Pi with no camera, on mains power, in Wi-Fi range of them. Adding one here gives it a key, and the page then shows the one command that sets up the device with it. The hub picks up changes here within a minute.</p>
 </div>
 
 {% if error %}<div class="notice err">{{ error }}</div>{% endif %}
@@ -17,15 +17,22 @@
   <h2>{{ t.id }} {{ 'added' if new_key.why == 'added' else 'has a new key' }}</h2>
   <p>Its key is shown <b>only now</b>. Copy it into the device before leaving this page.{% if new_key.why != 'added' %} The old key has stopped working.{% endif %}</p>
   {% if t.kind == 'esp32' %}
-  <p class="muted">In <code>device/esp32-node/include/node_config.h</code> for this ESP32, then flash it (<code>pio run -t upload</code>):</p>
+  <p>Plug the ESP32 into a computer with the repo and PlatformIO, and run this from the repo:</p>
+  <pre class="cfg">device/esp32-node/flash-camera.sh {{ t.id }} {{ new_key.key }}</pre>
+  <p class="muted">It puts the id and key in <code>node_config.h</code> and flashes the board. The first time on a computer it asks for the hub's Wi-Fi name and password once. Then hang the camera and power it: hub {{ t.hub_id }} accepts it within a minute, with no change on the hub.</p>
+  <details class="inline"><summary>Or by hand</summary>
+  <p class="muted">In <code>device/esp32-node/include/node_config.h</code>, then <code>pio run -t upload</code>:</p>
   <pre class="cfg">#define TRAP_ID "{{ t.id }}"
-#define API_KEY "{{ new_key.key }}"</pre>
-  <p class="muted">Hub {{ t.hub_id }} accepts this camera within a minute, with no change on the hub.</p>
+#define API_KEY "{{ new_key.key }}"</pre></details>
   {% elif t.kind == 'hub' %}
-  <p class="muted">In <code>/etc/sentinel/config.toml</code> on the hub Pi (<code>device/install-hub.sh</code> makes it), then <code>sudo systemctl restart sentinel-gateway</code>:</p>
+  <p>On the hub Pi (online, with Tailscale), from the repo's <code>device/</code> folder:</p>
+  <pre class="cfg">sudo ./install-hub.sh {{ t.id }} {{ new_key.key }} {{ server_url }}</pre>
+  <p class="muted">It installs the gateway, writes these into <code>/etc/sentinel/config.toml</code> and starts it. The hub shows as online here within a minute, and then it can be picked as the hub for ESP32 cameras. Set its Wi-Fi for the cameras as in <code>docs/esp32-traps.md</code>.</p>
+  <details class="inline"><summary>Or by hand</summary>
+  <p class="muted">In <code>/etc/sentinel/config.toml</code>, then <code>sudo systemctl restart sentinel-gateway</code>:</p>
   <pre class="cfg">trap_id = "{{ t.id }}"
 api_key = "{{ new_key.key }}"
-server_url = "{{ server_url }}"</pre>
+server_url = "{{ server_url }}"</pre></details>
   {% else %}
   <p class="muted">In <code>/etc/sentinel/config.toml</code> on this Pi:</p>
   <pre class="cfg">trap_id = "{{ t.id }}"

@@ -92,12 +92,14 @@ On a Raspberry Pi 4 or 5 (2 GB is plenty) with Raspberry Pi OS:
 1. Network and remote access: get it online (below), install Tailscale (`curl -fsSL https://tailscale.com/install.sh | sh`,
    then `sudo tailscale up --ssh --hostname <name>`) and log it into the team account.
 2. Dashboard → **Set up traps** → add it as a **Hub (Raspberry Pi, no camera)**. The page shows its
-   `trap_id`, `api_key` and `server_url` **once**.
-3. From the repo's `device/` folder: `sudo ./install-hub.sh`. Paste the three lines into
-   `/etc/sentinel/config.toml` and set `[schedule] times`
+   key **once**, in the command for the next step.
+3. From the repo's `device/` folder on the hub, run that command:
+   `sudo ./install-hub.sh T1 <key> http://apple-pi-server:8000`. It installs the gateway, writes the id,
+   key and server into `/etc/sentinel/config.toml` and starts `sentinel-gateway`. With no arguments it only
+   installs, and the three lines go into the config by hand (the page shows them too).
+4. `journalctl -u sentinel-gateway -f` should show `gateway listening on 0.0.0.0:8080 for ...`, and the
+   dashboard shows the hub as online within a minute. The photo times are `[schedule] times` in the config
    ([hub.example.toml](../device/hub.example.toml)).
-4. `sudo systemctl enable --now sentinel-gateway`, then `journalctl -u sentinel-gateway -f` should show
-   `gateway listening on 0.0.0.0:8080 for ...`, and the dashboard shows the hub as online within a minute.
 
 To change the schedule: edit `times` in `/etc/sentinel/config.toml` and
 `sudo systemctl restart sentinel-gateway`. Each camera picks up the new times at its next wake.
@@ -140,10 +142,12 @@ or a second hub.
 For each camera:
 
 1. Dashboard → **Set up traps** → Add: ESP32 camera, its hub, trap id, name, block and lure.
-   The page shows the camera's key **once**, as the two lines for `node_config.h`.
-2. Firmware: `cd device/esp32-node && cp include/node_config.example.h include/node_config.h`. Paste
-   those two lines, fill in the hub's Wi-Fi name and password, `HUB_URL` and the LED pin, and flash it:
-   `pio run -t upload` ([esp32-node/README.md](../device/esp32-node/README.md)).
+   The page shows the camera's key **once**, in the command for the next step.
+2. Plug the board in and run that command from the repo: `device/esp32-node/flash-camera.sh T3 <key>`.
+   It sets `TRAP_ID` and `API_KEY` in `include/node_config.h` and flashes it (`pio run -t upload`). The
+   first time on a computer it makes `node_config.h` from the example and stops: fill in the hub's Wi-Fi
+   name and password, `HUB_URL` and the LED pin, and run it again. Later cameras reuse them
+   ([esp32-node/README.md](../device/esp32-node/README.md)).
 3. Hang it and power it. The hub accepts it within a minute. Powering it on starts **setup mode**: for
    2 min it streams a live preview, with the LED on, so you can aim it. On a phone on the hub's Wi-Fi,
    open the hub's page, `http://10.42.0.1:8080/` (or `http://<hub's address>:8080/` on other Wi-Fi), and
