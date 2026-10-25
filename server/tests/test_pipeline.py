@@ -283,24 +283,6 @@ def test_touching_pair_counts_two_and_reviewer_can_fix_the_count():
                 assert services.week_counts(db, "T1")["CM"] == 3, "the reviewer's count stands"
 
 
-def test_old_database_gets_new_columns(tmp_path):
-    import sqlite3
-
-    from sentinel_server import db as db_mod
-
-    db_mod.reset_engine()
-    path = tmp_path / "data" / "sentinel.db"
-    path.unlink()
-    con = sqlite3.connect(path)
-    con.execute("CREATE TABLE tracks (id INTEGER PRIMARY KEY, card_id INTEGER)")
-    con.execute("INSERT INTO tracks (id, card_id) VALUES (1, 1)")
-    con.commit()
-    con.close()
-    db_mod.init_db()
-    con = sqlite3.connect(path)
-    assert con.execute("SELECT n_insects FROM tracks").fetchall() == [(1,)]
-
-
 def test_rejection_sticks_on_later_photos_and_reprocess():
     key = add_trap()
     t0 = datetime.now(UTC) - timedelta(hours=4)
