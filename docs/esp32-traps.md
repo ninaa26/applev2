@@ -23,6 +23,12 @@ ESP32 trap T4 ─┘  or the fieldhouse Wi-Fi)        gateway.py, always on:    
   Once a camera is in its trap, set its measured scale (`sentinel-server set-scale T2 10.3`, the px/mm its
   photos read at the card centre when the grid is found right): photos whose grid reads more than 20% off
   it are left out, from a liner's first photo on.
+  The ESP32s have no temperature or humidity sensor, so give the hub its location (on **Set up traps**
+  when adding it, on the hub's page later, or `sentinel-server set-location T1 42.4534 -76.4735`): the
+  server's worker then looks up the air temperature and humidity at the hour of each of its cameras'
+  photos from Open-Meteo (free, no key; every 10 min, photos up to 60 days old; `sentinel-server
+  fill-weather` does it at once). They show on the photo's page marked as from the weather service, and
+  are kept apart from a sensor's readings (`meta["weather"]`), so they do not feed the degree days.
 - **Hub:** `sentinel_device/gateway.py`, run always on by `systemd/sentinel-gateway.service`. Every 30 s
   it asks the server which ESP32 traps are its own (`GET /api/v1/hub/nodes`: their ids and key hashes,
   cached for when the server can't be reached), so the hub needs no change when cameras are added or

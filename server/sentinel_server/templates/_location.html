@@ -1,0 +1,58 @@
+{# Latitude and longitude fields, filled by searching for a town (Open-Meteo's geocoder, from the browser)
+   or from this device's location. Used inside a form; posts `lat` and `lon`. #}
+{% macro location_fields(lat=None, lon=None) %}
+<div class="loc">
+  <label>Town or address
+    <span class="loc-find"><input type="search" class="loc-q" placeholder="Ithaca, NY" autocomplete="off">
+      <button type="button" class="small loc-search">Find</button>
+      <button type="button" class="small loc-here" title="Use where this phone or computer is">Use my location</button></span></label>
+  <label>Latitude <input name="lat" class="loc-lat" inputmode="decimal" placeholder="42.4534" value="{{ lat if lat is not none else '' }}"></label>
+  <label>Longitude <input name="lon" class="loc-lon" inputmode="decimal" placeholder="-76.4735" value="{{ lon if lon is not none else '' }}"></label>
+  <p class="loc-msg faint small"></p>
+</div>
+{% endmacro %}
+
+{% macro location_script() %}
+<script>
+  document.querySelectorAll('.loc').forEach(box => {
+    const q = box.querySelector('.loc-q'), lat = box.querySelector('.loc-lat'), lon = box.querySelector('.loc-lon'),
+          msg = box.querySelector('.loc-msg');
+    const put = (la, lo, what) => { lat.value = (+la).toFixed(4); lon.value = (+lo).toFixed(4); msg.textContent = what; };
+    // The geocoder takes a town name only, so "Geneva, NY" is matched here: the part after the comma against
+    // the state (or its two-letter code) and country. With nothing after it, a US town comes first.
+    const STATES = {AL:'Alabama',AK:'Alaska',AZ:'Arizona',AR:'Arkansas',CA:'California',CO:'Colorado',CT:'Connecticut',
+      DE:'Delaware',FL:'Florida',GA:'Georgia',HI:'Hawaii',ID:'Idaho',IL:'Illinois',IN:'Indiana',IA:'Iowa',KS:'Kansas',
+      KY:'Kentucky',LA:'Louisiana',ME:'Maine',MD:'Maryland',MA:'Massachusetts',MI:'Michigan',MN:'Minnesota',
+      MS:'Mississippi',MO:'Missouri',MT:'Montana',NE:'Nebraska',NV:'Nevada',NH:'New Hampshire',NJ:'New Jersey',
+      NM:'New Mexico',NY:'New York',NC:'North Carolina',ND:'North Dakota',OH:'Ohio',OK:'Oklahoma',OR:'Oregon',
+      PA:'Pennsylvania',RI:'Rhode Island',SC:'South Carolina',SD:'South Dakota',TN:'Tennessee',TX:'Texas',UT:'Utah',
+      VT:'Vermont',VA:'Virginia',WA:'Washington',WV:'West Virginia',WI:'Wisconsin',WY:'Wyoming'};
+    const best = (hits, rest) => {
+      const want = rest.map(w => (STATES[w.toUpperCase()] || w).toLowerCase());
+      const fits = h => want.every(w => [h.admin1, h.country, h.country_code].some(v => (v || '').toLowerCase() === w));
+      return want.length ? hits.find(fits) : hits.find(h => h.country_code === 'US') || hits[0];
+    };
+    const find = async () => {
+      const [town, ...rest] = q.value.split(',').map(s => s.trim()).filter(Boolean);
+      if (!town) return;
+      msg.textContent = 'Looking…';
+      try {
+        const r = await fetch('https://geocoding-api.open-meteo.com/v1/search?count=20&name=' + encodeURIComponent(town));
+        const hit = best((await r.json()).results || [], rest);
+        if (!hit) { msg.textContent = 'No place by that name. Try the nearest town.'; return; }
+        put(hit.latitude, hit.longitude, [hit.name, hit.admin1, hit.country].filter(Boolean).join(', '));
+      } catch (e) { msg.textContent = "Couldn't reach the place search. Type the latitude and longitude instead."; }
+    };
+    box.querySelector('.loc-search').addEventListener('click', find);
+    q.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); find(); } });
+    box.querySelector('.loc-here').addEventListener('click', () => {
+      if (!navigator.geolocation) { msg.textContent = "This browser can't share its location."; return; }
+      msg.textContent = 'Asking for your location…';
+      navigator.geolocation.getCurrentPosition(
+        p => put(p.coords.latitude, p.coords.longitude, 'Where this device is now'),
+        () => { msg.textContent = "No location: the browser said no (it only shares it over https or on localhost). Search for the town instead."; },
+        {timeout: 15000});
+    });
+  });
+</script>
+{% endmacro %}

@@ -33,8 +33,12 @@
       <h2>Readings</h2>
       <dl class="kv">
         <dt>Woke for</dt><dd>{{ {'scheduled': 'A scheduled photo', 'requested': 'A photo asked for on the dashboard', 'manual': 'A button press', 'setup': 'Setting up'}.get(cap.wake_reason, cap.wake_reason or '—') }}</dd>
-        <dt>Temperature</dt><dd>{{ '%.1f °C (%.0f °F)'|format(cap.temp_c, cap.temp_c * 9 / 5 + 32) if cap.temp_c is not none else '—' }}</dd>
-        <dt>Humidity</dt><dd>{{ '%.0f%%'|format(cap.rh) if cap.rh is not none else '—' }}</dd>
+        {% set wx = cap.meta.weather if cap.temp_c is none and cap.rh is none and cap.meta.weather is defined else none %}
+        {% set temp_c, rh = (wx.temp_c, wx.rh) if wx else (cap.temp_c, cap.rh) %}
+        <dt>Temperature</dt><dd>{{ '%.1f °C (%.0f °F)'|format(temp_c, temp_c * 9 / 5 + 32) if temp_c is not none else '—' }}</dd>
+        <dt>Humidity</dt><dd>{{ '%.0f%%'|format(rh) if rh is not none else '—' }}</dd>
+        {% if wx %}<dt></dt><dd class="faint small">From the weather service ({{ wx.source }}) for {{ wx.at|fromiso|local('%H:%M') }}, not a sensor in the trap</dd>
+        {% elif cap.temp_c is none and cap.rh is none %}<dt></dt><dd class="faint small">{% if not located %}No sensor on this camera. {% if hub %}<a href="/traps/{{ hub.id }}#location">Set {{ hub.name or hub.id }}'s location</a>{% else %}Set the trap's location{% endif %} to get them from a weather service.{% else %}No sensor on this camera: looking up the weather service, within about 10 minutes.{% endif %}</dd>{% endif %}
         <dt>Battery</dt><dd>{{ '%.2f V'|format(cap.battery_v) if cap.battery_v else '—' }}</dd>
         {% if cap.meta.liner_days is defined %}<dt>Liner age</dt><dd>{{ cap.meta.liner_days }} days</dd>{% endif %}
         {% if cap.meta.px_per_mm %}<dt>Scale</dt><dd>{{ cap.meta.px_per_mm }} px/mm</dd>{% endif %}

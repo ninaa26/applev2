@@ -12,7 +12,7 @@ from PIL import Image
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .. import services
+from .. import services, weather
 from ..db import session_scope
 from ..models import Capture, Card, Detection, Event, Track, Trap, utcnow
 from ..settings import get_settings
@@ -327,11 +327,29 @@ def _process_in_order(pipeline: Pipeline, db: Session, cap: Capture) -> None:
         pipeline.reprocess_card(db, cap.card_id)
 
 
+WEATHER_EVERY_S = 600  # how often photos without a sensor reading are looked up (they come in a few a day)
+
+
+def fill_weather() -> int:
+    """Weather-service temperature and humidity for photos with no sensor reading (see weather.py)."""
+    try:
+        with session_scope() as db:
+            return weather.fill(db)
+    except Exception:
+        log.exception("weather lookup failed")
+        return 0
+
+
 def run_forever(stop_flag=None) -> None:
     pipeline = Pipeline()
     log.info("worker started (%s)", pipeline.version)
     poll = get_settings().worker_poll_s
+    weather_at = 0.0
     while not (stop_flag and stop_flag.is_set()):
+        if time.monotonic() - weather_at >= WEATHER_EVERY_S:
+            weather_at = time.monotonic()
+            if n := fill_weather():
+                log.info("weather filled in for %d photos", n)
         try:
             busy = process_pending(pipeline) > 0
         except Exception:  # e.g. the database is unreachable: try again rather than end the thread
