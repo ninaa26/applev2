@@ -23,6 +23,21 @@ ESP32 trap T4 ─┘  or the fieldhouse Wi-Fi)        gateway.py, always on:    
   Once a camera is in its trap, set its measured scale (`sentinel-server set-scale T2 10.3`, the px/mm its
   photos read at the card centre when the grid is found right): photos whose grid reads more than 20% off
   it are left out, from a liner's first photo on.
+  The ESP32s have no temperature or humidity sensor, so give the hub its location (on **Set up traps**
+  when adding it, on the hub's page later, or `sentinel-server set-location T1 42.4534 -76.4735`): the
+  server's worker then takes the air temperature and humidity for each of its cameras' photos from the
+  nearest National Weather Service station ([api.weather.gov](https://www.weather.gov/documentation/services-web-api):
+  free, no key, US only), the observation nearest the photo's time and within 90 min, trying the next
+  nearest of 3 stations when one has a gap (KITH, the Ithaca airport, had none on Oct 22 2026). It runs
+  every 10 min; `sentinel-server fill-weather` does it at once. When none of the 3 has a reading (or the
+  place is outside the US, or the service is down), the photo gets [Open-Meteo](https://open-meteo.com)'s
+  hourly value for the spot instead (free, no key; a weather model, not a measurement), once it is 3 h old
+  so a late station report still wins. The weather service keeps only about a week of observations, so
+  older photos go straight to Open-Meteo; photos older than 60 days aren't looked up. The readings show on the photo's page with
+  the station they came from, and are kept apart from a sensor's (`meta["weather"]`), so they do not feed
+  the degree days. The location form suggests addresses as you type (Photon, OpenStreetMap
+  addresses, free, no key), reads "76.4712° W" as -76.4712, and shows the place the numbers point to.
+  Changing a hub's location looks its cameras' weather up again.
 - **Hub:** `sentinel_device/gateway.py`, run always on by `systemd/sentinel-gateway.service`. Every 30 s
   it asks the server which ESP32 traps are its own (`GET /api/v1/hub/nodes`: their ids and key hashes,
   cached for when the server can't be reached), so the hub needs no change when cameras are added or

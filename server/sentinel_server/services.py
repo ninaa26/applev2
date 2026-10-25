@@ -59,7 +59,7 @@ def next_trap_id(db: Session) -> str:
 
 
 def create_trap(db: Session, trap_id: str, name: str = "", block: str = "", lure: str = "CM",
-                kind: str = "pi", hub_id: str | None = None) -> str:
+                kind: str = "pi", hub_id: str | None = None, lat: float | None = None, lon: float | None = None) -> str:
     """Register a trap and return its API key (only its hash is stored, so this is the one chance to see it)."""
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,31}", trap_id):
         raise ValueError("trap id: letters, digits, _ and - only (max 32)")
@@ -75,7 +75,7 @@ def create_trap(db: Session, trap_id: str, name: str = "", block: str = "", lure
             raise ValueError("an ESP32 camera needs a hub in the orchard: add the hub first")
     key = new_api_key()
     db.add(Trap(id=trap_id, name=name, block=block, lure=lure, kind=kind,
-                hub_id=hub_id if kind == "esp32" else None, api_key_hash=hash_key(key)))
+                hub_id=hub_id if kind == "esp32" else None, api_key_hash=hash_key(key), lat=lat, lon=lon))
     db.flush()  # the trap row before the event that points at it
     db.add(Event(trap_id=trap_id, kind="trap_added", payload={"note": f"{TRAP_KINDS[kind]}{f' via {hub_id}' if kind == 'esp32' else ''}"}))
     db.flush()

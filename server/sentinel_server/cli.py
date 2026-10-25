@@ -10,6 +10,8 @@
     sentinel-server backup ~/sentinel-backup --push nina@team-mac:sentinel-backup   # database + photos
     sentinel-server reprocess --card 3     # re-run a liner's photos with the current models
     sentinel-server import-weather newa.csv --source newa:Ithaca
+    sentinel-server set-location T1 42.4534 -76.4735   # a hub's location: its ESP32s' photos get the weather there
+    sentinel-server fill-weather           # look up the weather now for photos with no sensor reading
     sentinel-server detect photo.jpg --out overlays/   # try the detector on photos, draw what it found
     sentinel-server set-mask T1 --none     # lure not in view: don't ignore any area
     sentinel-server set-scale T2 10.3      # the camera's measured px/mm: photos far from it are left out
@@ -230,6 +232,41 @@ def cmd_import_weather(args) -> int:
     return 0
 
 
+def cmd_set_location(args) -> int:
+    from .weather import forget, parse_location
+
+    init_db()
+    with session_scope() as db:
+        trap = db.get(Trap, args.trap_id)
+        if trap is None:
+            print(f"no trap {args.trap_id}", file=sys.stderr)
+            return 1
+        if args.none:
+            trap.lat, trap.lon = None, None
+            forget(db, trap)
+        elif args.lat is not None:
+            try:
+                where = parse_location(args.lat, args.lon or "")
+            except ValueError as e:
+                print(e, file=sys.stderr)
+                return 1
+            if where != (trap.lat, trap.lon):
+                trap.lat, trap.lon = where
+                n = forget(db, trap)
+                print(f"{n} photos' weather is looked up again at the new location")
+        print(f"{trap.id} location: {f'{trap.lat}, {trap.lon}' if trap.lat is not None else 'not set'}")
+    return 0
+
+
+def cmd_fill_weather(args) -> int:
+    from .weather import fill
+
+    init_db()
+    with session_scope() as db:
+        print(f"weather filled in for {fill(db, limit=args.limit)} photos")
+    return 0
+
+
 def cmd_evaluate(args) -> int:
     """Score counts, detection and biofix against a person's count (see evaluate.py for the file formats)."""
     from . import evaluate as ev
@@ -314,6 +351,17 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("csv", type=Path)
     p.add_argument("--source", default="newa:station")
     p.set_defaults(fn=cmd_import_weather)
+
+    p = sub.add_parser("set-location", help="set (or show) where a hub or trap is, for the weather on its photos")
+    p.add_argument("trap_id")
+    p.add_argument("lat", nargs="?")
+    p.add_argument("lon", nargs="?")
+    p.add_argument("--none", action="store_true", help="forget it")
+    p.set_defaults(fn=cmd_set_location)
+
+    p = sub.add_parser("fill-weather", help="look up the weather for recent photos with no sensor reading")
+    p.add_argument("--limit", type=int, default=1000)
+    p.set_defaults(fn=cmd_fill_weather)
 
     p = sub.add_parser("evaluate", help="score counts, detection (IoMin) and biofix against manual truth")
     p.add_argument("--counts", type=Path, help="CSV card,date,label,count from counting the liners by hand")

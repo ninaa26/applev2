@@ -176,13 +176,14 @@ def new_hub_code() -> str:
     return "".join(secrets.choice(HUB_CODE_ALPHABET) for _ in range(10))
 
 
-def add_hub_with_code(db: Session, code: str, trap_id: str, name: str = "", block: str = "") -> Trap:
+def add_hub_with_code(db: Session, code: str, trap_id: str, name: str = "", block: str = "",
+                      lat: float | None = None, lon: float | None = None) -> Trap:
     code = normalise_code(code)
     if not HUB_CODE.fullmatch(code):
         raise ValueError("a hub's pairing code is 10 letters and digits, as on its sticker (e.g. K7QM-3XTP9R)")
     if db.get(HubClaim, code) is not None:
         raise ValueError("that pairing code is already in use")
-    key = services.create_trap(db, trap_id, name, block, kind="hub")
+    key = services.create_trap(db, trap_id, name, block, kind="hub", lat=lat, lon=lon)
     db.add(HubClaim(code=code, trap_id=trap_id, api_key=key))
     db.flush()
     return db.get(Trap, trap_id)

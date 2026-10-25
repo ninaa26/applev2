@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_status.html" import camera_status %}
+{% from "_location.html" import location_fields, location_script %}
 {% set nav = 'manage' %}
 {% block title %}Set up traps · Orchard Sentinel{% endblock %}
 {% block main %}
@@ -89,6 +90,10 @@ server_url = "{{ server_url }}"</pre>
     <label>Block <input name="block" placeholder="Honeycrisp block" maxlength="120"></label>
     <label id="lure-field">Lure
       <select name="lure">{% for sp in PESTS %}<option value="{{ sp }}">{{ SPECIES_LABELS[sp] }} ({{ sp }})</option>{% endfor %}</select></label>
+    <div id="loc-field" class="wide">
+      <p class="muted small">Where it is: its cameras' photos get the temperature and humidity from the nearest National Weather Service station. Optional, and it can be set later on its page.</p>
+      {{ location_fields() }}
+    </div>
     <div><button class="primary" type="submit">Add</button></div>
   </form>
 </div>
@@ -146,9 +151,10 @@ server_url = "{{ server_url }}"</pre>
 
 <script>
   const kind = document.getElementById('kind'), hub = document.getElementById('hub-field'), lure = document.getElementById('lure-field'),
-        code = document.getElementById('code-field');
+        code = document.getElementById('code-field'), loc = document.getElementById('loc-field');
   const sync = () => { hub.style.display = kind.value === 'esp32' ? '' : 'none'; lure.style.display = kind.value === 'hub' ? 'none' : '';
-                       code.style.display = kind.value === 'hub' ? '' : 'none'; };
+                       code.style.display = kind.value === 'hub' ? '' : 'none'; loc.style.display = kind.value === 'esp32' ? 'none' : ''; };
   kind.addEventListener('change', sync); sync();
 </script>
+{{ location_script() }}
 {% endblock %}
