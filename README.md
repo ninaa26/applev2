@@ -31,7 +31,7 @@ docs/       ESP32 traps and the hub, the server on Linux or the Mac, Pi camera b
 ## Quick start (no hardware needed)
 
 ```bash
-cd server && uv venv --python 3.12 .venv && uv pip install -p .venv/bin/python -e '.[dev]'
+cd server && uv sync --locked --python 3.12 --extra dev
 .venv/bin/sentinel-server init && .venv/bin/sentinel-server add-trap T1 --lure CM --name Bench
 .venv/bin/sentinel-server serve          # http://localhost:8000
 ```

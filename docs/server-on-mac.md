@@ -10,8 +10,7 @@ The Mac setup below is still the quickest way to develop and test.
 ```bash
 brew install uv                       # if needed
 cd server
-uv venv --python 3.12 .venv
-uv pip install -p .venv/bin/python -e '.[dev]'
+uv sync --locked --python 3.12 --extra dev   # makes .venv with the versions in uv.lock
 cp .env.example .env                  # edit if needed
 .venv/bin/sentinel-server init
 .venv/bin/sentinel-server add-trap T1 --lure CM --name "Bench mockup"   # prints the trap's API key
@@ -56,7 +55,7 @@ Install the Tailscale app, log in with the team account, and turn on MagicDNS in
 The device software has a fake camera that draws a liner collecting moths:
 
 ```bash
-cd device && uv venv --python 3.12 .venv && uv pip install -p .venv/bin/python -e '.[dev]'
+cd device && uv sync --locked --python 3.12 --extra dev
 # config.toml: backend = "fake", server_url = "http://127.0.0.1:8000", data_dir = "./data", halt_after_cycle = false,
 #              [led] enabled = false, [sensors] sht4x = false
 for i in 1 2 3 4 5; do .venv/bin/sentinel-cycle --config config.toml --no-halt; done
@@ -64,11 +63,13 @@ for i in 1 2 3 4 5; do .venv/bin/sentinel-cycle --config config.toml --no-halt; 
 
 ## Better models (optional, needs ~3 GB of downloads)
 
+`uv sync` keeps only the extras it is given, so name every one you use (`--extra dev --extra bioclip --extra yolo`).
+
 | Setting | Install | What it does |
 |---|---|---|
-| `SENTINEL_DETECTOR=flatbug` | `uv pip install -p .venv/bin/python -e '.[flatbug]'` | Pretrained insect detector, which also works on crowded cards. Weights (50 MB) download to `data/models/` on first use |
-| `SENTINEL_DETECTOR=yolo` + `SENTINEL_DETECTOR_MODEL=../ml/models/yolo11/<run>/weights/best.pt` | `uv pip install -p .venv/bin/python -e '.[yolo]'` | Our own YOLO11 from `ml/train_yolo.py`. The photo is shrunk to the px/mm the run was trained at, cut into overlapping tiles, and the tiles' boxes merged so an insect on a tile edge counts once. Not the default until a run has been scored on our own liners |
-| `SENTINEL_CLASSIFIER=bioclip` | `uv pip install -p .venv/bin/python -e '.[bioclip]'` | BioCLIP 2 zero-shot species ID (model v0) |
+| `SENTINEL_DETECTOR=flatbug` | `uv sync --locked --extra dev --extra flatbug` | Pretrained insect detector, which also works on crowded cards. Weights (50 MB) download to `data/models/` on first use |
+| `SENTINEL_DETECTOR=yolo` + `SENTINEL_DETECTOR_MODEL=../ml/models/yolo11/<run>/weights/best.pt` | `uv sync --locked --extra dev --extra yolo` | Our own YOLO11 from `ml/train_yolo.py`. The photo is shrunk to the px/mm the run was trained at, cut into overlapping tiles, and the tiles' boxes merged so an insect on a tile edge counts once. Not the default until a run has been scored on our own liners |
+| `SENTINEL_CLASSIFIER=bioclip` | `uv sync --locked --extra dev --extra bioclip` | BioCLIP 2 zero-shot species ID (model v0) |
 | `SENTINEL_CLASSIFIER=bioclip-v1` + `SENTINEL_CLASSIFIER_HEAD=../ml/models/v1/head.npz` | same `[bioclip]` extra | BioCLIP 2 + the linear head from `ml/train_v1.py` (model v1) |
 | `SENTINEL_CLASSIFIER=cnn-v2` + `SENTINEL_CLASSIFIER_MODEL=../ml/models/v2/efficientnet_b0.pt` | same `[bioclip]` extra (brings torch + torchvision) | fine-tuned CNN from `ml/train_v2.py` (model v2) |
 
