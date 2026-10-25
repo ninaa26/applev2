@@ -12,7 +12,7 @@ gives the report's three numbers, each with a pass mark:
 | Detection by size | recall and species accuracy by the drawn insect's long side (under 30, 30–75, 75–150, over 150 px) | report | accuracy swings ~20 points between small and large crops (AMI dataset); an average hides the OFM |
 | False moths by cause | every detection counted as a moth that is not one: bycatch, debris, or nothing there | report | Preti et al. (2021): up to 67% false positives in a codling moth trap, from scales, leaves, lure shadow and flies |
 | Tracking | insects given more than one track (counted twice), tracks that took in more than one insect | report | most papers only check tracks by eye |
-| Photos | share left out (blurred, scale or grid misread) and why; px/mm and the OFM's length in px (need ≥ 50); worst glare; oldest liner | report | ~7% of camera-trap photos were unusable in one study; resolution sets what can be told apart |
+| Photos | share left out (too dark, blurred, scale or grid misread) and why; px/mm and the OFM's length in px (need ≥ 50); worst glare; oldest liner | report | ~7% of camera-trap photos were unusable in one study; resolution sets what can be told apart |
 | Biofix | NEWA sustained-catch date from the manual count vs from the automatic count | within 1 day | the date growers actually act on |
 
 It also reports what two-photo confirmation removes: detections seen in one photo and never

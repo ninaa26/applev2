@@ -100,6 +100,7 @@ def photo_quality(img: np.ndarray, outline: np.ndarray | None = None, max_side: 
                the lens). Compared with the same liner's other photos, never against a fixed number.
     glare      share of the card that is blown out to white, where an insect cannot be seen.
     card_rgb   the card's median colour (R, G, B): drifts as the liner gets dirty or the light changes.
+    brightness the card's median grey level (0-255): near black at night, when nothing on it can be seen.
     """
     f = min(1.0, max_side / max(img.shape[:2]))
     small = cv2.resize(img, None, fx=f, fy=f, interpolation=cv2.INTER_AREA) if f < 1 else img
@@ -112,7 +113,9 @@ def photo_quality(img: np.ndarray, outline: np.ndarray | None = None, max_side: 
         on[:] = True
     lap = cv2.Laplacian(cv2.cvtColor(small, cv2.COLOR_BGR2GRAY), cv2.CV_32F)
     b, g, r = (float(np.median(small[..., c][on])) for c in range(3))
-    return {"sharpness": round(float(lap[on].var()), 2),
+    grey = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+    return {"brightness": round(float(np.median(grey[on])), 1),
+            "sharpness": round(float(lap[on].var()), 2),
             "glare": round(float((small.min(axis=2)[on] >= 250).mean()), 4),
             "card_rgb": [round(r), round(g), round(b)]}
 
