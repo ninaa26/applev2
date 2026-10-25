@@ -22,6 +22,11 @@ def _fake_service(monkeypatch, temp_c=11.5, rh=64.0, gaps=()):
     def get_json(url):
         asked.append(url)
         u = urlparse(url)
+        if u.netloc == "api.open-meteo.com":  # every hour of the days asked for, at 20 °C
+            day = datetime.fromisoformat(parse_qs(u.query)["start_date"][0])
+            hours = [day + timedelta(hours=i) for i in range(24 * 9)]
+            return {"hourly": {"time": [h.strftime("%Y-%m-%dT%H:%M") for h in hours],
+                               "temperature_2m": [20.0] * len(hours), "relative_humidity_2m": [80.0] * len(hours)}}
         if u.path.startswith("/points/"):
             return {"properties": {"observationStations": f"{weather.API}/gridpoints/BGM/45,71/stations"}}
         if u.path.endswith("/stations"):
@@ -121,10 +126,29 @@ def test_a_station_with_a_gap_falls_back_to_the_next_nearest(monkeypatch):
         _add(client, trap_id="T1", kind="hub", lat="42.45", lon="-76.47")
         _, key = _add(client, trap_id="T2", kind="esp32", hub_id="T1")
         _upload(client, key, "T2", "a1", datetime.now(timezone.utc) - timedelta(hours=2))
-        _upload(client, key, "T2", "old", datetime.now(timezone.utc) - timedelta(days=8))
         with session_scope() as db:
-            assert weather.fill(db) == 1  # the week-old photo is past what the service keeps
-            cap = db.query(Capture).filter_by(uid="a1").one()
-            assert cap.meta["weather"]["station"] == "KFAR"
-            old_id = db.query(Capture).filter_by(uid="old").one().id
-        assert "no National Weather Service station reported" in client.get(f"/captures/{old_id}").text
+            assert weather.fill(db) == 1
+            assert db.query(Capture).one().meta["weather"]["station"] == "KFAR"
+
+
+def test_no_station_reporting_falls_back_to_open_meteo(monkeypatch):
+    asked = _fake_service(monkeypatch, gaps={"KNEAR", "KFAR"})
+    with TestClient(create_app()) as client:
+        _add(client, trap_id="T1", kind="hub", lat="42.45", lon="-76.47")
+        _, key = _add(client, trap_id="T2", kind="esp32", hub_id="T1")
+        now = datetime.now(timezone.utc)
+        _upload(client, key, "T2", "fresh", now - timedelta(hours=1))  # a station may still report it
+        _upload(client, key, "T2", "gap", now - timedelta(hours=5))
+        _upload(client, key, "T2", "old", now - timedelta(days=8))  # past the stations' week of history
+        _upload(client, key, "T2", "ancient", now - timedelta(days=90))  # past what is looked up at all
+        with session_scope() as db:
+            assert weather.fill(db) == 2
+            wx = {c.uid: (c.meta or {}).get("weather") for c in db.query(Capture)}
+            assert wx["fresh"] is None and wx["ancient"] is None
+            assert wx["gap"]["source"] == wx["old"]["source"] == "Open-Meteo" and wx["gap"]["temp_c"] == 20.0
+            gap_id = db.query(Capture).filter_by(uid="gap").one().id
+            ancient_id = db.query(Capture).filter_by(uid="ancient").one().id
+        assert not any("/stations/" in u and "/observations" in u and "start=" + (now - timedelta(days=8)).strftime("%Y-%m-%d") in u
+                       for u in asked)  # the week-old photo never asked the stations
+        assert "Open-Meteo's weather model" in client.get(f"/captures/{gap_id}").text
+        assert "no weather found for this time" in client.get(f"/captures/{ancient_id}").text

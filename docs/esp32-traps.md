@@ -29,8 +29,11 @@ ESP32 trap T4 ─┘  or the fieldhouse Wi-Fi)        gateway.py, always on:    
   nearest National Weather Service station ([api.weather.gov](https://www.weather.gov/documentation/services-web-api):
   free, no key, US only), the observation nearest the photo's time and within 90 min, trying the next
   nearest of 3 stations when one has a gap (KITH, the Ithaca airport, had none on Oct 22 2026). It runs
-  every 10 min; `sentinel-server fill-weather` does it at once. The service keeps only about a week of
-  observations, so photos older than 7 days can't be filled. The readings show on the photo's page with
+  every 10 min; `sentinel-server fill-weather` does it at once. When none of the 3 has a reading (or the
+  place is outside the US, or the service is down), the photo gets [Open-Meteo](https://open-meteo.com)'s
+  hourly value for the spot instead (free, no key; a weather model, not a measurement), once it is 3 h old
+  so a late station report still wins. The weather service keeps only about a week of observations, so
+  older photos go straight to Open-Meteo; photos older than 60 days aren't looked up. The readings show on the photo's page with
   the station they came from, and are kept apart from a sensor's (`meta["weather"]`), so they do not feed
   the degree days. The town search on the location form uses Open-Meteo's place search, since the
   weather service has none.
