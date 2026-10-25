@@ -172,6 +172,7 @@ class UsbCamera:
                     break
                 brightness = max(-64, brightness - self.CLIP_STEP)
                 self._set_controls({"brightness": brightness})
+            assert frame is not None  # the loop raises on a missing frame
             if not cv2.imwrite(str(path), frame, [cv2.IMWRITE_JPEG_QUALITY, int(self.cfg["jpeg_quality"])]):
                 raise CaptureError(f"could not write {path}")
             wb = cap.get(cv2.CAP_PROP_WB_TEMPERATURE)
@@ -249,7 +250,7 @@ class FakeCamera:
             moth = Image.new("RGBA", (length * 2, length * 2), (0, 0, 0, 0))
             md = ImageDraw.Draw(moth)
             md.ellipse([length * 0.5, length * 0.75, length * 1.5, length * 1.25], fill=colour + (255,))
-            moth = moth.rotate(ins["angle"], resample=Image.BICUBIC)
+            moth = moth.rotate(ins["angle"], resample=Image.Resampling.BICUBIC)
             img.paste(moth, (int(ins["x"] - length), int(ins["y"] - length)), moth)
         img = img.filter(ImageFilter.GaussianBlur(0.8))
         img.save(path, quality=int(self.cfg.get("jpeg_quality", 95)))

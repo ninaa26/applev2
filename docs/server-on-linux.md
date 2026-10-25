@@ -74,8 +74,49 @@ server/deploy.sh --rollback      # put back the code and database from before th
 
 It saves the server's code and a snapshot of its database to `~/deploy-backups/<time>/` (the last 10 are
 kept), copies `server/sentinel_server/` over, installs the versions in `uv.lock` if it or `pyproject.toml` changed, and
-restarts. If `/healthz` doesn't answer within 60 s it puts the old code and packages back and restarts again. The deployed commit is
-in `~/applev2/server/DEPLOYED`. Hubs and cameras: [esp32-traps.md](esp32-traps.md#fixing-and-updating-in-the-field).
+restarts. If `/healthz` doesn't answer within 60 s it puts the old code and packages back and restarts again;
+if the new code had already migrated the database, it puts the snapshot back too, so the database matches the
+old code (anything saved in it between the snapshot and the failed start is lost; photo files stay). The
+deployed commit is in `~/applev2/server/DEPLOYED`. Hubs and cameras:
+[esp32-traps.md](esp32-traps.md#fixing-and-updating-in-the-field).
+
+## Changing the database
+
+The schema is versioned with [Alembic](https://alembic.sqlalchemy.org/). The revisions are in
+[server/sentinel_server/migrations/versions/](../server/sentinel_server/migrations/versions/), and the
+server runs the ones a database hasn't had every time it starts (`init_db()`, also `sentinel-server init` and
+every other command), so a deploy migrates the Pi 5's database by itself. `0001` is the baseline, the schema
+when Alembic came in: a database from before it gets only the tables, columns and indexes it lacks and is
+stamped `0001`, and one that already has them all (the Pi 5's) is only stamped. A migration runs in one
+transaction, also on SQLite, so one that fails leaves the database as it was and the server doesn't start
+(deploy.sh then puts the old code back).
+
+To change a table, on the Mac in `server/`:
+
+1. Change the model in `sentinel_server/models.py`.
+2. Write the revision against a scratch database at the current schema:
+
+   ```bash
+   export SENTINEL_DATA_DIR=$(mktemp -d)
+   .venv/bin/alembic upgrade head
+   .venv/bin/alembic revision --autogenerate --rev-id 0002 -m "add trap colour"
+   ```
+
+   Number revisions in order (`0002`, `0003`, …). Read the new file in `migrations/versions/` and fix it:
+   autogenerate misses renames (it writes a drop and an add) and server defaults it can't compare. A
+   new `NOT NULL` column needs a `server_default`, or old rows have no value; on SQLite, changing or dropping a
+   column goes in `with op.batch_alter_table(...)`, which autogenerate already writes.
+3. `.venv/bin/alembic check` should say "No new upgrade operations detected", and
+   `.venv/bin/python -m pytest -q tests/test_migrations.py` checks that a new database built from the
+   revisions matches the models.
+4. Commit the model and the revision together.
+
+Keep revisions additive (new tables, new nullable or defaulted columns, new indexes) where you can: older code
+then still runs on the newer database, so going back to an older commit doesn't need the database put back.
+An older checkout that finds a revision it doesn't know logs a warning and leaves the database alone. After
+a revision that drops or renames something, `server/deploy.sh --rollback` is the way back, since it restores
+the database snapshot too. With the `postgres` extra and `SENTINEL_DATABASE_URL`, the same revisions build a
+Postgres database.
 
 ## Back it up
 

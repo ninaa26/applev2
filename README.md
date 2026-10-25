@@ -26,8 +26,12 @@ server/     FastAPI + SQLite (Postgres later): upload API, detection/tracking/co
 ml/         training photos (AMI, iNaturalist, trap-style synthetic), labelling tool, detector and classifier training and scoring
 hardware/   trap dimensions (TRAP.md), weatherproof camera head that retrofits onto the stock trap (HOUSING.md),
             mockup trap template, liner tray, calibration prints
-docs/       ESP32 traps and the hub, the server on Linux or the Mac, Pi camera bring-up and wiring, camera bench test, measuring accuracy
+docs/       ESP32 traps and the hub, the server on Linux or the Mac, Pi camera bring-up and wiring, camera bench test,
+            measuring accuracy, research notes, and the code-review ledger (docs/code-review/)
 ```
+
+Every doc and what it's for: [docs/README.md](docs/README.md). How the team works (setup, `make check`,
+branches, deploying): [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Quick start (no hardware needed)
 

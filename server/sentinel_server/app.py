@@ -10,16 +10,20 @@ import json
 import re
 import secrets
 import threading
+import time
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
-from fastapi import Body, Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from PIL import Image
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -30,7 +34,22 @@ from .settings import get_settings
 
 HERE = Path(__file__).parent
 # A capture uid becomes a file name: letters, digits, "_" and "-" only, so it can't point outside media/.
+WRONG_LIMIT, WRONG_WINDOW_S = 10, 600  # dashboard: 10 wrong passwords per address in 10 minutes
 SAFE_UID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,79}")
+
+
+class HubPairing(BaseModel):
+    """A hub's report. Each entry is checked on its own in fleet.hub_pairing, so one camera sending
+    something odd is skipped instead of failing the whole report."""
+
+    waiting: list[Any] = Field(default=[], description="cameras asking to be added: {code, fw, rssi}", max_length=200)
+    handed: list[Any] = Field(default=[], description="codes of cameras the hub has given their key", max_length=200)
+
+
+class HubClaim(BaseModel):
+    code: str = Field(default="", max_length=40, description="the pairing code on the hub's sticker")
+
+
 templates = Jinja2Templates(directory=str(HERE / "templates"))
 
 
@@ -89,22 +108,51 @@ def create_app(start_worker: bool = False) -> FastAPI:
     app.mount("/media", StaticFiles(directory=str(settings.media_dir)), name="media")
     app.mount("/static", StaticFiles(directory=str(HERE / "static")), name="static")
 
+    # ---------------------------------------------------------------- forms from other sites, headers
+
+    # The browser re-sends the dashboard password by itself, so any web page a teammate has open could post
+    # the dashboard's forms (a firmware upload reaches every camera). Browsers mark a POST with the page it
+    # came from: refuse it when that is another site. Traps, hubs and curl send no Origin and are let through.
+    @app.middleware("http")
+    async def same_site_forms(request: Request, call_next):
+        if request.method not in ("GET", "HEAD", "OPTIONS") and not request.url.path.startswith("/api/"):
+            origin = request.headers.get("origin") or request.headers.get("referer")
+            host = request.headers.get("x-forwarded-host") or request.headers.get("host", "")
+            if origin is not None and urlsplit(origin).netloc != host:
+                return Response("This form must be sent from the dashboard itself.", status_code=403)
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")  # no page may show the dashboard in a frame
+        response.headers.setdefault("Referrer-Policy", "same-origin")
+        return response
+
     # ---------------------------------------------------------------- dashboard password
 
     # Traps and hubs sign their requests with their own key (a hub claiming its key has the code on its
     # sticker), and /healthz says nothing worth hiding.
     no_password = {"/api/v1/captures", "/healthz"}
+    # Wrong passwords per address in the last WRONG_WINDOW_S; past WRONG_LIMIT that address waits, so the
+    # password can't be guessed by trying many. A browser's first visit, with no password yet, doesn't count.
+    wrong: dict[str, list[float]] = {}
 
     @app.middleware("http")
     async def dashboard_password(request: Request, call_next):
         expected = get_settings().dashboard_password
         if expected and request.url.path not in no_password and not request.url.path.startswith("/api/v1/hub/"):
-            scheme, _, token = request.headers.get("authorization", "").partition(" ")
+            who, now = request.client.host if request.client else "", time.monotonic()
+            recent = [t for t in wrong.get(who, ()) if now - t < WRONG_WINDOW_S]
+            if len(recent) >= WRONG_LIMIT:
+                return Response("Too many wrong passwords. Try again in a few minutes.", status_code=429,
+                                headers={"Retry-After": str(int(WRONG_WINDOW_S - (now - recent[0])) + 1)})
+            header = request.headers.get("authorization", "")
+            scheme, _, token = header.partition(" ")
             try:
                 given = base64.b64decode(token, validate=True).decode().partition(":")[2] if scheme.lower() == "basic" else ""
             except (binascii.Error, UnicodeDecodeError):
                 given = ""
             if not secrets.compare_digest(given.encode(), expected.encode()):
+                if header:
+                    wrong[who] = [*recent, now]
                 return Response("Password needed.", status_code=401,
                                 headers={"WWW-Authenticate": 'Basic realm="Orchard Sentinel", charset="UTF-8"'})
         return await call_next(request)
@@ -172,7 +220,7 @@ def create_app(start_worker: bool = False) -> FastAPI:
         if current is None or (m.get("new_card") and current.installed_at < captured):
             card = services.start_new_card(db, trap.id, at=captured, note="from trap" if m.get("new_card") else "first photo")
         else:
-            card = services.card_at(db, trap.id, captured)
+            card = services.card_at(db, trap.id, captured)  # type: ignore[assignment]  # the trap has a liner, so this finds one
 
         rel = Path(trap.id) / captured.strftime("%Y/%m/%d") / f"{uid}.jpg"
         dest = settings.media_dir / rel
@@ -211,17 +259,14 @@ def create_app(start_worker: bool = False) -> FastAPI:
         return FileResponse(path, media_type="application/octet-stream")
 
     @app.post("/api/v1/hub/pairing")
-    def api_hub_pairing(body: dict = Body(...), trap: Trap = Depends(hub_trap), db: Session = Depends(get_session)):
+    def api_hub_pairing(body: HubPairing, trap: Trap = Depends(hub_trap), db: Session = Depends(get_session)):
         """Cameras near this hub asking to be added, and keys it has handed over; replies with new keys."""
-        waiting, handed = body.get("waiting") or [], body.get("handed") or []
-        if not isinstance(waiting, list) or not isinstance(handed, list):
-            raise HTTPException(422, 'body is {"waiting": [{code, fw, rssi}], "handed": [code]}')
-        return {"assigned": fleet.hub_pairing(db, trap, waiting, handed)}
+        return {"assigned": fleet.hub_pairing(db, trap, body.waiting, body.handed)}
 
     @app.post("/api/v1/hub/claim")
-    def api_hub_claim(body: dict = Body(...), db: Session = Depends(get_session)):
+    def api_hub_claim(body: HubClaim, db: Session = Depends(get_session)):
         """A new hub with no key asks with the pairing code on its sticker; 404 until it is added on the dashboard."""
-        got = fleet.claim_hub(db, str(body.get("code", "")))
+        got = fleet.claim_hub(db, body.code)
         if got is None:
             raise HTTPException(404, "not added on the dashboard yet")
         return got
@@ -392,7 +437,7 @@ def create_app(start_worker: bool = False) -> FastAPI:
             raise HTTPException(404, "no such trap")
         per_page = 48
         total = db.scalar(select(func.count(Capture.id)).where(Capture.trap_id == trap_id))
-        pages = max(1, -(-total // per_page))
+        pages = max(1, -(-(total or 0) // per_page))  # count() always returns a number
         page = min(max(1, page), pages)
         caps = list(db.scalars(select(Capture).where(Capture.trap_id == trap_id).order_by(Capture.captured_at.desc())
                                .offset((page - 1) * per_page).limit(per_page)))
@@ -488,7 +533,7 @@ def create_app(start_worker: bool = False) -> FastAPI:
         if cap is None:
             raise HTTPException(404, "no such photo")
         tracks = {d.track_id: db.get(Track, d.track_id) for d in cap.detections if d.track_id}
-        trap = db.get(Trap, cap.trap_id)
+        trap = db.get_one(Trap, cap.trap_id)
         return templates.TemplateResponse(request, "capture.html", {
             "cap": cap, "tracks": tracks, "trap": trap, "located": weather.location(db, trap) is not None,
             "wx_pending": cap.captured_at >= utcnow() - weather.LOOK_BACK,

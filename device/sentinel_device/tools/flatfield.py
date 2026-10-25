@@ -73,7 +73,7 @@ def main(argv: list[str] | None = None) -> int:
         Image.fromarray(white).save(args.keep, quality=95)
 
     gains = tuple(float(g) for g in cfg["camera"]["colour_gains"])
-    for line in report(white, gains):
+    for line in report(white, gains):  # type: ignore[arg-type]  # the config has two gains
         print(line)
     gain = flatfield.build(white)
     path = flatfield.save(data_dir, gain, exposure_us=cfg["camera"]["exposure_us"], colour_gains=gains)

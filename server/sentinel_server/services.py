@@ -7,6 +7,7 @@ import re
 import secrets
 from collections import Counter, defaultdict
 from datetime import UTC, date, datetime, timedelta
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import and_, func, or_, select
@@ -109,7 +110,8 @@ def request_photo(trap: Trap) -> None:
 
 def photo_requests(db: Session, hub_id: str) -> dict[str, str]:
     """ESP32 traps on this hub with a photo asked for on the dashboard: {trap_id: when it was asked, UTC}."""
-    return {t.id: t.photo_requested_at.replace(tzinfo=UTC).isoformat() for t in db.scalars(select(Trap).where(
+    return {t.id: t.photo_requested_at.replace(tzinfo=UTC).isoformat()  # type: ignore[union-attr]  # the query keeps only set ones
+            for t in db.scalars(select(Trap).where(
         Trap.hub_id == hub_id, Trap.kind == "esp32", Trap.retired_at.is_(None), Trap.photo_requested_at.is_not(None)))}
 
 
@@ -165,6 +167,7 @@ def start_new_card(db: Session, trap_id: str, at: datetime | None = None, note: 
     """`lure`: a new lure went in with the liner (the trap's lure changes from this liner on)."""
     at = at or utcnow()
     trap = db.get(Trap, trap_id)
+    assert trap is not None  # callers pass a trap that exists
     if lure is not None and lure not in phenology.MODELS:
         raise ValueError(f"unknown lure {lure!r}")
     current = open_card(db, trap_id)
@@ -309,7 +312,7 @@ def weather_days(db: Session, trap_id: str) -> tuple[dict[date, tuple[float, flo
         (local_date(c.captured_at), c.temp_c)
         for c in db.scalars(select(Capture).where(Capture.trap_id == trap_id, Capture.temp_c.is_not(None)))
     ]
-    return phenology.daily_extremes_f(readings), f"trap:{trap_id}"
+    return phenology.daily_extremes_f(readings), f"trap:{trap_id}"  # type: ignore[arg-type]  # the query keeps only set temp_c
 
 
 def lure_catch_dates(db: Session, trap: Trap, card_ids: set[int] | None = None, sure_only: bool = False,
@@ -338,7 +341,7 @@ def phenology_status(db: Session, trap: Trap) -> dict | None:
     by_person = trap.biofix_date if trap.biofix_date and trap.biofix_date.year == today.year else None
     biofix = by_person or auto
     days, source = weather_days(db, trap.id)
-    out = {"model": model, "biofix": biofix, "biofix_auto": auto, "biofix_set": by_person is not None,
+    out: dict[str, Any] = {"model": model, "biofix": biofix, "biofix_auto": auto, "biofix_set": by_person is not None,
            "catches": len(catch_dates), "weather_source": source}
     # The biofix starts the season's clock, so say when it rests on catches nobody has confirmed.
     sure = lure_catch_dates(db, trap, sure_only=True, season=today.year)
