@@ -220,7 +220,7 @@ def create_app(start_worker: bool = False) -> FastAPI:
         if current is None or (m.get("new_card") and current.installed_at < captured):
             card = services.start_new_card(db, trap.id, at=captured, note="from trap" if m.get("new_card") else "first photo")
         else:
-            card = services.card_at(db, trap.id, captured)
+            card = services.card_at(db, trap.id, captured)  # type: ignore[assignment]  # the trap has a liner, so this finds one
 
         rel = Path(trap.id) / captured.strftime("%Y/%m/%d") / f"{uid}.jpg"
         dest = settings.media_dir / rel
@@ -437,7 +437,7 @@ def create_app(start_worker: bool = False) -> FastAPI:
             raise HTTPException(404, "no such trap")
         per_page = 48
         total = db.scalar(select(func.count(Capture.id)).where(Capture.trap_id == trap_id))
-        pages = max(1, -(-total // per_page))
+        pages = max(1, -(-(total or 0) // per_page))  # count() always returns a number
         page = min(max(1, page), pages)
         caps = list(db.scalars(select(Capture).where(Capture.trap_id == trap_id).order_by(Capture.captured_at.desc())
                                .offset((page - 1) * per_page).limit(per_page)))
@@ -533,7 +533,7 @@ def create_app(start_worker: bool = False) -> FastAPI:
         if cap is None:
             raise HTTPException(404, "no such photo")
         tracks = {d.track_id: db.get(Track, d.track_id) for d in cap.detections if d.track_id}
-        trap = db.get(Trap, cap.trap_id)
+        trap = db.get_one(Trap, cap.trap_id)
         return templates.TemplateResponse(request, "capture.html", {
             "cap": cap, "tracks": tracks, "trap": trap, "located": weather.location(db, trap) is not None,
             "wx_pending": cap.captured_at >= utcnow() - weather.LOOK_BACK,

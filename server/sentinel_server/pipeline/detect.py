@@ -636,11 +636,11 @@ def estimate_lens_k(img: np.ndarray, min_gain: float = 1.25) -> float:
 
     lo, hi = LENS_K_RANGE
     tried = {round(float(k), 4): score(float(k)) for k in np.arange(lo, hi + 1e-9, 0.05)}
-    best = max(tried, key=tried.get)
+    best = max(tried, key=tried.__getitem__)
     for k in (round(best - 0.025, 4), round(best + 0.025, 4)):
         if lo <= k <= hi:
             tried[k] = score(k)
-    best = max(tried, key=tried.get)
+    best = max(tried, key=tried.__getitem__)
     base = tried.get(0.0, 0.0)
     if tried[best] <= 0 or (best != 0 and tried[best] < min_gain * base):
         return 0.0
@@ -668,7 +668,7 @@ class FlatbugDetector:  # pragma: no cover - needs the flatbug package + weights
         boxes = pred.boxes.cpu().tolist() if hasattr(pred.boxes, "cpu") else list(pred.boxes)
         confs = pred.confs.cpu().tolist() if hasattr(pred.confs, "cpu") else list(pred.confs)
         found = [Box(float(b[0]), float(b[1]), float(b[2]), float(b[3]), float(c)) for b, c in zip(boxes, confs)]
-        outline = card_outline(cv2.imread(str(image_path)))
+        outline = card_outline(cv2.imread(str(image_path)))  # type: ignore[arg-type]  # flat-bug just read the same file
         self.last = {"card": outline}
         return on_card(found, outline)
 

@@ -161,6 +161,7 @@ def cmd_detect(args) -> int:
     for path in args.images:
         boxes = det.detect(path)
         img = cv2.imread(str(path))
+        assert img is not None  # det.detect just read it
         info = getattr(det, "last", {})
         if info.get("card") is not None:
             cv2.polylines(img, [info["card"].astype("int32")], True, (0, 255, 0), 2)

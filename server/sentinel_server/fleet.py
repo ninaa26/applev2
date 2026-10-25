@@ -161,6 +161,7 @@ def add_waiting_camera(db: Session, code: str, trap_id: str, name: str = "", blo
     key = services.create_trap(db, trap_id, name, block, lure, kind="esp32", hub_id=row.hub_id)
     row.trap_id, row.api_key = trap_id, key
     trap = db.get(Trap, trap_id)
+    assert trap is not None  # create_trap just added it
     trap.firmware_version = row.fw or None
     return trap
 
@@ -186,7 +187,7 @@ def add_hub_with_code(db: Session, code: str, trap_id: str, name: str = "", bloc
     key = services.create_trap(db, trap_id, name, block, kind="hub", lat=lat, lon=lon)
     db.add(HubClaim(code=code, trap_id=trap_id, api_key=key))
     db.flush()
-    return db.get(Trap, trap_id)
+    return db.get_one(Trap, trap_id)  # create_trap just added it
 
 
 def claim_hub(db: Session, code: str) -> dict | None:

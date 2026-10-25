@@ -88,7 +88,7 @@ def drain(queue: Queue, server_url: str, api_key: str, timeout_s: float, max_ite
                 bad.mkdir(exist_ok=True)
                 for p in (image, image.with_suffix(".json")):
                     shutil.move(str(p), bad / p.name)
-                log.error("server rejected %s: %s", image.name, e.response.text[:200])
+                log.error("server rejected %s: %s", image.name, e.response.text[:200])  # type: ignore[union-attr]  # status came from it
                 continue
             return uploaded, reply, f"upload failed: {e}"
         except requests.RequestException as e:
