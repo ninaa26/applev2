@@ -1,4 +1,5 @@
 import json
+import os
 import socket
 import threading
 import time
@@ -259,6 +260,82 @@ def test_upload_that_stops_mid_body_does_not_hold_its_connection(tmp_path: Path)
             t0 = time.monotonic()
             assert s.recv(1024) == b""  # the hub hangs up instead of waiting for the rest
             assert time.monotonic() - t0 < 3
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def _firmware(trap_id: str = "T2", version: str = "0.2.7") -> bytes:
+    """An app image as the hub sees one: 0xE9 first, the app description's magic word, and main.cpp's marker."""
+    return b"\xe9\x05\x02\x20" + b"\x00" * 28 + gateway.APP_DESC_MAGIC + b"\x00" * 200 + f"SENTINEL-NODE trap={trap_id} fw={version}\x00".encode() + b"\xff" * 300
+
+
+def test_no_firmware_configured_means_no_offer_and_no_download(tmp_path: Path):
+    gw = _gw(tmp_path)
+    status, reply = gw.schedule("Bearer key2")
+    assert status == 200 and "firmware" not in reply
+    assert gw.firmware("Bearer key2")[0] == 404
+    gw = _gw(tmp_path, firmware_dir=str(tmp_path / "fw"))  # configured, but the folder has nothing for T2
+    assert "firmware" not in gw.schedule("Bearer key2")[1]
+
+
+def test_firmware_for_a_camera_is_offered_in_its_schedule_reply_and_served(tmp_path: Path):
+    import hashlib
+
+    fw = tmp_path / "fw"
+    fw.mkdir()
+    image = _firmware()
+    (fw / "T2.bin").write_bytes(image)
+    gw = _gw(tmp_path / "data", firmware_dir=str(fw))
+    status, reply = gw.schedule("Bearer key2")
+    assert status == 200
+    assert reply["firmware"] == {"version": "0.2.7", "size": len(image), "sha256": hashlib.sha256(image).hexdigest(),
+                                 "url": "/node/v1/firmware"}
+    assert "firmware" not in gw.schedule("Bearer key3")[1]  # T3's build is its own file (its key is compiled in)
+    assert "firmware" not in gw.capture("Bearer key2", _meta(), JPEG)[1]  # only the wake's last call offers it
+    status, body, headers = gw.firmware("Bearer key2")
+    assert status == 200 and body == image and headers["X-Firmware-Version"] == "0.2.7"
+    assert gw.firmware("Bearer nope")[0] == 401 and gw.firmware("Bearer key3")[0] == 404
+
+    # A new build dropped in place is offered from the next reply, without a restart.
+    newer = _firmware(version="0.2.10") + b"\x00"
+    (fw / "T2.tmp").write_bytes(newer)
+    (fw / "T2.tmp").rename(fw / "T2.bin")
+    offer = gw.schedule("Bearer key2")[1]["firmware"]
+    assert offer["version"] == "0.2.10" and offer["sha256"] == hashlib.sha256(newer).hexdigest()
+
+
+def test_firmware_that_is_not_this_cameras_build_is_not_offered(tmp_path: Path):
+    fw = tmp_path / "fw"
+    fw.mkdir()
+    gw = _gw(tmp_path / "data", firmware_dir=str(fw))
+    for image in (_firmware(trap_id="T3"),               # built with T3's id and key
+                  b"\x00" + _firmware()[1:],             # not an ESP32 image
+                  _firmware()[:32] + b"\xff" * 4 + _firmware()[36:],  # a bootloader, or a merged image (bootloader first)
+                  b"\xe9" + b"\x00" * 500,               # an older build, or another project: no marker
+                  _firmware() + b"\x00" * 0x200000):     # bigger than an app slot
+        (fw / "T2.bin").write_bytes(image)
+        os.utime(fw / "T2.bin", ns=(len(image), len(image)))  # each file looks new to the cache
+        assert "firmware" not in gw.schedule("Bearer key2")[1]
+        assert gw.firmware("Bearer key2")[0] == 404
+
+
+def test_firmware_download_over_http(tmp_path: Path):
+    import hashlib
+
+    fw = tmp_path / "fw"
+    fw.mkdir()
+    image = _firmware()
+    (fw / "T2.bin").write_bytes(image)
+    server = gateway.make_server(_gw(tmp_path / "data", firmware_dir=str(fw)), "127.0.0.1", 0)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        offer = requests.get(f"{base}/node/v1/schedule", headers={"Authorization": "Bearer key2"}, timeout=5).json()["firmware"]
+        r = requests.get(base + offer["url"], headers={"Authorization": "Bearer key2"}, timeout=5)
+        assert r.status_code == 200 and r.headers["Content-Type"] == "application/octet-stream"
+        assert int(r.headers["Content-Length"]) == offer["size"] and hashlib.sha256(r.content).hexdigest() == offer["sha256"]
+        assert requests.get(base + offer["url"], timeout=5).status_code == 401
     finally:
         server.shutdown()
         server.server_close()

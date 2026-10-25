@@ -32,7 +32,8 @@ ESP32 trap T4 ─┘  or the fieldhouse Wi-Fi)        gateway.py, always on:    
 - **ESP32 trap:** `device/esp32-node/` (PlatformIO). Each wake it takes a photo and saves it to flash,
   joins the hub's Wi-Fi, and uploads everything queued, oldest first. It asks the hub when to wake
   next, then deep-sleeps. A photo stays on the ESP32 until the hub has it, so a missed contact costs
-  nothing but delay. The queue has 5.9 MB of flash, room for roughly 40–60 UXGA photos; when it is full the oldest go first.
+  nothing but delay. The queue has 3.9 MB of flash (firmware 0.2.7; 5.9 MB before, when there was no second app slot for
+  updates), room for roughly 25–35 UXGA photos; when it is full the oldest go first.
 
 Which camera module to put on the ESP32 (OV3660 for bring-up, OV5640 wide-angle to buy):
 [hardware/CAMERAS.md](../hardware/CAMERAS.md).
@@ -148,6 +149,66 @@ reflashed board can get a **New key**.
 Cameras can also be listed by hand in the hub's config (`[hub.nodes.T2] api_key = "..."`), for a
 bench hub that has no server to ask.
 
+## Update the firmware
+
+From firmware 0.2.7 the hub can update its cameras over Wi-Fi. Put a camera's new build on the hub; at
+the end of a wake that has sent all its photos, the camera sees the newer version in the hub's reply,
+downloads it into its second app slot, checks its size and SHA-256, and reboots into it. That first boot
+(`wake=update`: no preview, no photo) must reach the hub, or the camera goes back to the build it had.
+Each update is reported in the camera's end-of-wake status as `ota`.
+
+**Once per camera: the first OTA build goes on over USB.** 0.2.7 changes the partition table (a second
+2 MB app slot, so the photo queue drops from 5.9 to 3.9 MB), and a partition table can only be written
+over USB. Flashing it **wipes the photo queue**, so do it only when the camera has nothing queued: right
+after a wake whose photos reached the hub (the hub's log shows `node T2: queued ...` for it and then
+its status), or with the photos on the dashboard. Then `pio run -t upload` as usual. T2 runs 0.2.5,
+so it needs this once.
+
+**Each later update, over Wi-Fi:**
+
+1. Build it for that camera. Each build has the camera's `TRAP_ID` and `API_KEY` compiled in, so each
+   camera gets its own file: with that camera's `include/node_config.h` in place, raise `FW_VERSION` in
+   `src/main.cpp` and run `pio run -e node` in `device/esp32-node/`. The file is
+   `.pio/build/node/firmware.bin` (not a merged image).
+2. Turn updates on in the hub's config once: `[hub] firmware_dir = "/var/lib/sentinel/firmware"`, then
+   `sudo systemctl restart sentinel-gateway`.
+3. Copy the build to the hub as `<trap_id>.bin`, writing it under another name first so the hub never
+   reads half a file:
+
+   ```bash
+   scp .pio/build/node/firmware.bin pi@apple-pi-hub:/tmp/T2.bin
+   ssh pi@apple-pi-hub 'sudo install -d /var/lib/sentinel/firmware && sudo install -m 644 /tmp/T2.bin /var/lib/sentinel/firmware/T2.bin.new && sudo mv /var/lib/sentinel/firmware/T2.bin.new /var/lib/sentinel/firmware/T2.bin'
+   ```
+
+   The hub reads the file again whenever it changes, so no restart. When the camera next checks in,
+   the hub's log says `firmware /var/lib/sentinel/firmware/T2.bin offered to T2: 0.2.8, 1068 kB`. It offers a file only
+   if it is an app image whose marker (`SENTINEL-NODE trap=T2 fw=0.2.8`, put in by `main.cpp`) names that
+   camera, and says why not otherwise (`built for T3, not T2`).
+4. The camera takes it at its next wake that reaches the hub (a check-in counts, so within `checkin_min`):
+   the hub logs `node T2: sending firmware 0.2.8 (1068 kB)`.
+
+**Check that a camera took it:** `journalctl -u sentinel-gateway | grep 'node T2 status'` on the hub, or
+`tail -n 3 /var/lib/sentinel/nodes/T2/status.jsonl`. The update wake's status says `"fw": "0.2.8"` and
+`"ota": "ok 0.2.8 (from 0.2.7)"`, and its photos carry `device.sw_version` 0.2.8 to the server.
+Anything else in `ota` comes from the wake after the trouble:
+
+- `failed 0.2.8: sha256 mismatch` (or `hub replied 404`, `download stopped after ...`): the download
+  went wrong and the camera kept its build. It tries the same version on 3 wakes, then
+  `... (gave up)`.
+- `failed 0.2.8: rolled back to 0.2.7`: the new build booted but never got an answer from the hub
+  (the wrong Wi-Fi settings or key in its `node_config.h`, or it crashed), so the camera went back.
+  The camera won't try that version again.
+- `skipped 0.2.8: gave up on this version` or `battery low (3.52 V)`: it didn't
+  try on this wake. `battery low` only appears if `BATTERY_PIN` is set in `node_config.h` (below
+  `OTA_MIN_BATTERY_V`, 3.7 V by default).
+
+To try a version again after it gave up or rolled back, build it with a higher `FW_VERSION`. The camera
+never takes a version that isn't newer than its own, so taking `T2.bin` off the hub (or leaving the old
+one there) does nothing. To roll a camera back, build the old code with a higher version, or flash over USB.
+
+Not yet tested on a board (Oct 24 2026): a rollback, a power cut in the middle of a download, and how
+long an update takes. Until it is, try each update on one camera on the bench first.
+
 ## Bench test without the orchard
 
 **Hub Pi and ESP32 on the same Wi-Fi (Oct 8 and Oct 22 2026 on RedRover).** No access point is needed
@@ -177,6 +238,9 @@ then run `sentinel-gateway --config that.toml --forward-every 30` beside `sentin
   hubs and cameras on the dashboard and the hub's check-ins (`server/tests/test_manage.py`). The node
   firmware compiles. The camera check found the board's pins (ESP32-S3-EYE / Freenove layout) and an
   OV3660, and took 1600×1200 photos over USB.
+- Firmware updates from the hub (0.2.7): the gateway side is tested (`test_gateway.py`), and the
+  update decision with it (`esp32-node/test/test_ota.cpp`, run by `test_esp32_host.py`); not yet run on
+  a board.
 - Not yet done: the hub on cellular, the ESP32 on the hub's own access point, drift correction over real
   sleeps, range in the orchard, and the ESP32's deep-sleep current (dev boards have a power LED and
   USB chip that draw power even while the ESP32 sleeps).

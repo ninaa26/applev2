@@ -9,19 +9,27 @@
 // through deep sleep on the RTC timer, and `offset` (hub time - clock) is measured on every contact.
 // Comparing offsets an hour or more apart gives the RTC's drift (drift.h), which shortens or lengthens
 // the next sleep.
+//
+// Updates: the hub offers a newer build in its schedule reply. A wake that has sent all its photos downloads
+// it into the other app slot, checks its SHA-256 and reboots into it. That first boot ("update") must reach
+// the hub, or the board rolls back to the old build. The result goes out in the next status ("ota").
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
 #include <LittleFS.h>
 #include <Preferences.h>
+#include <Update.h>
 #include <WiFi.h>
 #include <algorithm>
 #include <sys/time.h>
 #include <vector>
 #include "driver/rtc_io.h"
 #include "esp_camera.h"
+#include "esp_ota_ops.h"
 #include "drift.h"
 #include "esp_http_server.h"
+#include "mbedtls/sha256.h"
+#include "ota.h"
 #include "node_config.h"
 
 // Settings added after the first node_config.h files were written: defaults for those.
@@ -34,8 +42,19 @@
 #ifndef SETUP_HOLD_MS
 #define SETUP_HOLD_MS 3000               // hold BUTTON_PIN this long on a button wake for setup mode
 #endif
+#ifndef BATTERY_PIN
+#define BATTERY_PIN -1                   // ADC pin reading the battery through a divider, or -1: not measured
+#endif
+#ifndef BATTERY_DIVIDER
+#define BATTERY_DIVIDER 2.0              // battery volts per volt at BATTERY_PIN
+#endif
+#ifndef OTA_MIN_BATTERY_V
+#define OTA_MIN_BATTERY_V 3.7            // no update below this (only if BATTERY_PIN is set)
+#endif
 
-#define FW_VERSION "0.2.6"
+#define FW_VERSION "0.2.7"
+// Read by the hub from the .bin (gateway.py FIRMWARE_MARKER): which camera this build is for, and its version.
+extern "C" __attribute__((used)) const char sentinel_marker[] = "SENTINEL-NODE trap=" TRAP_ID " fw=" FW_VERSION;
 static const int CONNECT_MIN_S = 120;      // keep trying the hub at least this long per wake
 static const int CONNECT_MAX_S = 300;
 static const int UNSYNCED_SLEEP_S = 600;   // never heard from the hub: first retry after this long,
@@ -45,6 +64,7 @@ static const size_t FS_RESERVE = 600000;   // drop the oldest photos to keep thi
 static const int MAX_WAKES = 12;
 static const int CHECKIN_CONNECT_S = 20;   // a check-in that can't reach the hub gives up quickly
 static const int HUB_DOWN_CONNECT_S = 45;  // photo wakes after one that couldn't reach the hub, until it answers
+static const int OTA_MAX_TRIES = 3;        // downloads of one version that fail before the node stops trying it
 
 // Survives deep sleep, lost on power loss.
 RTC_DATA_ATTR uint32_t session = 0;        // random per power-on: photos from an older session have no usable clock
@@ -73,6 +93,9 @@ RTC_DATA_ATTR uint32_t upload_before_ms = 0;  // how long the first half was awa
 static uint32_t awake_before_ms = 0;       // the same, in the second half: counted in this wake's awake time
 static const char *wake_reason = "";
 static bool reached_hub = false;
+// The hub's last schedule reply offered this update (version empty: none).
+static struct { char version[16]; char sha256[65]; long size; char url[48]; } offer = {};
+static bool ota_verify = false;            // this boot runs an update the hub hasn't answered yet (rollback pending)
 
 static double clockNow() {
   struct timeval tv;
@@ -273,6 +296,153 @@ static int uploadQueue() {
   return 0;
 }
 
+// ------------------------------------------------------------------ updates
+
+static double batteryVolts() {
+  if (BATTERY_PIN < 0) return -1;
+  return analogReadMilliVolts(BATTERY_PIN) * BATTERY_DIVIDER / 1000.0;
+}
+
+// Arduino marks a new build valid as it starts unless this says the sketch will (otaConfirm).
+extern "C" bool verifyRollbackLater() { return true; }
+
+// What the next status reports as "ota" (kept in flash: an update reboots, a rollback resets the RTC memory).
+static void otaReport(const String &msg) {
+  Preferences prefs;
+  prefs.begin("ota");
+  if (prefs.getString("report", "") != msg) prefs.putString("report", msg);
+  prefs.end();
+}
+
+// On every boot: is this the first boot of an update, or of the old build after one rolled back? Either way
+// the wake only reaches the hub (reason "update"): no preview, no photo.
+static bool otaBoot() {
+  const esp_partition_t *running = esp_ota_get_running_partition();
+  esp_ota_img_states_t state;
+  ota_verify = esp_ota_get_state_partition(running, &state) == ESP_OK && state == ESP_OTA_IMG_PENDING_VERIFY;
+  Preferences prefs;
+  prefs.begin("ota");
+  bool pending = prefs.getBool("pending", false);
+  String ver = prefs.getString("ver", "");
+  if (pending && ver != FW_VERSION) {  // the update never reached the hub, or crashed: the bootloader went back
+    prefs.putBool("pending", false);
+    prefs.putInt("tries", OTA_MAX_TRIES);
+    prefs.putString("report", "failed " + ver + ": rolled back to " FW_VERSION);
+    setError("update rolled back");
+  } else if (pending && !ota_verify) {  // running the update, with nothing to confirm (rollback not enabled)
+    prefs.putBool("pending", false);
+    prefs.putString("report", "ok " FW_VERSION " (from " + prefs.getString("from", "?") + ")");
+  }
+  prefs.end();
+  if (ota_verify) Serial.println("first boot of an update: reaching the hub confirms it");
+  // ota_verify alone: power was lost between the download and "pending". It still must not deep-sleep unconfirmed.
+  return pending || ota_verify;
+}
+
+// The hub answered the first boot of an update: keep it.
+static void otaConfirm() {
+  esp_ota_mark_app_valid_cancel_rollback();
+  ota_verify = false;
+  Preferences prefs;
+  prefs.begin("ota");
+  prefs.putBool("pending", false);
+  prefs.putString("ver", "");
+  prefs.putInt("tries", 0);
+  prefs.putString("report", "");
+  prefs.end();
+  Serial.printf("update to %s confirmed\n", FW_VERSION);
+}
+
+// Download the offered build into the free app slot, checking its size and SHA-256. "" when it is ready to boot.
+static String otaDownload() {
+  HTTPClient http;
+  http.begin(String(HUB_URL) + offer.url);
+  http.setTimeout(20000);
+  http.addHeader("Authorization", String("Bearer ") + API_KEY);
+  int code = http.GET();
+  if (code != 200) { http.end(); return "hub replied " + String(code); }
+  int len = http.getSize();
+  if (len != offer.size) { http.end(); return "size " + String(len) + ", offered " + String(offer.size); }
+  if (!Update.begin(len)) { http.end(); return String("no room: ") + Update.errorString(); }
+  mbedtls_sha256_context sha;
+  mbedtls_sha256_init(&sha);
+  mbedtls_sha256_starts_ret(&sha, 0);
+  WiFiClient *stream = http.getStreamPtr();
+  static uint8_t buf[4096];
+  int left = len;
+  String err;
+  uint32_t last = millis();
+  while (left > 0 && millis() - last < 20000) {
+    size_t n = stream->available();
+    if (n == 0) {
+      if (!http.connected()) break;
+      delay(5);
+      continue;
+    }
+    n = stream->readBytes(buf, std::min(n, std::min(sizeof(buf), (size_t)left)));
+    mbedtls_sha256_update_ret(&sha, buf, n);
+    if (Update.write(buf, n) != n) { err = String("flash write: ") + Update.errorString(); break; }
+    left -= n;
+    last = millis();
+  }
+  uint8_t digest[32];
+  mbedtls_sha256_finish_ret(&sha, digest);
+  mbedtls_sha256_free(&sha);
+  http.end();
+  if (err.length() == 0 && left > 0) err = "download stopped after " + String(len - left) + " of " + String(len) + " bytes";
+  char hex[65];
+  for (int i = 0; i < 32; i++) snprintf(hex + 2 * i, 3, "%02x", digest[i]);
+  if (err.length() == 0 && strcasecmp(hex, offer.sha256) != 0) err = "sha256 mismatch";
+  if (err.length()) { Update.abort(); return err; }
+  if (!Update.end()) return String("image refused: ") + Update.errorString();  // also sets the boot slot
+  return "";
+}
+
+// After the wake's last hub contact, with every photo sent: take the hub's update if it is newer.
+static void maybeUpdate(bool queue_empty) {
+  const esp_partition_t *slot = esp_ota_get_next_update_partition(nullptr);
+  Preferences prefs;
+  prefs.begin("ota");
+  String tried = prefs.getString("ver", "");
+  int tries = prefs.getInt("tries", 0);
+  double battery = batteryVolts();
+  OtaDecision d = otaDecide(FW_VERSION, offer.version, offer.size, slot ? (long)slot->size : 0, offer.sha256,
+                            queue_empty, battery, OTA_MIN_BATTERY_V, tried.c_str(), tries, OTA_MAX_TRIES);
+  if (d == OTA_UP_TO_DATE) { prefs.end(); return; }
+  if (d != OTA_UPDATE) {
+    String msg = String("skipped ") + offer.version + ": " + otaDecisionText(d);
+    if (d == OTA_BATTERY_LOW) msg += " (" + String(battery, 2) + " V)";
+    prefs.end();
+    Serial.println(msg);
+    otaReport(msg);
+    return;
+  }
+  tries = tried == offer.version ? tries + 1 : 1;
+  prefs.putString("ver", offer.version);
+  prefs.putInt("tries", tries);
+  prefs.end();
+  Serial.printf("updating %s -> %s (%ld bytes, try %d)\n", FW_VERSION, offer.version, offer.size, tries);
+  uint32_t t0 = millis();
+  String err = otaDownload();
+  if (err.length()) {
+    String msg = String("failed ") + offer.version + ": " + err + (tries >= OTA_MAX_TRIES ? " (gave up)" : "");
+    setError("update failed");
+    Serial.println(msg);
+    otaReport(msg);
+    return;
+  }
+  prefs.begin("ota");
+  prefs.putBool("pending", true);
+  prefs.putString("from", FW_VERSION);
+  prefs.putString("report", "");
+  prefs.end();
+  Serial.printf("update downloaded in %lu ms, rebooting into it\n", (unsigned long)(millis() - t0));
+  Serial.flush();
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_OFF);
+  esp_restart();  // a restart, not a deep sleep: the new build starts with fresh RTC memory
+}
+
 // The last call of a wake: report status, get the schedule. Tells the hub this node is done.
 static int askSchedule() {
   JsonDocument st, reply;
@@ -284,10 +454,29 @@ static int askSchedule() {
     st["prev_wake"] = prev_wake; st["prev_awake_ms"] = prev_awake_ms; st["prev_reached_hub"] = prev_reached_hub;
   }
   st["cpu_temp_c"] = temperatureRead(); st["drift_ppm"] = (rate - 1.0) * 1e6;
+  double battery = batteryVolts();
+  if (battery >= 0) st["battery_v"] = battery;
+  // The last update's result: on the boot that runs it, "ok" (sent before the hub has answered, since this is
+  // the reply that confirms it), or what went wrong on an earlier wake.
+  Preferences prefs;
+  prefs.begin("ota", true);
+  String report = ota_verify ? "ok " FW_VERSION " (from " + prefs.getString("from", "?") + ")" : prefs.getString("report", "");
+  prefs.end();
+  if (report.length()) st["ota"] = report;
   reached_hub = true;
   String status;
   serializeJson(st, status);
-  return post("/node/v1/schedule", "GET", nullptr, status, reply);
+  int code = post("/node/v1/schedule", "GET", nullptr, status, reply);
+  if (code == 200) {
+    JsonObject fw = reply["firmware"];
+    strlcpy(offer.version, fw["version"] | "", sizeof(offer.version));
+    strlcpy(offer.sha256, fw["sha256"] | "", sizeof(offer.sha256));
+    strlcpy(offer.url, fw["url"] | "/node/v1/firmware", sizeof(offer.url));
+    offer.size = fw["size"] | 0L;
+    if (ota_verify) otaConfirm();
+    else if (report.length()) otaReport("");
+  }
+  return code;
 }
 
 // ------------------------------------------------------------------ setup mode: live preview
@@ -465,13 +654,15 @@ void setup() {
   if (upload) awake_before_ms = upload_before_ms;
   else boots++;
   if (session == 0) session = esp_random() | 1;
+  (void)*(volatile const char *)sentinel_marker;  // keep the marker in the build
+  bool update = otaBoot();  // just rebooted into an update, or rolled back from one
   bool checkin = cause == ESP_SLEEP_WAKEUP_TIMER && checkin_next && !upload;
   bool button = cause == ESP_SLEEP_WAKEUP_EXT0;
   // A timer wake without a schedule is only a search for the hub (see sleepUntilNextWake).
   bool search = cause == ESP_SLEEP_WAKEUP_TIMER && !checkin && !upload && retries > 0;
   // Powered on (installing it) or BOOT held: live preview first. A button wake means a fresh liner either way.
-  bool setup_mode = (cause != ESP_SLEEP_WAKEUP_TIMER && !button) || (button && buttonHeld());
-  const char *reason = upload ? upload_reason : setup_mode ? "setup" : checkin ? "checkin" : search ? "search" : cause == ESP_SLEEP_WAKEUP_TIMER ? "scheduled" : "manual";
+  bool setup_mode = !update && ((cause != ESP_SLEEP_WAKEUP_TIMER && !button) || (button && buttonHeld()));
+  const char *reason = update ? "update" : upload ? upload_reason : setup_mode ? "setup" : checkin ? "checkin" : search ? "search" : cause == ESP_SLEEP_WAKEUP_TIMER ? "scheduled" : "manual";
   wake_reason = reason;
   Serial.printf("\nsentinel node %s fw %s wake=%s%s boots=%lu synced=%d\n", TRAP_ID, FW_VERSION, reason,
                 upload ? " (upload)" : "", (unsigned long)boots, synced);
@@ -481,7 +672,7 @@ void setup() {
   if (setup_mode) runPreview();
   // A check-in takes no photo unless one was asked for. A search wake (no schedule) takes none either,
   // or the queue fills with them.
-  if (!upload && !checkin && !search) {
+  if (!upload && !checkin && !search && !update) {
     captureToQueue(reason, button);
     restartForUpload(reason);
   }
@@ -489,7 +680,7 @@ void setup() {
   double real_margin = haveSchedule() ? 15 + 0.003 * 43200 : 0;  // as early as we might have woken
   // A photo wake waits up to 5 min for the hub. With the hub down, that is 5 min of Wi-Fi on every photo
   // wake, so after one miss it tries briefly until the hub answers again (a check-in resets it too).
-  int connect_s = checkin ? CHECKIN_CONNECT_S : search ? RETRY_CONNECT_S
+  int connect_s = checkin ? CHECKIN_CONNECT_S : search || update ? RETRY_CONNECT_S
                   : hub_misses > 0 ? HUB_DOWN_CONNECT_S
                   : std::min(CONNECT_MAX_S, CONNECT_MIN_S + (int)(2 * real_margin));
   uint32_t until = millis() + connect_s * 1000UL;
@@ -508,10 +699,18 @@ void setup() {
     }
     if (code == 0) {
       hub_misses = 0;
-      askSchedule();
+      int sched = askSchedule();
+      // The first boot of an update keeps it only if the hub answers, so give the hub the whole window.
+      while (ota_verify && sched != 200 && (int32_t)(until - millis()) > 5000) {
+        delay(5000);
+        if (WiFi.status() != WL_CONNECTED) connectWifi(std::max(10, (int)((int32_t)(until - millis()) / 1000)));
+        sched = askSchedule();
+      }
       if (photo_now) {  // asked for on the dashboard since this node's last photo
         Serial.println("photo asked for on the dashboard");
         if (captureToQueue("requested", false)) restartForUpload("requested");
+      } else if (sched == 200) {
+        maybeUpdate(true);  // reboots into the update if it takes one
       }
     } else if (code != 401 && !checkin) {
       setError("hub not answering");
@@ -523,6 +722,11 @@ void setup() {
   }
   WiFi.disconnect(true);
   WiFi.mode(WIFI_OFF);
+  if (ota_verify) {  // an update that can't reach the hub: back to the build that could
+    Serial.println("update never reached the hub: rolling back");
+    Serial.flush();
+    esp_ota_mark_app_invalid_rollback_and_reboot();
+  }
   sleepUntilNextWake();
 }
 

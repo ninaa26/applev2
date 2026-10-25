@@ -36,7 +36,28 @@ CH343 USB serial, ESP32-S3-EYE camera pins) with an OV3660. On a Mac the CH343 g
 115200 baud, which is why `upload_speed` is 115200 (about 20 s per flash). Other boards need their
 camera pins in `node_config.h` and maybe `board_build.arduino.memory_type` in `platformio.ini`.
 
-`partitions.csv` keeps one 2 MB app slot and gives the rest of the flash (5.9 MB) to the photo queue.
+`partitions.csv` has two 2 MB app slots, one running and one for over-the-air updates, and gives the
+rest of the flash (3.9 MB) to the photo queue (firmware 0.2.7; before that one slot and 5.9 MB).
+
+## Update the firmware
+
+The hub updates its cameras over Wi-Fi (firmware 0.2.7 and later). The steps, and how to check that a
+camera took an update: [docs/esp32-traps.md → Update the firmware](../../docs/esp32-traps.md#update-the-firmware).
+In short:
+
+- **The first 0.2.7 build goes on over USB** (`pio run -t upload`), because it changes the partition
+  table. That flash **wipes the photo queue**: do it right after a wake whose photos reached the hub.
+- After that, build the next version with that camera's `node_config.h` and a higher `FW_VERSION`, and
+  put `.pio/build/node/firmware.bin` on the hub as `<firmware_dir>/<trap_id>.bin` (`[hub] firmware_dir`).
+  One file per camera, since each build has its camera's id and key compiled in.
+- The camera takes it at the end of a wake that has sent all its photos (and only if the battery is
+  above `OTA_MIN_BATTERY_V`, when `BATTERY_PIN` is set). It reboots into it, and that first boot must
+  reach the hub, or the camera goes back to the old build.
+- The result is in the next end-of-wake status: `"ota": "ok 0.2.8 (from 0.2.7)"`, `"failed 0.2.8: ..."`
+  or `"skipped 0.2.8: ..."`.
+
+The decision (is the offer newer, does it fit, is it worth trying again) is in `include/ota.h`, checked
+on the computer by `test/test_ota.cpp` (`device/tests/test_esp32_host.py` builds and runs it).
 
 ## Serial output
 
@@ -67,6 +88,11 @@ If the hub's Wi-Fi is up but its gateway is not open yet (`upload ... -> -1`), t
 photo on those wakes (`wake=search`, firmware 0.2.2); one that has a schedule keeps to the hub's times, repeated daily. `wifi ... failed status N mac ...`:
 1 means the network was not seen, 4 that it refused the node (the password, or a network that wants
 the MAC registered).
+
+An update shows as `updating 0.2.7 -> 0.2.8 (1068448 bytes, try 1)`, then `update downloaded in ... ms,
+rebooting into it`, and the next boot prints `wake=update` and `first boot of an update: reaching the hub
+confirms it`, then `update to 0.2.8 confirmed`. `update never reached the hub: rolling back` means it goes
+back to the old build.
 
 `ERROR camera not found`: the ribbon cable is loose or upside down, or the camera's pins differ from
 `node_config.h`. `ERROR hub not reachable`: out of range, the wrong Wi-Fi password, or the hub was not

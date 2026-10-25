@@ -20,10 +20,13 @@ Node protocol (all requests carry "Authorization: Bearer <that trap's server API
     GET  /node/v1/schedule   last call of a wake; marks the node done for this window
     POST /node/v1/preview    header X-Sentinel-Meta: {"url": "http://<node ip>/", "seconds": n}: the node is
                              streaming a live preview for setting it up, listed on the hub's page (GET /)
+    GET  /node/v1/firmware   the firmware update offered in the schedule reply (application/octet-stream)
 
 All reply with {"now": unix seconds, "sleep_s": seconds until the node's next wake, "wakes": the next
 12 wake times in unix seconds, "checkin_s": how often to check in between photos (0: don't),
 "photo_now": true when a photo was asked for on the dashboard and this node hasn't sent one since}.
+The schedule reply also carries "firmware": {"version", "size", "sha256", "url"} when [hub] firmware_dir
+holds an update for that node (<trap_id>.bin, see Gateway.firmware_for); the node decides whether to take it.
 """
 
 from __future__ import annotations
@@ -54,6 +57,10 @@ log = logging.getLogger(__name__)
 NODE_ID = re.compile(r"[0-9a-fA-F]{8,32}")
 PREVIEW_URL = re.compile(r"http://[0-9.]{7,15}(:[0-9]{1,5})?/")
 TRAP_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,31}")
+# main.cpp puts this in every build: which trap's id and key it was built with, and its FW_VERSION.
+FIRMWARE_MARKER = re.compile(rb"SENTINEL-NODE trap=([A-Za-z0-9][A-Za-z0-9_-]{0,31}) fw=([0-9]+(?:\.[0-9]+){1,3})\x00")
+FIRMWARE_MAX = 0x200000  # one app slot in esp32-node/partitions.csv
+APP_DESC_MAGIC = (0xABCD5432).to_bytes(4, "little")  # esp_app_desc_t.magic_word, at byte 32 of an app image
 
 
 def hash_key(key: str) -> str:
@@ -93,6 +100,7 @@ class Gateway:
         self.requests: dict[str, datetime] = {}  # photo asked for on the dashboard: trap_id -> when (from the server)
         self.served: dict[str, datetime] = {}    # requests a node has already sent a newer photo for
         self.previews: dict[str, tuple[str, float]] = {}  # trap_id -> (live preview url, until clock())
+        self._firmware: dict[str, tuple[tuple[int, int], dict | None, bytes]] = {}  # trap_id -> (file stat, offer, image)
         self.lock = threading.Lock()
 
     def _set_nodes(self, server: dict[str, str]) -> None:
@@ -173,6 +181,61 @@ class Gateway:
                 "wakes": [round(w.timestamp()) for w in wakes], "checkin_s": round(float(self.hub["checkin_min"]) * 60),
                 "photo_now": self.photo_wanted(trap_id)}
 
+    def firmware_for(self, trap_id: str) -> tuple[dict, bytes] | None:
+        """The update offered to one camera, and its image: [hub] firmware_dir/<trap_id>.bin. Each build has the
+        camera's trap id and key compiled in, so each camera has its own file, and the hub offers it only if the
+        marker in the image names that camera. Read again whenever the file changes, so dropping a new .bin in
+        place (copy, then rename over the old one) needs no restart."""
+        folder = self.hub.get("firmware_dir")
+        if not folder:
+            return None
+        path = Path(folder) / f"{trap_id}.bin"
+        try:
+            st = path.stat()
+            stamp = (st.st_mtime_ns, st.st_size)
+            with self.lock:
+                cached = self._firmware.get(trap_id)
+            if cached is None or cached[0] != stamp:
+                data = path.read_bytes()
+                cached = (stamp, self._firmware_offer(path, trap_id, data), data)
+                with self.lock:
+                    self._firmware[trap_id] = cached
+        except OSError:
+            return None
+        return (cached[1], cached[2]) if cached[1] else None
+
+    @staticmethod
+    def _firmware_offer(path: Path, trap_id: str, data: bytes) -> dict | None:
+        found = FIRMWARE_MARKER.findall(data)
+        # An app image: 0xE9, and the app description's magic word after the image and segment headers. A
+        # merged image (bootloader first) or a bootloader starts with 0xE9 too.
+        if data[:1] != b"\xe9" or data[32:36] != APP_DESC_MAGIC:
+            log.warning("firmware %s is not an ESP32 app image (use .pio/build/node/firmware.bin); not offered", path)
+        elif len(data) > FIRMWARE_MAX:
+            log.warning("firmware %s is %d bytes, more than an app slot holds; not offered", path, len(data))
+        elif len(found) != 1:
+            log.warning("firmware %s has no Orchard Sentinel marker (fw 0.2.7 or later); not offered", path)
+        elif found[0][0].decode() != trap_id:
+            log.warning("firmware %s was built for %s, not %s; not offered", path, found[0][0].decode(), trap_id)
+        else:
+            version = found[0][1].decode()
+            log.info("firmware %s offered to %s: %s, %d kB", path, trap_id, version, len(data) // 1000)
+            return {"version": version, "size": len(data), "sha256": hashlib.sha256(data).hexdigest(),
+                    "url": "/node/v1/firmware"}
+        return None
+
+    def firmware(self, authorization: str) -> tuple[int, dict | bytes, dict]:
+        """GET /node/v1/firmware: the image firmware_for offers this node, exactly the bytes it hashed."""
+        trap_id = self.trap_for(authorization)
+        if trap_id is None:
+            return 401, {"error": "unknown or missing trap API key"}, {}
+        found = self.firmware_for(trap_id)
+        if found is None:
+            return 404, {"error": "no firmware update for this trap"}, {}
+        offer, data = found
+        log.info("node %s: sending firmware %s (%d kB)", trap_id, offer["version"], len(data) // 1000)
+        return 200, data, {"X-Firmware-Version": offer["version"], "X-Firmware-SHA256": offer["sha256"]}
+
     def capture(self, authorization: str, meta_header: str, body: bytes) -> tuple[int, dict]:
         trap_id = self.trap_for(authorization)
         if trap_id is None:
@@ -232,7 +295,11 @@ class Gateway:
         if meta_header:
             log.info("node %s status: %s", trap_id, meta_header[:600])
             self._save_status(trap_id, meta_header)
-        return 200, self.schedule_reply(trap_id)
+        reply = self.schedule_reply(trap_id)
+        found = self.firmware_for(trap_id)
+        if found:
+            reply["firmware"] = found[0]
+        return 200, reply
 
     def _save_status(self, trap_id: str, meta_header: str) -> None:
         """Keep each node's end-of-wake status (awake time, signal, errors) in data_dir/nodes/<trap_id>/status.jsonl."""
@@ -322,6 +389,18 @@ def make_server(gw: Gateway, host: str, port: int, socket_timeout: float = 60) -
             self.end_headers()
             self.wfile.write(data)
 
+        def _send_firmware(self) -> None:
+            status, body, headers = gw.firmware(self.headers.get("Authorization", ""))
+            if status != 200:
+                return self._reply(status, body)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Content-Length", str(len(body)))
+            for name, value in headers.items():
+                self.send_header(name, value)
+            self.end_headers()
+            self.wfile.write(body)
+
         def do_POST(self):
             if self.path == "/node/v1/preview":
                 return self._reply(*gw.preview(self.headers.get("Authorization", ""), self.headers.get("X-Sentinel-Meta", "")))
@@ -343,6 +422,8 @@ def make_server(gw: Gateway, host: str, port: int, socket_timeout: float = 60) -
                 self.send_header("Content-Length", str(len(data)))
                 self.end_headers()
                 return self.wfile.write(data)
+            if self.path == "/node/v1/firmware":
+                return self._send_firmware()
             if self.path != "/node/v1/schedule":
                 return self._reply(404, {"error": "not found"})
             self._reply(*gw.schedule(self.headers.get("Authorization", ""), self.headers.get("X-Sentinel-Meta", "")))

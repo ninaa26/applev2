@@ -37,8 +37,9 @@ DEFAULTS: dict[str, Any] = {
     "upload": {"timeout_s": 30, "max_per_cycle": 20},
     # Hub for ESP32 camera traps (gateway.py). nodes: {trap_id: {"api_key": ...}} from [hub.nodes.<trap_id>].
     # checkin_min: between photos, nodes wake this often just to ask for a photo requested on the dashboard (0: never).
+    # firmware_dir: over-the-air updates, <firmware_dir>/<trap_id>.bin offered to that node ("": none).
     "hub": {"enabled": False, "listen": "0.0.0.0", "port": 8080, "window_s": 240, "node_offset_s": 60,
-            "max_image_mb": 4, "checkin_min": 30, "nodes": {}},
+            "max_image_mb": 4, "checkin_min": 30, "firmware_dir": "", "nodes": {}},
 }
 
 # Keys the server is allowed to change remotely. Identity and credentials stay local.
