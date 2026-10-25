@@ -201,3 +201,13 @@ def test_overview_shows_a_hub_before_any_camera_is_added():
         page = client.get("/").text
     assert "No cameras yet" in page
     assert "<h2>Hubs</h2>" in page and "Fieldhouse hub" in page and "0 cameras" in page
+
+
+def test_stylesheet_url_changes_with_its_contents():
+    # A deploy must not leave browsers on a cached old app.css with the new pages.
+    import hashlib
+    from sentinel_server import app as app_module
+    css = (app_module.HERE / "static" / "app.css").read_bytes()
+    with TestClient(create_app()) as client:
+        page = client.get("/").text
+        assert f'href="/static/app.css?v={hashlib.sha256(css).hexdigest()[:12]}"' in page
