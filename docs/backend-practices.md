@@ -10,7 +10,8 @@ securing code). Round 10 (Oct 25): [PR #60](https://github.com/ninaa26/applev2/p
 items 1, 2, 6 and 11 and was checked; this branch did items 4, 7, 8 (rate limiting), 14
 (`SECURITY.md`), 15 and 16. Round 11 (Oct 25): dismissed the CodeQL alerts and set the
 GitHub settings for items 10, 14 and 17. Round 12: checked Dependabot PRs #61–#63 (item 6). Round 13: #61–#63 and #66 merged; checked
-the top-level folder layout (under "Skipped on purpose").
+the top-level folder layout (under "Skipped on purpose"). Round 14: organization ideas, checked
+against the repo (new section below).
 
 ## Already in place
 
@@ -167,6 +168,35 @@ the reason below, and none is open now:
 of work, each worth its own PR.
 
 **Next:** rebase and merge PR #65 (type checking), and choose a license (item 13).
+
+## Organization ideas (round 14)
+
+Checked against the repo on Oct 25 2026, most useful first. None is urgent; each is small.
+
+| # | Idea | What was found |
+|---|------|----------------|
+| O1 | Delete merged remote branches | 61 remote branches, 52 already merged into `master`. Auto-delete (item 17) only covers new PRs |
+| O2 | Tag what's deployed and released | No tags at all. `deploy.sh` writes the commit only to `~/applev2/DEPLOYED` on the Pi, and firmware versions live only in `FW_VERSION` in `main.cpp` |
+| O3 | Move team conventions into `CONTRIBUTING.md` | Branch/PR flow, commit prefixes, bench-Pi etiquette and deploy steps are only in `CLAUDE.md`, which a teammate may never open. Commit prefixes now include `CI:` but `CLAUDE.md` lists only four |
+| O4 | PR template | PR bodies already follow What / Checked / Not tested; `.github/pull_request_template.md` would make that the default |
+| O5 | A docs index | The README links 10 docs but not `wiring.md` or this file. The two `*-research-status.md` files are dated snapshots mixed in with how-to guides |
+| O6 | One command for every check | Tests run per folder with different commands; a root `justfile` or `Makefile` (`test`, `lint`, `types`) would match CI in one step |
+| O7 | Tidy `ml/` | 25 scripts, already grouped by prefix (`fetch_`, `eval_`, `train_`). `mobilenet_cm_patti.py` is the only one `ml/README.md` doesn't mention |
+| O8 | `code-review/` | 1.1 MB of process material at the top level; move under `docs/` or archive at semester end |
+
+Details:
+
+- **O2.** Have `deploy.sh` push a tag such as `server-2026-10-25` after `/healthz` answers, and
+  `release.sh` a `fw-<FW_VERSION>` tag. GitHub then shows what each Pi and camera runs, and
+  `git diff server-2026-10-20 server-2026-10-25` is the change list for a report.
+- **O3.** Keep `CLAUDE.md` for what's specific to Claude (environments, which preview servers
+  exist) and point it at `CONTRIBUTING.md` for the rest, so there's one source.
+- **O5.** A short `docs/README.md` in three groups (set up: bring-up, wiring, ESP32 traps, server
+  on Linux/Mac; check: camera bench, evaluation; background: research status, backend practices),
+  with the research-status pages carrying an "as of" date at the top.
+- Not suggested: CODEOWNERS (two people), GitHub Issues/Projects (the review ledger in
+  `code-review/LEDGER.md` already tracks work; only add Issues if the course wants visible
+  progress), a monorepo tool, or splitting `app.py` (552 lines is still easy to follow).
 
 ## Skipped on purpose
 
