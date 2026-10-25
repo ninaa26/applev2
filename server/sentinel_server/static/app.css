@@ -237,3 +237,10 @@ tr.retired td{color:var(--muted)}
 @media (prefers-reduced-motion:no-preference){
   .ddtrack .fill{transition:width .4s ease}
 }
+/* location picker (_location.html): a town search, then the numbers it found */
+form.add .wide,form.add > .loc{grid-column:1/-1}
+.loc{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;align-items:end}
+.loc label:first-child{grid-column:1/-1}
+.loc-find{display:flex;gap:8px;flex-wrap:wrap}
+.loc-find input{flex:1 1 180px;min-width:0}
+.loc-msg{grid-column:1/-1;margin:0;min-height:1em}

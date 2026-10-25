@@ -23,7 +23,7 @@ from PIL import Image
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from . import __version__, services
+from . import __version__, services, weather
 from .db import get_session, init_db
 from .models import PESTS, SPECIES, SPECIES_LABELS, Capture, Detection, Event, Review, Track, Trap, utcnow
 from .settings import get_settings
@@ -55,6 +55,7 @@ def _ago(dt: datetime | None) -> str:
 
 templates.env.filters["local"] = _local
 templates.env.filters["ago"] = _ago
+templates.env.filters["fromiso"] = datetime.fromisoformat
 # What each event means, in a grower's words (Event.kind).
 EVENT_LABELS = {
     "new_card": "New liner", "new_card_ignored": "Not a new liner after all: the same insects are still there",
@@ -242,6 +243,19 @@ def create_app(start_worker: bool = False) -> FastAPI:
             trap.biofix_date = when
         return RedirectResponse(f"/traps/{trap_id}", status_code=303)
 
+    @app.post("/traps/{trap_id}/location")
+    def set_location(trap_id: str, lat: str = Form(default=""), lon: str = Form(default=""),
+                     db: Session = Depends(get_session)):
+        """Where a hub (or Pi trap) is, for the weather on its cameras' photos; both empty forgets it."""
+        trap = db.get(Trap, trap_id)
+        if trap is None:
+            raise HTTPException(404, "no such trap")
+        try:
+            trap.lat, trap.lon = weather.parse_location(lat, lon)
+        except ValueError as e:
+            raise HTTPException(422, str(e))
+        return RedirectResponse(f"/traps/{trap_id}", status_code=303)
+
     @app.post("/traps/{trap_id}/request-photo")
     def request_photo(trap_id: str, db: Session = Depends(get_session)):
         trap = db.get(Trap, trap_id)
@@ -363,9 +377,12 @@ def create_app(start_worker: bool = False) -> FastAPI:
     @app.post("/manage/traps", response_class=HTMLResponse)
     def manage_add(request: Request, trap_id: str = Form(...), name: str = Form(default=""), block: str = Form(default=""),
                    lure: str = Form(default="CM"), kind: str = Form(default="esp32"), hub_id: str = Form(default=""),
-                   db: Session = Depends(get_session)):
+                   lat: str = Form(default=""), lon: str = Form(default=""), db: Session = Depends(get_session)):
         try:
-            key = services.create_trap(db, trap_id.strip(), name.strip()[:120], block.strip()[:120], lure, kind, hub_id or None)
+            # An ESP32 camera goes by its hub's location (see weather.location), so only Pis are asked for one.
+            la, lo = weather.parse_location(lat, lon) if kind != "esp32" else (None, None)
+            key = services.create_trap(db, trap_id.strip(), name.strip()[:120], block.strip()[:120], lure, kind,
+                                       hub_id or None, la, lo)
         except ValueError as e:
             return manage_page(request, db, error=str(e), status_code=422)
         return manage_page(request, db, new_key={"trap": db.get(Trap, trap_id.strip()), "key": key, "why": "added"})
@@ -393,7 +410,12 @@ def create_app(start_worker: bool = False) -> FastAPI:
         if cap is None:
             raise HTTPException(404, "no such photo")
         tracks = {d.track_id: db.get(Track, d.track_id) for d in cap.detections if d.track_id}
-        return templates.TemplateResponse(request, "capture.html", {"cap": cap, "tracks": tracks, "trap": db.get(Trap, cap.trap_id)})
+        trap = db.get(Trap, cap.trap_id)
+        return templates.TemplateResponse(request, "capture.html", {
+            "cap": cap, "tracks": tracks, "trap": trap, "located": weather.location(db, trap) is not None,
+            "wx_pending": cap.captured_at >= utcnow() - weather.LOOK_BACK,
+            "hub": db.get(Trap, trap.hub_id) if trap.hub_id else None,
+        })
 
     @app.get("/review", response_class=HTMLResponse)
     def review_page(request: Request, db: Session = Depends(get_session)):
