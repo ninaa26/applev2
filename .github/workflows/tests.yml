@@ -5,6 +5,10 @@ on:
     branches: [master]
   pull_request:
 
+# the jobs only read the code
+permissions:
+  contents: read
+
 jobs:
   lint:
     runs-on: ubuntu-latest
