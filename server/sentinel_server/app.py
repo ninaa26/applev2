@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import hashlib
 import io
 import json
 import re
@@ -60,8 +61,10 @@ EVENT_LABELS = {
     "card_full": "Liner is getting full", "card_old": "Liner is old", "glare": "Glare on the liner",
     "trap_added": "Trap added", "trap_changed": "Trap changed", "trap_removed": "Trap taken out", "trap_restored": "Trap put back",
 }
+# The stylesheet's URL carries a hash of its contents, so a deploy never leaves a browser on a cached old copy.
+CSS_V = hashlib.sha256((HERE / "static" / "app.css").read_bytes()).hexdigest()[:12]
 templates.env.globals.update(SPECIES=SPECIES, SPECIES_LABELS=SPECIES_LABELS, PESTS=PESTS, version=__version__,
-                             EVENT_LABELS=EVENT_LABELS)
+                             EVENT_LABELS=EVENT_LABELS, CSS_V=CSS_V)
 
 
 def create_app(start_worker: bool = False) -> FastAPI:
