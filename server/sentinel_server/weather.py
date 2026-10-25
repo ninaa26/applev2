@@ -27,8 +27,8 @@ log = logging.getLogger(__name__)
 
 API = "https://api.weather.gov"
 SOURCE = "National Weather Service"
-# The service asks every caller to name itself in the User-Agent, with a way to reach them.
-USER_AGENT = f"OrchardSentinel/{__version__} (+https://github.com/ninaa26/applev2)"
+# The service asks every caller to name itself in the User-Agent. Just the app's name: no link or contact.
+USER_AGENT = f"OrchardSentinel/{__version__}"
 # api.weather.gov keeps about a week of observations (checked Oct 25 2026: Oct 18 on, none before), so
 # older photos can't be filled.
 LOOK_BACK = timedelta(days=7)
