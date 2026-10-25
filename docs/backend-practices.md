@@ -9,7 +9,8 @@ DataCamp's Python backend tutorial, and three dev.to articles (repository practi
 securing code). Round 10 (Oct 25): [PR #60](https://github.com/ninaa26/applev2/pull/60) landed
 items 1, 2, 6 and 11 and was checked; this branch did items 4, 7, 8 (rate limiting), 14
 (`SECURITY.md`), 15 and 16. Round 11 (Oct 25): dismissed the CodeQL alerts and set the
-GitHub settings for items 10, 14 and 17. Round 12: checked Dependabot PRs #61–#63 (item 6).
+GitHub settings for items 10, 14 and 17. Round 12: checked Dependabot PRs #61–#63 (item 6). Round 13: #61–#63 and #66 merged; checked
+the top-level folder layout (under "Skipped on purpose").
 
 ## Already in place
 
@@ -60,9 +61,9 @@ GitHub settings for items 10, 14 and 17. Round 12: checked Dependabot PRs #61–
 |---|----------|--------|
 | 1 | Lock dependencies (`uv.lock`) | done in PR #60: `uv.lock` for `server/` and `device/`, `uv sync --locked` in CI, deploys install the locked versions |
 | 2 | Linter and formatter (`ruff`) | done in PR #60: `ruff.toml` and a lint job in CI (lint only; no formatter yet) |
-| 3 | Type checking (`mypy` or `pyright`) | to do |
+| 3 | Type checking (`mypy` or `pyright`) | in [PR #65](https://github.com/ninaa26/applev2/pull/65) (loose `mypy` + a `types` CI job); conflicts with master after #61/#63/#66 and needs a rebase |
 | 4 | Pydantic models for request bodies | done: `HubPairing` and `HubClaim` models in `app.py` |
-| 5 | Versioned schema migrations (Alembic) | to do |
+| 5 | Versioned schema migrations (Alembic) | done in [PR #66](https://github.com/ninaa26/applev2/pull/66): Alembic migrations, existing databases stamped at the baseline; not tried on real Postgres |
 | 6 | Dependabot + `pip-audit` | done in PR #60: `.github/dependabot.yml` (weekly uv, monthly Actions); `pip-audit` not added |
 | 7 | Pre-commit hooks | done: `.pre-commit-config.yaml` (Ruff, large files, private keys); each person runs `uvx pre-commit install` once |
 | 8 | Require auth on anything exposed | rate limiting done (10 wrong passwords per address per 10 min); required password + HTTPS wait for a public host |
@@ -165,7 +166,7 @@ the reason below, and none is open now:
 **Left for a person:** item 13 needs a decision about the license. Items 3 (type checking) and 5 (Alembic) are bigger pieces
 of work, each worth its own PR.
 
-**Next:** choose a license (item 13). Type checking (item 3) and Alembic (item 5) are being done in their own sessions.
+**Next:** rebase and merge PR #65 (type checking), and choose a license (item 13).
 
 ## Skipped on purpose
 
@@ -224,3 +225,10 @@ of work, each worth its own PR.
   TfSec) aren't needed, because CodeQL covers the languages that matter here and there's no
   Terraform or container image. Repository security advisories only matter once someone reports a
   vulnerability through item 14.
+- **Top-level layout (checked Oct 25).** One folder per part of the system (`device/`, `server/`,
+  `ml/`, `hardware/`, `docs/`) is the usual shape for a hardware + server + ML project, and each
+  Python folder is its own package with its own env and lock, so CI and deploys stay separate. Not
+  worth a reshuffle. Two optional tidy-ups: `code-review/` (1.1 MB, mostly raw Gemini output) is
+  project process rather than product, so it could move under `docs/` or be archived at the end of
+  the semester; and a `LICENSE` at the root (item 13). `field-tests/` stays at the top because a
+  run spans the cameras, the hub and the server.
