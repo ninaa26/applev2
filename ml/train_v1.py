@@ -213,7 +213,7 @@ def main(argv=None) -> int:
         results[f"v1 linear head (C={C}) · {name}"] = report(y[m], clf.predict(X[m]), classes)
     if args.final and lk.any():
         results["v0 zero-shot · LOCKED own cards"] = report(y[lk], (X[lk] @ text.T).argmax(1), classes)
-        results[f"v1 linear head · LOCKED own cards"] = report(y[lk], clf.predict(X[lk]), classes)
+        results["v1 linear head · LOCKED own cards"] = report(y[lk], clf.predict(X[lk]), classes)
 
     args.out.mkdir(parents=True, exist_ok=True)
     np.savez(args.out / "head.npz", classes=np.array(classes), W=clf.coef_.astype(np.float32),

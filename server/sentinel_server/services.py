@@ -6,7 +6,7 @@ import hashlib
 import re
 import secrets
 from collections import Counter, defaultdict
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import and_, func, or_, select
@@ -109,7 +109,7 @@ def request_photo(trap: Trap) -> None:
 
 def photo_requests(db: Session, hub_id: str) -> dict[str, str]:
     """ESP32 traps on this hub with a photo asked for on the dashboard: {trap_id: when it was asked, UTC}."""
-    return {t.id: t.photo_requested_at.replace(tzinfo=timezone.utc).isoformat() for t in db.scalars(select(Trap).where(
+    return {t.id: t.photo_requested_at.replace(tzinfo=UTC).isoformat() for t in db.scalars(select(Trap).where(
         Trap.hub_id == hub_id, Trap.kind == "esp32", Trap.retired_at.is_(None), Trap.photo_requested_at.is_not(None)))}
 
 
@@ -143,7 +143,7 @@ def orchard_summary(db: Session, traps: list[Trap]) -> dict:
 
 
 def local_date(dt_utc: datetime) -> date:
-    return dt_utc.replace(tzinfo=timezone.utc).astimezone(ZoneInfo(get_settings().timezone)).date()
+    return dt_utc.replace(tzinfo=UTC).astimezone(ZoneInfo(get_settings().timezone)).date()
 
 
 def open_card(db: Session, trap_id: str) -> Card | None:

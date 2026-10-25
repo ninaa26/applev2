@@ -38,7 +38,6 @@ import time
 from pathlib import Path
 
 import numpy as np
-
 from train_v1 import REAL, fit_temperature, format_report, load_rows, report
 
 ARCHS = ("efficientnet_b0", "mobilenet_v3_large", "mobilenet_v3_small", "convnext_tiny")

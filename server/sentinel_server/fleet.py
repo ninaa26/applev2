@@ -53,7 +53,7 @@ def read_firmware_version(data: bytes) -> str:
 
 def add_firmware(db: Session, data: bytes, note: str = "") -> Firmware:
     version = read_firmware_version(data)
-    md5 = hashlib.md5(data).hexdigest()
+    md5 = hashlib.md5(data, usedforsecurity=False).hexdigest()  # the ESP32's Update checks MD5
     fw = db.get(Firmware, version)
     if fw is not None:
         if fw.md5 != md5:

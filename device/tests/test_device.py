@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -11,28 +11,28 @@ from sentinel_device.camera import FakeCamera
 def test_next_wake_same_day_and_rollover():
     times = ["07:00", "19:30"]
     # 2026-10-05 12:00 EDT == 16:00 UTC -> next is 19:30 EDT == 23:30 UTC
-    now = datetime(2026, 10, 5, 16, 0, tzinfo=timezone.utc)
-    assert schedule.next_wake(now, times, "America/New_York") == datetime(2026, 10, 5, 23, 30, tzinfo=timezone.utc)
+    now = datetime(2026, 10, 5, 16, 0, tzinfo=UTC)
+    assert schedule.next_wake(now, times, "America/New_York") == datetime(2026, 10, 5, 23, 30, tzinfo=UTC)
     # 21:00 EDT -> tomorrow 07:00 EDT == 11:00 UTC
-    now = datetime(2026, 10, 6, 1, 0, tzinfo=timezone.utc)
-    assert schedule.next_wake(now, times, "America/New_York") == datetime(2026, 10, 6, 11, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 10, 6, 1, 0, tzinfo=UTC)
+    assert schedule.next_wake(now, times, "America/New_York") == datetime(2026, 10, 6, 11, 0, tzinfo=UTC)
 
 
 def test_next_wake_across_dst_end():
     # DST ends 2026-11-01 in the US: 07:00 EST is 12:00 UTC
-    now = datetime(2026, 11, 1, 3, 0, tzinfo=timezone.utc)
-    assert schedule.next_wake(now, ["07:00"], "America/New_York") == datetime(2026, 11, 1, 12, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 11, 1, 3, 0, tzinfo=UTC)
+    assert schedule.next_wake(now, ["07:00"], "America/New_York") == datetime(2026, 11, 1, 12, 0, tzinfo=UTC)
 
 
 def test_wake_reason():
-    expected = datetime(2026, 10, 5, 23, 30, tzinfo=timezone.utc)
-    assert schedule.wake_reason(datetime(2026, 10, 5, 23, 31, tzinfo=timezone.utc), expected.isoformat()) == "scheduled"
-    assert schedule.wake_reason(datetime(2026, 10, 5, 20, 0, tzinfo=timezone.utc), expected.isoformat()) == "manual"
-    assert schedule.wake_reason(datetime(2026, 10, 5, 20, 0, tzinfo=timezone.utc), None) == "first"
+    expected = datetime(2026, 10, 5, 23, 30, tzinfo=UTC)
+    assert schedule.wake_reason(datetime(2026, 10, 5, 23, 31, tzinfo=UTC), expected.isoformat()) == "scheduled"
+    assert schedule.wake_reason(datetime(2026, 10, 5, 20, 0, tzinfo=UTC), expected.isoformat()) == "manual"
+    assert schedule.wake_reason(datetime(2026, 10, 5, 20, 0, tzinfo=UTC), None) == "first"
     # the alarm time passed with the board off: it had no power, nobody pressed the button
-    assert schedule.wake_reason(datetime(2026, 10, 6, 6, 30, tzinfo=timezone.utc), expected.isoformat()) == "power_restored"
+    assert schedule.wake_reason(datetime(2026, 10, 6, 6, 30, tzinfo=UTC), expected.isoformat()) == "power_restored"
     # the last cycle never powered off by itself
-    assert schedule.wake_reason(datetime(2026, 10, 5, 20, 0, tzinfo=timezone.utc), expected.isoformat(), clean_halt=False) == "interrupted"
+    assert schedule.wake_reason(datetime(2026, 10, 5, 20, 0, tzinfo=UTC), expected.isoformat(), clean_halt=False) == "interrupted"
 
 
 def test_sht4x_crc_and_decode():
@@ -181,8 +181,8 @@ def _boot(tmp_path: Path, monkeypatch, at: datetime, **state) -> dict:
 
 
 def test_only_a_button_press_starts_a_new_liner(tmp_path: Path, monkeypatch):
-    expected = datetime(2026, 10, 5, 23, 30, tzinfo=timezone.utc)  # 19:30 in New York
-    early, late = datetime(2026, 10, 5, 21, 0, tzinfo=timezone.utc), datetime(2026, 10, 6, 10, 30, tzinfo=timezone.utc)
+    expected = datetime(2026, 10, 5, 23, 30, tzinfo=UTC)  # 19:30 in New York
+    early, late = datetime(2026, 10, 5, 21, 0, tzinfo=UTC), datetime(2026, 10, 6, 10, 30, tzinfo=UTC)
 
     press = _boot(tmp_path, monkeypatch, early, expected_wake=expected.isoformat(), clean_halt=True)
     assert (press["reason"], press["new_card"], press["source"]) == ("manual", True, "button")
@@ -212,6 +212,7 @@ def test_cycle_survives_a_broken_schedule_from_the_server(tmp_path: Path, monkey
 def test_flat_field_makes_a_tinted_vignetted_card_even(tmp_path: Path):
     import numpy as np
     from PIL import Image
+
     from sentinel_device import flatfield
 
     h, w = 480, 640
@@ -236,6 +237,7 @@ def test_flat_field_makes_a_tinted_vignetted_card_even(tmp_path: Path):
 
 def test_flatfield_tool_flags_red_roof_light_and_suggests_white_balance():
     import numpy as np
+
     from sentinel_device.tools.flatfield import report
 
     red = np.zeros((100, 100, 3), np.uint8)
@@ -249,6 +251,7 @@ def test_flatfield_tool_flags_red_roof_light_and_suggests_white_balance():
 
 def test_flat_field_ignores_the_red_trap_walls_around_the_card():
     import numpy as np
+
     from sentinel_device import flatfield
 
     white = np.zeros((480, 640, 3), np.uint8)

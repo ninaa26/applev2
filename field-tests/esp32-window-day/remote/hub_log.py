@@ -9,7 +9,7 @@ import os
 import shutil
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 
@@ -30,7 +30,7 @@ except Exception:
 mem = dict(line.split(":", 1) for line in open("/proc/meminfo"))
 kb = lambda k: int(mem[k].split()[0])
 row = {
-    "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    "at": datetime.now(UTC).isoformat(timespec="seconds"),
     "wlan0_ip": ip[2].split("/")[0] if len(ip) > 2 else "",
     "gateway": run("systemctl", "is-active", "sentinel-gateway"),
     "queued": len(list((node / "queue").glob("*.jpg"))),

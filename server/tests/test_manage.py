@@ -2,7 +2,7 @@
 import io
 import json
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -26,7 +26,7 @@ def _add(client, **form) -> tuple[int, str | None]:
 
 
 def _upload(client, key, trap_id, uid, when=None):
-    when = when or datetime.now(timezone.utc)
+    when = when or datetime.now(UTC)
     meta = {"capture_uid": uid, "trap_id": trap_id, "captured_at": when.isoformat()}
     return client.post("/api/v1/captures", headers={"Authorization": f"Bearer {key}"},
                        files={"image": (f"{uid}.jpg", _jpeg(), "image/jpeg")}, data={"meta": json.dumps(meta)})
@@ -86,7 +86,7 @@ def test_orchard_view_and_each_traps_photos():
         k1 = services.create_trap(db, "T1", "Hub", lure="CM")
         k2 = services.create_trap(db, "T2", "Row 4", lure="OFM", kind="esp32", hub_id="T1")
     with TestClient(create_app()) as client:
-        start = datetime.now(timezone.utc) - timedelta(days=3)
+        start = datetime.now(UTC) - timedelta(days=3)
         for i in range(50):
             assert _upload(client, k2, "T2", f"p{i:02d}", start + timedelta(hours=i)).status_code == 201
         _upload(client, k1, "T1", "h1")
@@ -143,7 +143,7 @@ def test_hub_without_a_camera_relays_esp32s_and_shows_when_it_last_checked_in():
             assert db.get(Trap, "T1").last_seen_at == seen  # not rewritten on every request
 
         with session_scope() as db:
-            db.get(Trap, "T1").last_seen_at = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=2)
+            db.get(Trap, "T1").last_seen_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=2)
         assert "Offline" in client.get("/").text.split("Each trap")[0]
         assert _upload(client, cam_key, "T2", "b1").status_code == 201
 
@@ -176,7 +176,7 @@ def test_take_a_photo_now_reaches_the_hub_and_clears_when_a_newer_photo_arrives(
         assert client.post("/traps/T1/request-photo").status_code == 422  # a hub has no camera
         assert "Take a photo now" in client.get("/traps/T2").text
 
-        before = datetime.now(timezone.utc) - timedelta(minutes=5)
+        before = datetime.now(UTC) - timedelta(minutes=5)
         assert client.post("/traps/T2/request-photo", follow_redirects=False).status_code == 303
         assert "taken at the next check-in" in client.get("/traps/T2").text
         asked = client.get("/api/v1/hub/nodes", headers=hub).json()["photo_requests"]
@@ -216,6 +216,7 @@ def test_overview_shows_a_hub_before_any_camera_is_added():
 def test_stylesheet_url_changes_with_its_contents():
     # A deploy must not leave browsers on a cached old app.css with the new pages.
     import hashlib
+
     from sentinel_server import app as app_module
     css = (app_module.HERE / "static" / "app.css").read_bytes()
     with TestClient(create_app()) as client:

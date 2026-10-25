@@ -25,7 +25,6 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-
 from eval_detector_roboflow import GROUPS, centre, dataset_dir, grid_px_per_mm, inside, iou, load_coco, match, overlay
 
 

@@ -181,7 +181,7 @@ def same_picture(a: str, b: str, min_corr: float = 0.95) -> bool:
 
 
 def split_of(group: str, seed: int, val: float, test: float) -> str:
-    u = int(hashlib.sha1(f"{seed}:{group}".encode()).hexdigest()[:8], 16) / 0xFFFFFFFF
+    u = int(hashlib.sha1(f"{seed}:{group}".encode(), usedforsecurity=False).hexdigest()[:8], 16) / 0xFFFFFFFF
     return "test" if u < test else "val" if u < test + val else "train"
 
 
@@ -255,7 +255,7 @@ def main(argv=None) -> int:
     liner_val = set()
     for name in {r["set"] for r in liner}:  # a hash split of ~10 liners could leave val with next to nothing
         groups = sorted({r["group"] for r in liner if r["set"] == name and not r["held_out"]},
-                        key=lambda g: hashlib.sha1(f"{args.seed}:{g}".encode()).hexdigest())
+                        key=lambda g: hashlib.sha1(f"{args.seed}:{g}".encode(), usedforsecurity=False).hexdigest())
         size = Counter(r["group"] for r in liner if r["set"] == name and not r["held_out"])
         for g in groups[:-1]:  # liners differ a lot in how many insects they hold: go by crops, not liners
             if sum(size[v] for v in liner_val if v in size) >= 0.2 * sum(size.values()):

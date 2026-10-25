@@ -23,11 +23,10 @@ import json
 from pathlib import Path
 
 import cv2
-from PIL import Image
-
 from crop_field_cards import FIELDS, server_crop
 from eval_detector_combine import good_shape, union
 from eval_detector_roboflow import centre, dataset_dir, grid_px_per_mm, inside, iou, load_coco
+from PIL import Image
 
 # what the uploader's class means, per dataset (ofm-ervins named its OFM class "codling_moth")
 CLAIMED = {"ofm-ervins": "OFM", "codling-moth-ervins": "CM", "grape-moth-nsect": "other_tortricid",

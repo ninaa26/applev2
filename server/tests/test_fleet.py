@@ -4,7 +4,6 @@ import base64
 import hashlib
 import io
 import json
-import re
 
 import pytest
 from fastapi.testclient import TestClient
