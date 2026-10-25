@@ -41,3 +41,4 @@ The labeller and model playground are preview servers in `.claude/launch.json`
 - Camera settings and the white-card correction (`flatfield.npz`) belong to one Pi, camera position and lighting setup. Redo the calibration when any of them changes.
 - How it runs (since Oct 22 2026): ESP32 cameras → hub Pi with no camera (`apple-pi-hub`, the bench Pi; gateway only) → server on a Pi 5 (`apple-pi-server`, a stand-in for a cloud server). Both are on the team Tailscale.
 - The bench Pi is shared. Ask before running anything on it, and do not run `device/install.sh` there.
+- Deploying fixes: `server/deploy.sh` (server), `device/deploy-hub.sh pi@<hub>` (a hub), and ESP32 firmware through the dashboard (Set up traps → Camera firmware, built with `device/esp32-node/release.sh`). All three go back to the old version if the new one doesn't come up: [docs/esp32-traps.md](docs/esp32-traps.md#fixing-and-updating-in-the-field).

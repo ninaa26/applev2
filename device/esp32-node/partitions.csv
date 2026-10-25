@@ -1,7 +1,10 @@
-# One 2 MB app (the firmware is about 1 MB; no over-the-air updates) and the rest for the photo queue.
+# Two 2 MB app slots for over-the-air updates (the firmware is about 1 MB): the hub sends new firmware into
+# the slot not running, and the bootloader goes back to the other if it fails. The rest is the photo queue.
+# Changing this table needs one flash over USB; from then on updates go through the dashboard.
 # Name,   Type, SubType,  Offset,   Size
 nvs,      data, nvs,      0x9000,   0x5000
 otadata,  data, ota,      0xe000,   0x2000
 app0,     app,  ota_0,    0x10000,  0x200000
-spiffs,   data, spiffs,   0x210000, 0x5E0000
+app1,     app,  ota_1,    0x210000, 0x200000
+spiffs,   data, spiffs,   0x410000, 0x3E0000
 coredump, data, coredump, 0x7F0000, 0x10000

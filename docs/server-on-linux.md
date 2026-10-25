@@ -64,6 +64,20 @@ journalctl -u sentinel-server -f        # "worker started (baseline-cv-0.4+biocl
 The first start downloads BioCLIP 2 (about 1.6 GB, to `~/.cache/huggingface`). After `git pull` or a
 change to `.env`: `sudo systemctl restart sentinel-server`.
 
+## Deploying a fix
+
+From the Mac, in the repo, on the commit to deploy (normally `master` after the pull request is merged):
+
+```bash
+server/deploy.sh                 # to pi@apple-pi-server; server/deploy.sh <user@host> for another
+server/deploy.sh --rollback      # put back the code and database from before the last deploy
+```
+
+It saves the server's code and a snapshot of its database to `~/deploy-backups/<time>/` (the last 10 are
+kept), copies `server/sentinel_server/` over, reinstalls if `pyproject.toml` changed, and restarts. If
+`/healthz` doesn't answer within 60 s it puts the old code back and restarts again. The deployed commit is
+in `~/applev2/server/DEPLOYED`. Hubs and cameras: [esp32-traps.md](esp32-traps.md#fixing-and-updating-in-the-field).
+
 ## Back it up
 
 Everything the season produces is in `server/data/`: the database and the photos. One dead SD card loses
