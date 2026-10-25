@@ -67,7 +67,7 @@ items 1, 2, 6 and 11 and was checked; this branch did items 4, 7, 8 (rate limiti
 | 8 | Require auth on anything exposed | rate limiting done (10 wrong passwords per address per 10 min); required password + HTTPS wait for a public host |
 | 9 | Ops basics | mostly done; only JSON logs are left (optional) |
 | 10 | Branch protection on `master` | to do (checked: not protected) |
-| 11 | GitHub Dependabot alerts + code scanning | done in PR #60: Dependabot alerts + security updates on, CodeQL default setup (Python, Actions). 12 CodeQL alerts open, all false positives or intended; dismiss them (see below) |
+| 11 | GitHub Dependabot alerts + code scanning | done in PR #60: Dependabot alerts + security updates on, CodeQL default setup (Python, Actions). its 12 first-scan alerts were checked and dismissed with reasons (see below) |
 | 12 | Least privilege for keys and accounts | to check |
 | 13 | Add a `LICENSE` | to decide (checked: the public repo has none) |
 | 14 | `SECURITY.md` + private vulnerability reporting | `SECURITY.md` done; private vulnerability reporting still off (repo setting) |
@@ -146,8 +146,8 @@ items 1, 2, 6 and 11 and was checked; this branch did items 4, 7, 8 (rate limiti
     `claude/...` branches don't pile up.
 
 **CodeQL alerts (round 10).** The first scan after PR #60 opened 12 alerts on master; each was
-checked and none is a real problem. They need dismissing in the Security tab (Claude's attempt was
-blocked as an external write):
+checked and none is a real problem. All 12 were dismissed in the Security tab on Oct 25, each with
+the reason below, and none is open now:
 
 | Alerts | Rule | Why it's not a problem |
 |---|---|---|
@@ -157,7 +157,7 @@ blocked as an external write):
 | #9, #10 | path injection | the upload's uid must match `SAFE_UID`, and the trap id comes from the database |
 | #4–#8 | URL redirection | redirects go to `/traps/{id}` after the id was found, or to a `next` that must be a local path |
 
-**Left for a person:** items 10, 11's dismissals, 14's reporting toggle and 17 are GitHub settings;
+**Left for a person:** items 10, 14's reporting toggle and 17 are GitHub settings;
 13 needs a decision about the license. Items 3 (type checking) and 5 (Alembic) are bigger pieces
 of work, each worth its own PR.
 
