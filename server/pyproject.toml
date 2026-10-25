@@ -12,6 +12,7 @@ dependencies = [
     "pillow>=10.0",
     "numpy>=1.26",
     "opencv-python-headless>=4.9",
+    "alembic>=1.13",
 ]
 
 [project.optional-dependencies]
@@ -33,7 +34,7 @@ build-backend = "setuptools.build_meta"
 include = ["sentinel_server*"]
 
 [tool.setuptools.package-data]
-sentinel_server = ["templates/*.html", "static/*"]
+sentinel_server = ["templates/*.html", "static/*", "migrations/*.py", "migrations/*.mako", "migrations/versions/*.py"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

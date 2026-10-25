@@ -7,8 +7,9 @@
 # Before copying anything it saves the code and a snapshot of the database to ~/deploy-backups/<time>/ on the
 # server, with a list of its installed packages. Packages are installed at the versions in uv.lock, and only
 # when pyproject.toml or uv.lock changed. After the restart it waits for /healthz; if that doesn't answer in
-# 60 s, it restores that backup's code and packages (the database is left alone: a new column is harmless to
-# old code) and restarts again.
+# 60 s, it restores that backup's code and packages and restarts again. The database is put back too if the new
+# code migrated it (its Alembic revision changed): it then matches the old code again, and anything the server
+# saved in the database between the backup and the failed start is lost (the photo files stay).
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -83,6 +84,13 @@ echo "server did not come up on $3: putting the old code back"
 journalctl -u sentinel-server -n 30 --no-pager || true
 rm -rf ~/$app/sentinel_server && tar xzf "$dir/code.tgz" -C ~/$app
 (( $4 )) && ~/.local/bin/uv pip install -q -p ~/$app/.venv/bin/python -r "$dir/packages.txt"
+rev='import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); t=c.execute("SELECT 1 FROM sqlite_master WHERE name=?", ("alembic_version",)).fetchone(); print(sorted(r[0] for r in c.execute("SELECT version_num FROM alembic_version")) if t else [])'
+if [[ $(~/$app/.venv/bin/python -c "$rev" "$dir/sentinel.db") != $(~/$app/.venv/bin/python -c "$rev" ~/$app/data/sentinel.db) ]]; then
+  echo "the new code migrated the database: putting back the one from the backup"
+  cp "$dir/sentinel.db" ~/$app/data/sentinel.db.restore
+  sudo systemctl stop sentinel-server
+  mv ~/$app/data/sentinel.db.restore ~/$app/data/sentinel.db && rm -f ~/$app/data/sentinel.db-wal ~/$app/data/sentinel.db-shm
+fi
 sudo systemctl restart sentinel-server
 exit 1
 EOF
