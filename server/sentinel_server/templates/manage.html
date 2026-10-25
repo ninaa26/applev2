@@ -5,12 +5,22 @@
 {% block main %}
 <div>
   <h1>Set up traps</h1>
-  <p class="lede">Add a camera to the orchard or take one out. ESP32 cameras send their photos through a hub: a Raspberry Pi with no camera, on mains power, in Wi-Fi range of them. Adding one here gives it a key, and the page then shows the one command that sets up the device with it. The hub picks up changes here within a minute.</p>
+  <p class="lede">Add a camera to the orchard or take one out. ESP32 cameras send their photos through a hub: a Raspberry Pi with no camera, on mains power, in Wi-Fi range of them. A new camera switched on near a hub shows up here by itself, and a hub is added with the pairing code on its sticker. The hub picks up changes here within a minute.</p>
 </div>
 
 {% if error %}<div class="notice err">{{ error }}</div>{% endif %}
 
-{% if new_key %}
+{% if new_key and new_key.why == 'paired' %}
+{% set t = new_key.trap %}
+<div class="card" style="border-color:var(--leaf)">
+  <h2>{{ t.id }} added</h2>
+  {% if t.kind == 'hub' %}
+  <p>Once the hub is plugged in and online, it fetches its key by itself, within a minute. It then shows as online here and can be picked as the hub for cameras.</p>
+  {% else %}
+  <p>Hub {{ t.hub_id }} gives the camera its key at its next check, within a minute. The camera then shows a live preview for 2 minutes, for aiming it (linked from the hub's page, <code>http://10.42.0.1:8080/</code> on the hub's Wi-Fi), and takes its first photo.</p>
+  {% endif %}
+</div>
+{% elif new_key %}
 {% set t = new_key.trap %}
 <div class="card" style="border-color:var(--leaf)">
   <h2>{{ t.id }} {{ 'added' if new_key.why == 'added' else 'has a new key' }}</h2>
@@ -41,8 +51,28 @@ server_url = "{{ server_url }}"</pre>
 </div>
 {% endif %}
 
+{% if waiting %}
+<div class="card" style="border-color:var(--leaf)">
+  <h2>New cameras waiting</h2>
+  <p class="muted">These cameras were switched on near a hub and are asking to be added. Match the code with the sticker on the camera.</p>
+  {% for w in waiting %}
+  <form class="add" method="post" action="/manage/waiting/{{ w.code }}" style="margin-top:12px">
+    <div><b class="mono">{{ w.code }}</b><br><span class="muted">near hub {{ w.hub_id }}{% if w.rssi is not none %}, signal {{ w.rssi }} dBm{% endif %}, first seen {{ w.first_seen_at|ago }}</span></div>
+    <label id="code-field">Pairing code <input name="pair_code" placeholder="On the hub's sticker" maxlength="16" autocomplete="off"></label>
+    <label>Trap id <input name="trap_id" value="{{ suggest_id }}" required pattern="[A-Za-z0-9][A-Za-z0-9_\-]{0,31}" maxlength="32"></label>
+    <label>Name <input name="name" placeholder="Row 4, east end" maxlength="120"></label>
+    <label>Block <input name="block" placeholder="Honeycrisp block" maxlength="120"></label>
+    <label>Lure
+      <select name="lure">{% for sp in PESTS %}<option value="{{ sp }}">{{ SPECIES_LABELS[sp] }} ({{ sp }})</option>{% endfor %}</select></label>
+    <div><button class="primary" type="submit">Add this camera</button></div>
+  </form>
+  {% endfor %}
+</div>
+{% endif %}
+
 <div class="card">
   <h2>Add a hub or camera</h2>
+  <p class="muted">A new ESP32 camera shows up above by itself when it is switched on near a hub. Use this for a hub, or for a camera set up by hand.</p>
   <form class="add" method="post" action="/manage/traps" style="margin-top:12px">
     <label>Camera
       <select name="kind" id="kind">
@@ -73,7 +103,7 @@ server_url = "{{ server_url }}"</pre>
     {% set h = health[t.id] %}
     <tr class="{{ 'retired' if t.retired_at }}">
       <td><a href="/traps/{{ t.id }}"><b>{{ t.id }}</b></a> <span class="muted">{{ t.name }}{% if t.block %}, {{ t.block }}{% endif %}</span></td>
-      <td>{% if t.kind == 'esp32' %}ESP32 via {{ t.hub_id }}{% else %}{{ 'Hub, no camera' if t.kind == 'hub' else 'Raspberry Pi camera' }}{% set n = traps|selectattr('hub_id', 'equalto', t.id)|rejectattr('retired_at')|list|length %}{% if n %}, hub for {{ n }}{% endif %}{% endif %}</td>
+      <td>{% if t.kind == 'esp32' %}ESP32 via {{ t.hub_id }}{% if t.firmware_version %} <span class="muted mono">fw {{ t.firmware_version }}</span>{% endif %}{% if t.firmware_target and t.firmware_target != t.firmware_version and not t.retired_at %} <span class="muted">updating to {{ t.firmware_target }}</span>{% endif %}{% else %}{{ 'Hub, no camera' if t.kind == 'hub' else 'Raspberry Pi camera' }}{% set n = traps|selectattr('hub_id', 'equalto', t.id)|rejectattr('retired_at')|list|length %}{% if n %}, hub for {{ n }}{% endif %}{% endif %}</td>
       <td>{{ '—' if t.kind == 'hub' else t.lure }}</td>
       <td>{% if t.retired_at %}<span class="pill never">Removed {{ t.retired_at|local('%b %d') }}</span>{% elif t.kind == 'hub' %}<span class="pill {{ h.state }}">{% if h.state == 'never' %}Not heard from yet{% else %}{{ h.state|capitalize }}, checked in {{ h.seen_at|ago }}{% endif %}</span>{% else %}{{ camera_status(h) }}{% endif %}</td>
       <td class="mono muted">{{ t.created_at|local('%b %d, %Y') }}</td>
@@ -92,9 +122,33 @@ server_url = "{{ server_url }}"</pre>
   {% else %}<p class="muted">No cameras yet.</p>{% endif %}
 </div>
 
+<div class="card" id="firmware">
+  <h2>Camera firmware</h2>
+  <p class="muted">Update the ESP32 cameras without taking them down: each one gets the new firmware from its hub at its next check-in, and goes back to the old one by itself if the new one can't reach the hub. Build it with <code>device/esp32-node/release.sh</code>, upload the file here, then send it to one camera first.</p>
+  <form class="add" method="post" action="/manage/firmware" enctype="multipart/form-data" style="margin-top:12px">
+    <label>Firmware file <input type="file" name="file" accept=".bin" required></label>
+    <label>Note <input name="note" placeholder="What changed" maxlength="200"></label>
+    <div><button type="submit">Upload</button></div>
+  </form>
+  {% if firmware %}
+  <form class="add" method="post" action="/manage/firmware/target" style="margin-top:12px">
+    <label>Version
+      <select name="version">{% for f in firmware %}<option value="{{ f.version }}">{{ f.version }}{% if f.note %}: {{ f.note }}{% endif %}</option>{% endfor %}</select></label>
+    <label>Send to
+      <select name="trap_id"><option value="all">All ESP32 cameras</option>{% for t in esp32s %}<option value="{{ t.id }}">{{ t.id }}{% if t.firmware_version %} (now {{ t.firmware_version }}){% endif %}</option>{% endfor %}</select></label>
+    <div><button class="primary" type="submit">Send update</button></div>
+  </form>
+  {% if esp32s|selectattr('firmware_target')|list %}
+  <form method="post" action="/manage/firmware/target" style="margin-top:8px"><input type="hidden" name="version" value=""><input type="hidden" name="trap_id" value="all"><button type="submit" class="small">Stop sending updates</button></form>
+  {% endif %}
+  {% else %}<p class="muted" style="margin-top:8px">No firmware uploaded yet.</p>{% endif %}
+</div>
+
 <script>
-  const kind = document.getElementById('kind'), hub = document.getElementById('hub-field'), lure = document.getElementById('lure-field');
-  const sync = () => { hub.style.display = kind.value === 'esp32' ? '' : 'none'; lure.style.display = kind.value === 'hub' ? 'none' : ''; };
+  const kind = document.getElementById('kind'), hub = document.getElementById('hub-field'), lure = document.getElementById('lure-field'),
+        code = document.getElementById('code-field');
+  const sync = () => { hub.style.display = kind.value === 'esp32' ? '' : 'none'; lure.style.display = kind.value === 'hub' ? 'none' : '';
+                       code.style.display = kind.value === 'hub' ? '' : 'none'; };
   kind.addEventListener('change', sync); sync();
 </script>
 {% endblock %}
