@@ -13,8 +13,8 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
       # settings in ruff.toml; the version is pinned so a new Ruff release can't fail every PR at once
       - run: uvx ruff@0.17.2 check .
 
@@ -40,8 +40,8 @@ jobs:
       run:
         working-directory: server
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
       # --locked: fails if uv.lock is out of step with pyproject.toml (run uv lock and commit it)
       - run: uv sync --locked --python 3.12 --extra dev
       - run: uv run --no-sync pytest -q
@@ -52,8 +52,8 @@ jobs:
       run:
         working-directory: device
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
       # bench adds OpenCV, so the camera-bench tests run instead of being skipped
       - run: uv sync --locked --python 3.12 --extra dev --extra bench
       - run: uv run --no-sync pytest -q
@@ -64,7 +64,7 @@ jobs:
       run:
         working-directory: ml
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
       # the tests need numpy + pillow only, not the torch stack in requirements.txt
       - run: uv run --no-project --python 3.12 --with numpy --with pillow python -m unittest discover tests
