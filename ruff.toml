@@ -1,0 +1,25 @@
+# Ruff lint settings for the repo's Python (code-review/ holds outside snapshots and is skipped). Run from the root:
+# uvx ruff check .   (--fix for the fixable ones). No formatter yet.
+target-version = "py311"
+line-length = 120
+extend-exclude = ["**/.venv", "code-review", "ml/data", "ml/models", "server/data", "device/data", "field-tests/**/runs"]
+
+[lint]
+# E9/F: real errors · I: import order · B: bugbear · UP: newer syntax · S: bandit security checks
+select = ["E9", "F", "I", "B", "UP", "S"]
+ignore = [
+    "B008",  # FastAPI's Depends(...)/File(...) in defaults is how FastAPI works
+    "B905",  # zip(strict=) would turn silent truncation into an error; left as it is
+    "S101",  # assert outside tests is for invariants, not input checks
+    "S104",  # the server and gateway bind to all interfaces on purpose (Tailscale, the hub's Wi-Fi)
+    "S311",  # random is for sampling and synthetic photos, never for keys (those use secrets)
+    "S603", "S607",  # subprocess with fixed argument lists, no shell
+]
+
+[lint.per-file-ignores]
+"**/tests/**" = ["S"]
+"ml/**" = ["S310"]  # urlopen on fixed dataset URLs
+
+[lint.isort]
+known-first-party = ["sentinel_server", "sentinel_device"]
+combine-as-imports = true

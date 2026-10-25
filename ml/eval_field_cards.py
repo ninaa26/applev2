@@ -29,10 +29,9 @@ from collections import Counter
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageOps
-
 from build_dataset import CLASS_OF
 from crop_field_cards import PAD
+from PIL import Image, ImageOps
 from train_v1 import Embedder
 
 MOTH_CLASSES = {"CM", "OFM", "OBLR", "other_moth"}

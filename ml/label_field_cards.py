@@ -32,9 +32,8 @@ from pathlib import Path
 from statistics import median
 from urllib.parse import unquote
 
-from PIL import Image, ImageOps
-
 from crop_field_cards import FIELDS, server_crop
+from PIL import Image, ImageOps
 
 # Pass 1 (anyone): moth / other_insect / debris, Delete = skip. Pass 2 (a trained eye): the species.
 SPECIES = ["CM", "OFM", "OBLR", "lookalike_RBLR", "lookalike_LAW", "other_tortricid", "other_moth"]

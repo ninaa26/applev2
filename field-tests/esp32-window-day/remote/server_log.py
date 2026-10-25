@@ -8,7 +8,7 @@ import os
 import sqlite3
 import subprocess
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 
@@ -20,7 +20,7 @@ def run(*cmd):
 
 
 server_dir, trap, hub = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
-now = datetime.now(timezone.utc)
+now = datetime.now(UTC)
 db = sqlite3.connect(f"file:{server_dir}/data/sentinel.db?mode=ro", uri=True, timeout=30)
 one = lambda sql, *a: db.execute(sql, a).fetchone()[0]
 naive = lambda d: d.replace(tzinfo=None).isoformat(sep=" ")

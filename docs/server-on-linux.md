@@ -24,8 +24,7 @@ On Raspberry Pi OS (64-bit) or Ubuntu, logged in as the user that will run it (`
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh                  # uv, which brings Python 3.12
 git clone https://github.com/ninaa26/applev2.git ~/applev2
-cd ~/applev2/server && ~/.local/bin/uv venv --python 3.12 .venv
-~/.local/bin/uv pip install -p .venv/bin/python -e '.[bioclip]'  # torch + open_clip for the classifier
+cd ~/applev2/server && ~/.local/bin/uv sync --locked --python 3.12 --extra bioclip  # torch + open_clip for the classifier
 ```
 
 The classifier's head is not in git: copy it from the machine that trained it, for example
@@ -74,8 +73,8 @@ server/deploy.sh --rollback      # put back the code and database from before th
 ```
 
 It saves the server's code and a snapshot of its database to `~/deploy-backups/<time>/` (the last 10 are
-kept), copies `server/sentinel_server/` over, reinstalls if `pyproject.toml` changed, and restarts. If
-`/healthz` doesn't answer within 60 s it puts the old code back and restarts again. The deployed commit is
+kept), copies `server/sentinel_server/` over, installs the versions in `uv.lock` if it or `pyproject.toml` changed, and
+restarts. If `/healthz` doesn't answer within 60 s it puts the old code and packages back and restarts again. The deployed commit is
 in `~/applev2/server/DEPLOYED`. Hubs and cameras: [esp32-traps.md](esp32-traps.md#fixing-and-updating-in-the-field).
 
 ## Back it up

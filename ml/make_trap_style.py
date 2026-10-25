@@ -43,9 +43,8 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageFilter
-
 from build_dataset import CLASS_OF
+from PIL import Image, ImageFilter
 
 # Resting length in mm (head to wing tips), from the NEWA / UC IPM / TortAI descriptions.
 LENGTH_MM = {

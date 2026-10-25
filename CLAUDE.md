@@ -18,7 +18,9 @@ and `hardware/CAMERAS.md`.
 ## Environments and tests
 
 Each of `server/`, `device/` and `ml/` has its own `.venv` (Python 3.12, made with `uv`). Use that
-folder's `.venv/bin/python`, not the system Python.
+folder's `.venv/bin/python`, not the system Python. `server/` and `device/` pin every package in `uv.lock`
+(`uv sync --locked --python 3.12 --extra dev`); after changing a `pyproject.toml`, run `uv lock` there and
+commit both. `ml/` still uses `requirements.txt`.
 
 ```bash
 cd server && .venv/bin/python -m pytest -q            # about a minute
@@ -26,7 +28,9 @@ cd device && .venv/bin/python -m pytest -q            # camera-bench tests skip 
 cd ml && .venv/bin/python -m unittest discover tests
 ```
 
-CI runs the same three suites on every pull request (`.github/workflows/tests.yml`).
+CI runs the same three suites and `uvx ruff check .` (settings in `ruff.toml`) on every pull request
+(`.github/workflows/tests.yml`). Dependabot opens weekly PRs for the locked versions and Actions; CodeQL
+scans the Python and the workflows.
 
 The labeller and model playground are preview servers in `.claude/launch.json`
 (`field-labeler`, `ofm-labeler`, `model-playground`).

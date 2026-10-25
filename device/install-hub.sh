@@ -28,7 +28,8 @@ id -u sentinel >/dev/null 2>&1 || useradd --system --create-home sentinel
 
 python3 -m venv /opt/sentinel/venv
 /opt/sentinel/venv/bin/pip install --upgrade pip
-/opt/sentinel/venv/bin/pip install .
+# constraints.txt (the versions in uv.lock) comes with deploy-hub.sh; a plain git clone installs the newest
+/opt/sentinel/venv/bin/pip install $([[ -f constraints.txt ]] && echo -c constraints.txt) .
 
 install -d -o sentinel -g sentinel /var/lib/sentinel
 install -d /etc/sentinel

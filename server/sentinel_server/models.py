@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 from sqlalchemy import JSON, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -25,7 +25,7 @@ NOT_CATCHES = {"other_insect", "debris"}  # kept on the liner record, left out o
 
 
 def utcnow() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 class Trap(Base):
@@ -64,7 +64,7 @@ class Trap(Base):
     # to install. Its hub offers the target at each contact until the camera reports running it.
     firmware_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
     firmware_target: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    cards: Mapped[list["Card"]] = relationship(back_populates="trap", order_by="Card.installed_at")
+    cards: Mapped[list[Card]] = relationship(back_populates="trap", order_by="Card.installed_at")
 
 
 class Card(Base):
@@ -103,7 +103,7 @@ class Capture(Base):
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     processed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     model_version: Mapped[str | None] = mapped_column(String(80), nullable=True)
-    detections: Mapped[list["Detection"]] = relationship(back_populates="capture", cascade="all, delete-orphan")
+    detections: Mapped[list[Detection]] = relationship(back_populates="capture", cascade="all, delete-orphan")
 
 
 class Track(Base):

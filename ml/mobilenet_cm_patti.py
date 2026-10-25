@@ -4,15 +4,14 @@ in use (all six trap classes, the group-aware split from build_dataset.py). Was 
 "Patti's code" until Oct 24 2026.
 """
 
-import os
 import copy
+import os
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
-
-from torchvision import datasets, transforms, models
 from torch.utils.data import DataLoader
-
+from torchvision import datasets, models, transforms
 
 # ---------------------------------------------------------
 # SETTINGS

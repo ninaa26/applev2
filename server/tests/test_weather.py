@@ -1,16 +1,15 @@
 """A hub's location, and the National Weather Service's temperature and humidity on its ESP32 cameras' photos."""
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from urllib.parse import parse_qs, urlparse
 
 from fastapi.testclient import TestClient
+from test_manage import _add, _upload
 
 from sentinel_server import weather
 from sentinel_server.app import create_app
 from sentinel_server.db import session_scope
 from sentinel_server.models import Capture, Trap
-
-from test_manage import _add, _upload
 
 
 def _fake_service(monkeypatch, temp_c=11.5, rh=64.0, gaps=()):
@@ -69,7 +68,7 @@ def test_photos_without_a_sensor_get_the_weather_at_their_hub(monkeypatch):
     with TestClient(create_app()) as client:
         _add(client, trap_id="T1", kind="hub")
         _, key = _add(client, trap_id="T2", kind="esp32", hub_id="T1")
-        when = datetime.now(timezone.utc) - timedelta(hours=3)
+        when = datetime.now(UTC) - timedelta(hours=3)
         assert _upload(client, key, "T2", "a1", when).status_code == 201
         with session_scope() as db:
             cap_id = db.query(Capture).one().id
@@ -92,7 +91,7 @@ def test_a_sensor_reading_is_kept_and_not_looked_up(monkeypatch):
     asked = _fake_service(monkeypatch)
     with TestClient(create_app()) as client:
         _, key = _add(client, trap_id="T1", kind="pi", lat="42.45", lon="-76.47")
-        meta = {"capture_uid": "s1", "trap_id": "T1", "captured_at": datetime.now(timezone.utc).isoformat(),
+        meta = {"capture_uid": "s1", "trap_id": "T1", "captured_at": datetime.now(UTC).isoformat(),
                 "env": {"temp_c": 20.0, "rh": 50.0}}
         from test_manage import _jpeg
         client.post("/api/v1/captures", headers={"Authorization": f"Bearer {key}"},
@@ -112,7 +111,7 @@ def test_service_down_leaves_the_photo_for_next_time(monkeypatch):
     with TestClient(create_app()) as client:
         _add(client, trap_id="T1", kind="hub", lat="42.45", lon="-76.47")
         _, key = _add(client, trap_id="T2", kind="esp32", hub_id="T1")
-        _upload(client, key, "T2", "a1", datetime.now(timezone.utc) - timedelta(hours=2))
+        _upload(client, key, "T2", "a1", datetime.now(UTC) - timedelta(hours=2))
         with session_scope() as db:
             assert weather.fill(db) == 0
         _fake_service(monkeypatch)
@@ -125,7 +124,7 @@ def test_a_station_with_a_gap_falls_back_to_the_next_nearest(monkeypatch):
     with TestClient(create_app()) as client:
         _add(client, trap_id="T1", kind="hub", lat="42.45", lon="-76.47")
         _, key = _add(client, trap_id="T2", kind="esp32", hub_id="T1")
-        _upload(client, key, "T2", "a1", datetime.now(timezone.utc) - timedelta(hours=2))
+        _upload(client, key, "T2", "a1", datetime.now(UTC) - timedelta(hours=2))
         with session_scope() as db:
             assert weather.fill(db) == 1
             assert db.query(Capture).one().meta["weather"]["station"] == "KFAR"
@@ -136,7 +135,7 @@ def test_no_station_reporting_falls_back_to_open_meteo(monkeypatch):
     with TestClient(create_app()) as client:
         _add(client, trap_id="T1", kind="hub", lat="42.45", lon="-76.47")
         _, key = _add(client, trap_id="T2", kind="esp32", hub_id="T1")
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         _upload(client, key, "T2", "fresh", now - timedelta(hours=1))  # a station may still report it
         _upload(client, key, "T2", "gap", now - timedelta(hours=5))
         _upload(client, key, "T2", "old", now - timedelta(days=8))  # past the stations' week of history
@@ -171,7 +170,7 @@ def test_moving_the_hub_looks_its_cameras_weather_up_again(monkeypatch):
     with TestClient(create_app()) as client:
         _add(client, trap_id="T1", kind="hub", lat="42.45", lon="76.47")  # the minus sign forgotten
         _, key = _add(client, trap_id="T2", kind="esp32", hub_id="T1")
-        _upload(client, key, "T2", "a1", datetime.now(timezone.utc) - timedelta(hours=2))
+        _upload(client, key, "T2", "a1", datetime.now(UTC) - timedelta(hours=2))
         with session_scope() as db:
             assert weather.fill(db) == 1
         client.post("/traps/T1/location", data={"lat": "42.45", "lon": "76.47"})  # saved again, unchanged

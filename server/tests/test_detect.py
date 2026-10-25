@@ -6,8 +6,17 @@ import cv2
 import numpy as np
 import pytest
 
-from sentinel_server.pipeline.detect import (BaselineDetector, Box, card_outline, distort_points, estimate_lens_k,
-                                             find_grid, merge_tiles, on_card, tile_origins)
+from sentinel_server.pipeline.detect import (
+    BaselineDetector,
+    Box,
+    card_outline,
+    distort_points,
+    estimate_lens_k,
+    find_grid,
+    merge_tiles,
+    on_card,
+    tile_origins,
+)
 
 W, H = 640, 480
 PX_PER_MM = 7.0

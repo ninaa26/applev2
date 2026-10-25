@@ -11,7 +11,7 @@ import re
 import secrets
 import threading
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -37,7 +37,7 @@ templates = Jinja2Templates(directory=str(HERE / "templates"))
 def _local(dt: datetime | None, fmt: str = "%b %d %H:%M") -> str:
     if dt is None:
         return "—"
-    return dt.replace(tzinfo=timezone.utc).astimezone(ZoneInfo(get_settings().timezone)).strftime(fmt)
+    return dt.replace(tzinfo=UTC).astimezone(ZoneInfo(get_settings().timezone)).strftime(fmt)
 
 
 def _ago(dt: datetime | None) -> str:
@@ -140,10 +140,10 @@ def create_app(start_worker: bool = False) -> FastAPI:
             m = json.loads(meta)
             captured = datetime.fromisoformat(m["captured_at"])
         except (ValueError, KeyError, TypeError) as e:
-            raise HTTPException(422, f"bad meta: {e}")
+            raise HTTPException(422, f"bad meta: {e}") from e
         if m.get("trap_id") not in (None, trap.id):
             raise HTTPException(422, f"meta trap_id {m.get('trap_id')!r} does not match this key's trap {trap.id!r}")
-        captured = captured.astimezone(timezone.utc).replace(tzinfo=None) if captured.tzinfo else captured
+        captured = captured.astimezone(UTC).replace(tzinfo=None) if captured.tzinfo else captured
         uid = str(m.get("capture_uid") or Path(image.filename or "capture").stem)
         if not SAFE_UID.fullmatch(uid):
             raise HTTPException(422, f"bad capture_uid {uid!r}: use letters, digits, _ and - (max 80)")
@@ -163,7 +163,7 @@ def create_app(start_worker: bool = False) -> FastAPI:
             with Image.open(io.BytesIO(data)) as im:
                 im.verify()
         except Exception:
-            raise HTTPException(422, "image is not a readable picture")
+            raise HTTPException(422, "image is not a readable picture") from None
 
         # A photo goes on the liner that was in the trap when it was taken, not the one there when it arrives:
         # photos wait in the trap's (or hub's) queue while the server is out of reach, and a liner may have
@@ -205,7 +205,7 @@ def create_app(start_worker: bool = False) -> FastAPI:
         try:
             path = fleet.firmware_path(version)
         except ValueError as e:
-            raise HTTPException(404, str(e))
+            raise HTTPException(404, str(e)) from e
         if not path.exists():
             raise HTTPException(404, f"no firmware {version}")
         return FileResponse(path, media_type="application/octet-stream")
@@ -259,7 +259,7 @@ def create_app(start_worker: bool = False) -> FastAPI:
         try:
             services.start_new_card(db, trap_id, note=note, lure=lure or None)
         except ValueError as e:
-            raise HTTPException(422, str(e))
+            raise HTTPException(422, str(e)) from e
         return RedirectResponse(f"/traps/{trap_id}", status_code=303)
 
     @app.post("/traps/{trap_id}/biofix")
@@ -274,7 +274,7 @@ def create_app(start_worker: bool = False) -> FastAPI:
             try:
                 when = datetime.strptime(date.strip(), "%Y-%m-%d").date()
             except ValueError:
-                raise HTTPException(422, "biofix date must be YYYY-MM-DD")
+                raise HTTPException(422, "biofix date must be YYYY-MM-DD") from None
             if when > services.local_date(services.utcnow()):
                 raise HTTPException(422, "the biofix can't be in the future")
             trap.biofix_date = when
@@ -290,7 +290,7 @@ def create_app(start_worker: bool = False) -> FastAPI:
         try:
             where = weather.parse_location(lat, lon)
         except ValueError as e:
-            raise HTTPException(422, str(e))
+            raise HTTPException(422, str(e)) from e
         if where != (trap.lat, trap.lon):
             trap.lat, trap.lon = where
             weather.forget(db, trap)
@@ -304,7 +304,7 @@ def create_app(start_worker: bool = False) -> FastAPI:
         try:
             services.request_photo(trap)
         except ValueError as e:
-            raise HTTPException(422, str(e))
+            raise HTTPException(422, str(e)) from e
         return RedirectResponse(f"/traps/{trap_id}", status_code=303)
 
     @app.post("/tracks/{track_id}/review")

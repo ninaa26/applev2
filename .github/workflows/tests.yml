@@ -5,7 +5,19 @@ on:
     branches: [master]
   pull_request:
 
+# the jobs only read the code
+permissions:
+  contents: read
+
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      # settings in ruff.toml; the version is pinned so a new Ruff release can't fail every PR at once
+      - run: uvx ruff@0.17.2 check .
+
   server:
     runs-on: ubuntu-latest
     defaults:
@@ -14,7 +26,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
-      - run: uv run --no-project --python 3.12 --with-editable '.[dev]' pytest -q
+      # --locked: fails if uv.lock is out of step with pyproject.toml (run uv lock and commit it)
+      - run: uv sync --locked --python 3.12 --extra dev
+      - run: uv run --no-sync pytest -q
 
   device:
     runs-on: ubuntu-latest
@@ -25,7 +39,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
       # bench adds OpenCV, so the camera-bench tests run instead of being skipped
-      - run: uv run --no-project --python 3.12 --with-editable '.[dev,bench]' pytest -q
+      - run: uv sync --locked --python 3.12 --extra dev --extra bench
+      - run: uv run --no-sync pytest -q
 
   ml:
     runs-on: ubuntu-latest

@@ -6,10 +6,10 @@ start as JSON on stdout, with everything the report needs from each row.
 import json
 import sqlite3
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 server_dir, trap, start = sys.argv[1], sys.argv[2], datetime.fromisoformat(sys.argv[3])
-start = start.astimezone(timezone.utc).replace(tzinfo=None).isoformat(sep=" ")
+start = start.astimezone(UTC).replace(tzinfo=None).isoformat(sep=" ")
 db = sqlite3.connect(f"file:{server_dir}/data/sentinel.db?mode=ro", uri=True, timeout=30)
 db.row_factory = sqlite3.Row
 rows = db.execute(

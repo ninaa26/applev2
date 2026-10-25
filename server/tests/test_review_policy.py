@@ -50,7 +50,6 @@ def test_one_in_ten_sure_labels_is_spot_checked_and_scored():
 def test_a_lure_change_applies_from_the_new_liner_on():
     """The lure is kept per liner. Swapping a CM lure for an OFM one used to reinterpret every past catch:
     OFM bycatch on the old CM liner then counted towards the OFM biofix."""
-    from datetime import date
 
     now = datetime(2026, 7, 20, 16)
     first = trap_with_tracks([("OFM", 0.95, "auto", d) for d in (40, 39, 33, 32)], now=now)  # on the CM liner

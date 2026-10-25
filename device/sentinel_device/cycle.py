@@ -15,7 +15,7 @@ import subprocess
 import sys
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from . import __version__, config as config_mod, hardware
@@ -30,7 +30,7 @@ log = logging.getLogger("sentinel")
 
 def capture_once(cfg: dict, data_dir: Path, reason: str, state: State, new_card: bool = False,
                  new_card_source: str | None = None) -> Path:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     stem = f"{now.strftime('%Y%m%dT%H%M%SZ')}_{cfg['trap_id']}"
     tmp = data_dir / f"{stem}.jpg"
 
@@ -77,7 +77,7 @@ def _schedule(cfgs: list[dict]) -> tuple[datetime, bool]:
     for cfg in cfgs:
         try:
             sched = cfg["schedule"]
-            return next_wake(datetime.now(timezone.utc), sched["times"], cfg["timezone"]), bool(sched["halt_after_cycle"])
+            return next_wake(datetime.now(UTC), sched["times"], cfg["timezone"]), bool(sched["halt_after_cycle"])
         except Exception as e:
             log.error("unusable schedule %r: %s", cfg.get("schedule"), e)
     raise RuntimeError("no usable schedule")  # the built-in defaults always work
@@ -95,7 +95,7 @@ def run(cfg_path: Path | None, halt: bool | None, capture: bool = True, new_card
     # the cycle must still reach the end: set the wake alarm and power off.
     error = None
     try:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         # State files from before clean_halt existed have no entry: treat those as a clean power-off.
         reason = wake_reason(now, state.get("expected_wake"), state.get("clean_halt", True))
         state.set("clean_halt", False)  # until this cycle reaches its own power-off

@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 import math
 import time
-from pathlib import Path
 
 import cv2
 from PIL import Image

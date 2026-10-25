@@ -44,14 +44,14 @@ import argparse
 import hashlib
 import html
 import json
-import os
 import logging
+import os
 import re
 import secrets
 import sys
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -136,7 +136,7 @@ class Gateway:
             r.raise_for_status()
             nodes = r.json()["nodes"]
             assert isinstance(nodes, dict)
-            asked = {t: datetime.fromisoformat(w).astimezone(timezone.utc)
+            asked = {t: datetime.fromisoformat(w).astimezone(UTC)
                      for t, w in (r.json().get("photo_requests") or {}).items()}
             firmware = r.json().get("firmware") or {}
             assert isinstance(firmware, dict)
@@ -181,7 +181,7 @@ class Gateway:
                 except requests.RequestException as e:
                     log.warning("firmware %s not fetched: %s", version, e.__class__.__name__)
                     continue
-                if len(r.content) != size or hashlib.md5(r.content).hexdigest() != md5:
+                if len(r.content) != size or hashlib.md5(r.content, usedforsecurity=False).hexdigest() != md5:
                     log.error("firmware %s from the server doesn't match its size and md5", version)
                     continue
                 self.firmware_dir.mkdir(parents=True, exist_ok=True)
@@ -312,7 +312,7 @@ class Gateway:
             return asked is not None and self.served.get(trap_id) != asked
 
     def schedule_reply(self, trap_id: str | None = None) -> dict:
-        now = datetime.fromtimestamp(self.clock(), timezone.utc)
+        now = datetime.fromtimestamp(self.clock(), UTC)
         offset = timedelta(seconds=self.hub["node_offset_s"])
         # The node wakes node_offset_s after the hub's slot, once the hub has booted and opened the window.
         wakes, t = [], now - offset
@@ -347,10 +347,10 @@ class Gateway:
         if not (body[:2] == b"\xff\xd8" and body.rstrip(b"\x00")[-2:] == b"\xff\xd9"):
             return 415, {"error": "body is not a whole JPEG"}
 
-        now = datetime.fromtimestamp(self.clock(), timezone.utc)
+        now = datetime.fromtimestamp(self.clock(), UTC)
         try:
             if meta.get("clock_synced") and meta.get("captured_at"):
-                captured = datetime.fromisoformat(meta["captured_at"]).astimezone(timezone.utc)
+                captured = datetime.fromisoformat(meta["captured_at"]).astimezone(UTC)
             else:  # the node has never been told the time: it says how long ago it took the photo
                 captured = now - timedelta(seconds=float(meta.get("age_s", 0)))
         except (ValueError, TypeError):
@@ -396,7 +396,7 @@ class Gateway:
             assert isinstance(status, dict)
         except (ValueError, AssertionError):
             return
-        status = {"at": datetime.fromtimestamp(self.clock(), timezone.utc).isoformat(), **status}
+        status = {"at": datetime.fromtimestamp(self.clock(), UTC).isoformat(), **status}
         path = self.nodes_dir / trap_id / "status.jsonl"
         path.parent.mkdir(parents=True, exist_ok=True)
         with self.lock, path.open("a") as f:

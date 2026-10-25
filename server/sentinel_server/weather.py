@@ -20,7 +20,7 @@ import math
 import re
 import urllib.parse
 import urllib.request
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -76,7 +76,7 @@ def parse_location(lat: str, lon: str) -> tuple[float | None, float | None]:
     try:
         la, lo = _coord(lat), _coord(lon)
     except ValueError:
-        raise ValueError("location: give both latitude and longitude as numbers, e.g. 42.4459 and -76.4712")
+        raise ValueError("location: give both latitude and longitude as numbers, e.g. 42.4459 and -76.4712") from None
     if not (-90 <= la <= 90 and -180 <= lo <= 180):
         raise ValueError("location: latitude is -90 to 90 and longitude -180 to 180")
     return round(la, 4), round(lo, 4)
@@ -95,8 +95,8 @@ def forget(db: Session, trap: Trap) -> int:
 
 
 def _get_json(url: str) -> dict:
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/geo+json"})
-    with urllib.request.urlopen(req, timeout=TIMEOUT_S) as r:
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/geo+json"})  # noqa: S310
+    with urllib.request.urlopen(req, timeout=TIMEOUT_S) as r:  # noqa: S310 (https URLs of the NWS and Open-Meteo APIs)
         return json.load(r)
 
 
@@ -125,7 +125,7 @@ def observations(station: str, first: datetime, last: datetime) -> list[tuple[da
         p = f["properties"]
         tc, rh = (p.get("temperature") or {}).get("value"), (p.get("relativeHumidity") or {}).get("value")
         if tc is not None and rh is not None:
-            at = datetime.fromisoformat(p["timestamp"]).astimezone(timezone.utc).replace(tzinfo=None)
+            at = datetime.fromisoformat(p["timestamp"]).astimezone(UTC).replace(tzinfo=None)
             out.append((at, tc, rh))
     return out
 

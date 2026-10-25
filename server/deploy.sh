@@ -5,8 +5,10 @@
 #   server/deploy.sh pi@other-host
 #   server/deploy.sh --rollback           # put back the code and database from before the last deploy
 # Before copying anything it saves the code and a snapshot of the database to ~/deploy-backups/<time>/ on the
-# server. After the restart it waits for /healthz; if that doesn't answer in 60 s, it restores that backup's
-# code (the database is left alone: a new column is harmless to old code) and restarts again.
+# server, with a list of its installed packages. Packages are installed at the versions in uv.lock, and only
+# when pyproject.toml or uv.lock changed. After the restart it waits for /healthz; if that doesn't answer in
+# 60 s, it restores that backup's code and packages (the database is left alone: a new column is harmless to
+# old code) and restarts again.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -24,6 +26,7 @@ app=$1; last=$(ls -1d ~/deploy-backups/*/ 2>/dev/null | tail -1)
 [[ -n $last ]] || { echo "no backups in ~/deploy-backups"; exit 1; }
 echo "putting back $last"
 rm -rf ~/$app/sentinel_server && tar xzf "$last/code.tgz" -C ~/$app
+[[ -f $last/packages.txt ]] && ~/.local/bin/uv pip install -q -p ~/$app/.venv/bin/python -r "$last/packages.txt"
 cp "$last/sentinel.db" ~/$app/data/sentinel.db.restore
 sudo systemctl stop sentinel-server
 mv ~/$app/data/sentinel.db.restore ~/$app/data/sentinel.db && rm -f ~/$app/data/sentinel.db-wal ~/$app/data/sentinel.db-shm
@@ -45,7 +48,8 @@ remote bash -s "$app" "$stamp" <<'EOF'
 set -euo pipefail
 app=$1; dir=~/deploy-backups/$2
 mkdir -p "$dir"
-tar czf "$dir/code.tgz" -C ~/$app sentinel_server pyproject.toml
+tar czf "$dir/code.tgz" -C ~/$app sentinel_server pyproject.toml $(cd ~/$app && ls uv.lock 2>/dev/null)
+~/.local/bin/uv pip freeze -q -p ~/$app/.venv/bin/python --exclude-editable > "$dir/packages.txt"
 ~/$app/.venv/bin/python -c "import sqlite3,sys; s=sqlite3.connect(sys.argv[1]); d=sqlite3.connect(sys.argv[2]); s.backup(d); d.close()" \
   ~/$app/data/sentinel.db "$dir/sentinel.db"
 ls -1d ~/deploy-backups/*/ | head -n -10 | xargs -r rm -rf   # keep the last 10
@@ -53,15 +57,21 @@ EOF
 
 echo "copying $sha"
 rsync -a --delete --exclude __pycache__ sentinel_server/ "$host:$app/sentinel_server/"
-hash='import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())'
-old_deps=$(remote "python3 -c '$hash' $app/pyproject.toml")
-rsync -a pyproject.toml "$host:$app/pyproject.toml"
-if [[ $old_deps != $(python3 -c "$hash" pyproject.toml) ]]; then
-  echo "pyproject.toml changed: installing"
-  remote "cd $app && .venv/bin/pip install -q -e ."
+hash='import hashlib,os,sys; print(hashlib.sha256(b"".join(open(f,"rb").read() for f in sys.argv[1:] if os.path.exists(f))).hexdigest())'
+old_deps=$(remote "python3 -c '$hash' $app/pyproject.toml $app/uv.lock")
+deps_changed=0
+if [[ $old_deps != $(python3 -c "$hash" pyproject.toml uv.lock) ]]; then
+  deps_changed=1
+  echo "pyproject.toml or uv.lock changed: installing the locked versions"
+  # constraints, not requirements: the server keeps the extras it has (bioclip), each at its locked version
+  uv export --locked --all-extras --no-emit-project --no-emit-package flat-bug --no-hashes --no-header \
+    --no-annotate -q -o constraints.txt.new
+  rsync -a pyproject.toml uv.lock "$host:$app/"
+  rsync -a constraints.txt.new "$host:$app/constraints.txt" && rm constraints.txt.new
+  remote "cd $app && ~/.local/bin/uv pip install -q -p .venv/bin/python -e . -c constraints.txt"
 fi
 
-remote bash -s "$app" "$stamp" "$sha" <<'EOF'
+remote bash -s "$app" "$stamp" "$sha" "$deps_changed" <<'EOF'
 set -euo pipefail
 app=$1; dir=~/deploy-backups/$2
 sudo systemctl restart sentinel-server
@@ -72,6 +82,7 @@ done
 echo "server did not come up on $3: putting the old code back"
 journalctl -u sentinel-server -n 30 --no-pager || true
 rm -rf ~/$app/sentinel_server && tar xzf "$dir/code.tgz" -C ~/$app
+(( $4 )) && ~/.local/bin/uv pip install -q -p ~/$app/.venv/bin/python -r "$dir/packages.txt"
 sudo systemctl restart sentinel-server
 exit 1
 EOF
