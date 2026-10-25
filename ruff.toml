@@ -1,8 +1,8 @@
-# Ruff lint settings for the repo's Python (code-review/ holds outside snapshots and is skipped). Run from the root:
+# Ruff lint settings for the repo's Python (docs/code-review/ holds outside snapshots and is skipped). Run from the root:
 # uvx ruff check .   (--fix for the fixable ones). No formatter yet.
 target-version = "py311"
 line-length = 120
-extend-exclude = ["**/.venv", "code-review", "ml/data", "ml/models", "server/data", "device/data", "field-tests/**/runs"]
+extend-exclude = ["**/.venv", "docs/code-review", "ml/data", "ml/models", "server/data", "device/data", "field-tests/**/runs"]
 
 [lint]
 # E9/F: real errors · I: import order · B: bugbear · UP: newer syntax · S: bandit security checks

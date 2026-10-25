@@ -9,7 +9,9 @@ DataCamp's Python backend tutorial, and three dev.to articles (repository practi
 securing code). Round 10 (Oct 25): [PR #60](https://github.com/ninaa26/applev2/pull/60) landed
 items 1, 2, 6 and 11 and was checked; this branch did items 4, 7, 8 (rate limiting), 14
 (`SECURITY.md`), 15 and 16. Round 11 (Oct 25): dismissed the CodeQL alerts and set the
-GitHub settings for items 10, 14 and 17.
+GitHub settings for items 10, 14 and 17. Round 12: checked Dependabot PRs #61–#63 (item 6). Round 13: #61–#63 and #66 merged; checked
+the top-level folder layout (under "Skipped on purpose"). Round 14: organization ideas, checked
+against the repo (new section below). Round 15: all eight organization ideas done (O1–O8).
 
 ## Already in place
 
@@ -60,9 +62,9 @@ GitHub settings for items 10, 14 and 17.
 |---|----------|--------|
 | 1 | Lock dependencies (`uv.lock`) | done in PR #60: `uv.lock` for `server/` and `device/`, `uv sync --locked` in CI, deploys install the locked versions |
 | 2 | Linter and formatter (`ruff`) | done in PR #60: `ruff.toml` and a lint job in CI (lint only; no formatter yet) |
-| 3 | Type checking (`mypy` or `pyright`) | done: loose `mypy` on `sentinel_server` and `sentinel_device` (settings in each `pyproject.toml`), a `types` job in CI |
+| 3 | Type checking (`mypy` or `pyright`) | done: loose `mypy` on `sentinel_server` and `sentinel_device` (settings in each `pyproject.toml`), a `types` job in CI ([PR #65](https://github.com/ninaa26/applev2/pull/65)) |
 | 4 | Pydantic models for request bodies | done: `HubPairing` and `HubClaim` models in `app.py` |
-| 5 | Versioned schema migrations (Alembic) | done in PR #66: `server/sentinel_server/migrations/`, baseline `0001` |
+| 5 | Versioned schema migrations (Alembic) | done in [PR #66](https://github.com/ninaa26/applev2/pull/66): `server/sentinel_server/migrations/`, baseline `0001` |
 | 6 | Dependabot + `pip-audit` | done in PR #60: `.github/dependabot.yml` (weekly uv, monthly Actions); `pip-audit` not added |
 | 7 | Pre-commit hooks | done: `.pre-commit-config.yaml` (Ruff, large files, private keys); each person runs `uvx pre-commit install` once |
 | 8 | Require auth on anything exposed | rate limiting done (10 wrong passwords per address per 10 min); required password + HTTPS wait for a public host |
@@ -105,6 +107,10 @@ GitHub settings for items 10, 14 and 17.
 6. **Automate dependency and security updates.** Add `.github/dependabot.yml` for pip and GitHub
    Actions, and optionally run `pip-audit` in CI. GitHub's `actions/dependency-review-action` can also
    flag a PR that adds a dependency with a known vulnerability.
+   The first three Dependabot PRs (Oct 25) were checked: #61 moves CI to `actions/checkout@v7` and
+   `setup-uv@v7`; #62 (uvicorn) and #63 (psycopg) only raise the minimum in `pyproject.toml` to the
+   version `uv.lock` already had, so nothing installed changes. They also rewrite `uv.lock` in uv's
+   newer format (`revision = 5`), which the team's uv 0.12.10 reads fine.
 7. **Pre-commit hooks**: a `.pre-commit-config.yaml` running ruff plus a check for large files, so
    photos or `.pt` files can't slip into a commit.
 8. **Require authentication on anything exposed.** `SENTINEL_DASHBOARD_PASSWORD` is optional.
@@ -174,6 +180,35 @@ the reason below, and none is open now:
 **Next:** choose a license (item 13). Item 3 (loose `mypy` in CI) is done; tightening it module by
 module (`check_untyped_defs` first) is the next step there. Alembic (item 5) is done in PR #66.
 
+## Organization ideas (round 14, done in round 15)
+
+Checked against the repo on Oct 25 2026, most useful first, and all done the same day.
+
+| # | Idea | What was found | Done |
+|---|------|----------------|------|
+| O1 | Delete merged remote branches | 61 remote branches, 52 already merged into `master`. Auto-delete (item 17) only covers new PRs | 42 merged branches deleted on GitHub; 6 unmerged ones kept |
+| O2 | Tag what's deployed and released | No tags at all. `deploy.sh` writes the commit only to `~/applev2/DEPLOYED` on the Pi, and firmware versions live only in `FW_VERSION` in `main.cpp` | `deploy.sh`, `deploy-hub.sh` and `release.sh` tag `server-*`, `hub-*` and `fw-*` |
+| O3 | Move team conventions into `CONTRIBUTING.md` | Branch/PR flow, commit prefixes, bench-Pi etiquette and deploy steps are only in `CLAUDE.md`, which a teammate may never open. Commit prefixes now include `CI:` but `CLAUDE.md` lists only four | `CONTRIBUTING.md`; `CLAUDE.md` imports it and keeps only Claude-specific notes |
+| O4 | PR template | PR bodies already follow What / Checked / Not tested; `.github/pull_request_template.md` would make that the default | `.github/pull_request_template.md` |
+| O5 | A docs index | The README links 10 docs but not `wiring.md` or this file. The two `*-research-status.md` files are dated snapshots mixed in with how-to guides | `docs/README.md`, linked from the README (the research pages already carried "as of" dates) |
+| O6 | One command for every check | Tests run per folder with different commands; a root `justfile` or `Makefile` (`test`, `lint`, `types`) would match CI in one step | root `Makefile`: `make check` runs what CI runs |
+| O7 | Tidy `ml/` | 25 scripts, already grouped by prefix (`fetch_`, `eval_`, `train_`). `mobilenet_cm_patti.py` is the only one `ml/README.md` doesn't mention | `mobilenet_cm_patti.py` documented in `ml/README.md` (kept, as the start of `train_v2.py`) |
+| O8 | `code-review/` | 1.1 MB of process material at the top level; move under `docs/` or archive at semester end | moved to `docs/code-review/`; its scripts, `CLAUDE.md` and `ruff.toml` updated |
+
+Details:
+
+- **O2.** Have `deploy.sh` push a tag such as `server-2026-10-25` after `/healthz` answers, and
+  `release.sh` a `fw-<FW_VERSION>` tag. GitHub then shows what each Pi and camera runs, and
+  `git diff server-2026-10-20 server-2026-10-25` is the change list for a report.
+- **O3.** Keep `CLAUDE.md` for what's specific to Claude (environments, which preview servers
+  exist) and point it at `CONTRIBUTING.md` for the rest, so there's one source.
+- **O5.** A short `docs/README.md` in three groups (set up: bring-up, wiring, ESP32 traps, server
+  on Linux/Mac; check: camera bench, evaluation; background: research status, backend practices),
+  with the research-status pages carrying an "as of" date at the top.
+- Not suggested: CODEOWNERS (two people), GitHub Issues/Projects (the review ledger in
+  `code-review/LEDGER.md` already tracks work; only add Issues if the course wants visible
+  progress), a monorepo tool, or splitting `app.py` (552 lines is still easy to follow).
+
 ## Skipped on purpose
 
 - **Reorganizing into `app/api/`, `core/`, `models/`, `schemas/`, `services/`.** The server is one
@@ -231,3 +266,9 @@ module (`check_untyped_defs` first) is the next step there. Alembic (item 5) is 
   TfSec) aren't needed, because CodeQL covers the languages that matter here and there's no
   Terraform or container image. Repository security advisories only matter once someone reports a
   vulnerability through item 14.
+- **Top-level layout (checked Oct 25).** One folder per part of the system (`device/`, `server/`,
+  `ml/`, `hardware/`, `docs/`) is the usual shape for a hardware + server + ML project, and each
+  Python folder is its own package with its own env and lock, so CI and deploys stay separate. Not
+  worth a reshuffle; `code-review/` moved under `docs/` (O8), and a `LICENSE` is still to come
+  (item 13). `field-tests/` stays at the top because a
+  run spans the cameras, the hub and the server.

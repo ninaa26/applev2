@@ -3,7 +3,7 @@
 ## Steps
 
 1. Get the live data (only reads from the Pis; takes about a minute):
-   `bash code-review/gemini-upload/collect-live.sh`
+   `bash docs/code-review/gemini-upload/collect-live.sh`
    It writes `06_live_snapshot.md`. Skim it before you upload.
 2. In the Gemini app pick **4 Argon**, start a new chat and attach these files:
    - `01_code_server.txt`: FastAPI server, pipeline, dashboard, tests
