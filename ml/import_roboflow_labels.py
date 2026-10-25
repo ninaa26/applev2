@@ -1,7 +1,7 @@
 """Turn a Roboflow COCO export into a label_field_cards.py folder, so its boxes can be checked by hand.
 
-    python import_roboflow_labels.py ofm-ervins            # -> data/web_liners/label/ofm-ervins/
-    python label_field_cards.py --data data/web_liners/label/ofm-ervins
+    python import_roboflow_labels.py ofm-ervins            # -> data/real_liners/from_the_web/label/ofm-ervins/
+    python label_field_cards.py --data data/real_liners/from_the_web/label/ofm-ervins
 
 The uploader's boxes come in pre-labelled (pass 1: `moth`; the species they claim is kept in the
 `source` column, e.g. roboflow:OFM). Only the target moth was boxed, so the other insects on the liner
@@ -23,6 +23,7 @@ import json
 from pathlib import Path
 
 import cv2
+import paths
 from crop_field_cards import FIELDS, server_crop
 from eval_detector_combine import good_shape, union
 from eval_detector_roboflow import centre, dataset_dir, grid_px_per_mm, inside, iou, load_coco
@@ -40,7 +41,7 @@ def overlaps(a, b) -> bool:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("dataset", choices=sorted(CLAIMED))
-    ap.add_argument("--data", type=Path, default=Path("data/web_liners"))
+    ap.add_argument("--data", type=Path, default=paths.DATA / paths.WEB_LINERS)
     ap.add_argument("--grid-mm", type=float, default=25.0)
     ap.add_argument("--fb-conf", type=float, default=0.3)
     args = ap.parse_args(argv)

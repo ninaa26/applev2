@@ -1,12 +1,12 @@
 """Cut the moth out of every web photo with flatbug, for pasting onto liner photos (make_trap_style.py).
 
-    python segment_moths.py                 # all web photos in data/dataset.csv; resumable
+    python segment_moths.py                 # all web photos in data/training/classifier/dataset.csv; resumable
     python segment_moths.py --limit 50      # quick look
 
 flatbug (github.com/darsa-group/flat-bug, MIT) is a pretrained arthropod instance segmenter.
 Each photo is shrunk to 640 px, the most confident insect is kept if it is confident enough and
 not a sliver or the whole frame, and saved as an RGBA PNG cropped to the insect:
-data/cutouts/<label>/<name>.png. data/cutouts/manifest.csv lists every photo tried (also the
+data/web_moth_photos/cutouts/<label>/<name>.png. data/web_moth_photos/cutouts/manifest.csv lists every photo tried (also the
 misses), so a re-run only does new photos.
 """
 
@@ -19,6 +19,7 @@ import time
 from pathlib import Path
 
 import numpy as np
+import paths
 from PIL import Image, ImageDraw, ImageOps
 
 FIELDS = ["path", "label", "cutout", "conf", "area_frac", "status"]
@@ -63,7 +64,7 @@ def cut(predictor, path: str, size: int, min_conf: float) -> tuple[Image.Image |
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--data", type=Path, default=Path("data"))
-    ap.add_argument("--weights", default="flat_bug_M.pt", help="downloaded to the working dir on first use")
+    ap.add_argument("--weights", default=paths.FLATBUG, help="downloaded there on first use")
     ap.add_argument("--size", type=int, default=640)
     ap.add_argument("--min-conf", type=float, default=0.5)
     ap.add_argument("--limit", type=int, default=0)
@@ -72,9 +73,9 @@ def main(argv=None) -> int:
     import torch
     from flat_bug.predictor import Predictor
 
-    with open(args.data / "dataset.csv", newline="") as f:
+    with open(args.data / paths.DATASET, newline="") as f:
         rows = [r for r in csv.DictReader(f) if r["source"] in ("inat", "ami")]
-    out = args.data / "cutouts"
+    out = args.data / paths.CUTOUTS
     manifest = out / "manifest.csv"
     done = load_done(manifest)
     todo = [r for r in rows if r["path"] not in done]

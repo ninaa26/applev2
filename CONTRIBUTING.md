@@ -41,6 +41,8 @@ The device's camera-bench tests need OpenCV, which `make setup` installs (the `b
 
 ## Data and results
 
+- What is where in the ML data and models: [ml/data/README.md](ml/data/README.md). Which photos are held out
+  from training is in git, in `ml/data/training/held_out/`.
 - Photos, datasets, model weights and run outputs are gitignored (`ml/data/`, `ml/models/`,
   `server/data/`, `device/data/`, `*.pt`, firmware `.bin` files). The scripts and READMEs are the
   record of how they were made, so keep them in step.

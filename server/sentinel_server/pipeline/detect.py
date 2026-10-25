@@ -754,6 +754,6 @@ def make_detector(name: str):
         return FlatbugDetector(models / "flat_bug_M.pt")  # downloaded there on first use
     if name == "yolo":
         if not s.detector_model:
-            raise ValueError("SENTINEL_DETECTOR=yolo needs SENTINEL_DETECTOR_MODEL=<path to ml/models/yolo11/<run>/weights/best.pt>")
+            raise ValueError("SENTINEL_DETECTOR=yolo needs SENTINEL_DETECTOR_MODEL=<path to ml/models/detector/yolo/<run>/weights/best.pt>")
         return YoloDetector(s.detector_model, grid_mm=s.grid_mm, lens=s.lens_k)
     raise ValueError(f"unknown detector {name!r}")

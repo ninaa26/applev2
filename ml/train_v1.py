@@ -3,8 +3,9 @@
     python train_v1.py                    # embed new photos, train, report on the test split
     python train_v1.py --final            # also report on our locked test cards (do this once, at the end)
 
-Reads data/dataset.csv from build_dataset.py. Embeddings are cached in data/embeddings/, so
-re-running after adding photos only embeds the new ones and then takes seconds.
+Reads data/training/classifier/dataset.csv from build_dataset.py. Embeddings are cached in
+data/training/classifier/bioclip_embeddings/, so re-running after adding photos only embeds the new ones and
+then takes seconds.
 
 v1 is a logistic regression on the (normalised) BioCLIP 2 image embedding, with class weights
 balanced so the few OFM photos count as much as the many OBLR ones. The regularisation
@@ -17,8 +18,10 @@ automatically as something else); val photos from the trap's own domain are what
 have to be right for. T divides the logits (plain temperature scaling, the open-set baseline to
 beat in Open-Insect) so the server's 0.80 / 0.50 confidence thresholds mean what they say.
 
-Writes models/v1/head.npz (classes, weights, bias, temperature, model name), which the server's
-`bioclip-v1` classifier loads, plus metrics.json and report.md.
+Writes models/classifier/bioclip_head/current/head.npz (classes, weights, bias, temperature, model name),
+which the server's `bioclip-v1` classifier loads, plus metrics.json, report.md and trained_on.json (the
+dataset, trap-style version, held-out lists and commit it came from). Before overwriting current/ with an
+experiment, copy it to archive/<date>_<what changed>/, or pass --out models/classifier/bioclip_head/archive/....
 """
 
 from __future__ import annotations
@@ -30,6 +33,8 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import paths
+import trained_on
 
 MODEL = "hf-hub:imageomics/bioclip-2"
 # Same prompts as the server's zero-shot classifier (server/sentinel_server/pipeline/classify.py).
@@ -44,7 +49,7 @@ PROMPTS = {
 
 
 def load_rows(data: Path) -> list[dict]:
-    with open(data / "dataset.csv", newline="") as f:
+    with open(data / paths.DATASET, newline="") as f:
         return list(csv.DictReader(f))
 
 
@@ -102,8 +107,8 @@ def embeddings(rows: list[dict], cache: Path, model_name: str, batch: int,
         for start in range(0, len(missing), chunk):
             part = missing[start:start + chunk]
             cached.update(zip(part, embedder.images(part, batch)))
-            paths = sorted(cached)
-            np.savez(cache, paths=np.array(paths), feats=np.stack([cached[p] for p in paths]).astype(np.float16))
+            keys = sorted(cached)
+            np.savez(cache, paths=np.array(keys), feats=np.stack([cached[p] for p in keys]).astype(np.float16))
             print(f"  saved {min(start + chunk, len(missing))}/{len(missing)} new embeddings", flush=True)
     return np.stack([cached[r["path"]] for r in rows]).astype(np.float32), embedder
 
@@ -158,7 +163,7 @@ REAL = ("liner", "own")  # sources photographed on a liner: what C and T are tun
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--data", type=Path, default=Path("data"))
-    ap.add_argument("--out", type=Path, default=Path("models/v1"))
+    ap.add_argument("--out", type=Path, default=Path(paths.CLASSIFIER_HEAD).parent)
     ap.add_argument("--model", default=MODEL)
     ap.add_argument("--batch", type=int, default=16, help="64 hangs the GPU on a 16 GB M3 (Metal never returns)")
     ap.add_argument("--device", default="auto",
@@ -170,7 +175,7 @@ def main(argv=None) -> int:
 
     rows = [r for r in load_rows(args.data) if r["split"] != "locked" or args.final]
     slug = args.model.split("/")[-1].replace(":", "_")
-    X, embedder = embeddings(rows, args.data / "embeddings" / f"{slug}.npz", args.model, args.batch, args.device)
+    X, embedder = embeddings(rows, args.data / paths.EMBEDDINGS / f"{slug}.npz", args.model, args.batch, args.device)
 
     classes = sorted({r["class"] for r in rows if r["split"] == "train"})
     idx = {c: k for k, c in enumerate(classes)}
@@ -219,6 +224,8 @@ def main(argv=None) -> int:
     np.savez(args.out / "head.npz", classes=np.array(classes), W=clf.coef_.astype(np.float32),
              b=clf.intercept_.astype(np.float32), T=np.float32(T), model=np.array(args.model))
     (args.out / "metrics.json").write_text(json.dumps(results, indent=2))
+    trained_on.write(args.out, trained_on.summary(args.data, args.model, args.data / paths.DATASET, rows,
+                                                  C=C, T=round(float(T), 4), final=args.final))
     by_source = {s: int(sum(1 for r in rows if r["source"] == s and r["split"] == "train"))
                  for s in ("inat", "ami", "own", "liner", "synth")}
     md = ["# Species ID v0 / v1", "",
@@ -236,7 +243,7 @@ def main(argv=None) -> int:
     (args.out / "report.md").write_text("\n".join(md))
     for k, v in results.items():
         print("\n" + format_report(k, v))
-    print(f"Saved {args.out / 'head.npz'}, metrics.json, report.md")
+    print(f"Saved {args.out / 'head.npz'}, metrics.json, report.md, trained_on.json")
     return 0
 
 

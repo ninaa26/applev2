@@ -18,8 +18,8 @@ claim and the camera is not ours, so they choose between options; they are not t
 
 | # | Item | Why not | What would settle it |
 |---|---|---|---|
-| 1 | Training and testing on our own trap, across a season, with decayed moths and crowded liners | `ml/data/own/` does not exist: the server holds 6 webcam photos and no reviews. Everything "real" in training is other people's liners | Run the trap, review on the dashboard, `export_server_crops.py`, lock test cards, `train_v1.py --final` |
-| 2 | Species checked by someone who knows the moths | Real-liner species now covers all three targets, but from an uploader's claim (OFM liners, CM cards, potato tuber moth) or from Claude reading the field-card photos on Oct 7 2026 (`ml/data/field/species.csv`: 35 OBLR, 20 OFM, 13 CM, 24 left unsure). A head that never saw those cards agrees on 42 of 43 held-out moths, which is two readings, not a check. No look-alike tortricid on glue except one lesser appleworm | A trained eye over `ml/data/field/claude_sheets/` and `species.csv` |
+| 1 | Training and testing on our own trap, across a season, with decayed moths and crowded liners | `ml/data/real_liners/our_trap/` does not exist: the server holds 6 webcam photos and no reviews. Everything "real" in training is other people's liners | Run the trap, review on the dashboard, `export_server_crops.py`, lock test cards, `train_v1.py --final` |
+| 2 | Species checked by someone who knows the moths | Real-liner species now covers all three targets, but from an uploader's claim (OFM liners, CM cards, potato tuber moth) or from Claude reading the field-card photos on Oct 7 2026 (`ml/data/real_liners/cornell_field_cards/species.csv`: 35 OBLR, 20 OFM, 13 CM, 24 left unsure). A head that never saw those cards agrees on 42 of 43 held-out moths, which is two readings, not a check. No look-alike tortricid on glue except one lesser appleworm | A trained eye over `ml/data/real_liners/cornell_field_cards/claude_sheets/` and `species.csv` |
 | 3 | The species that really land in each lure's trap here | The papers' look-alike lists are European or for other pests (*Synanthedon myopaeformis*, *Cacoecimorpha pronubana*, *Mythimna*). I have not put names in the fetch scripts from memory; the right list is whatever pass 2 finds on the Geneva field cards, checked with an entomologist | Pass 2, then add the species to `fetch_inat.py` as `lookalike_*` |
 | 4 | OFM against lesser appleworm at trap resolution | With lesser appleworm in training, 39 of 132 trap-style lesser appleworm copies are still called OFM (1% at ≥ 0.80; the rest go to review). No real-liner lesser appleworm to check against. The file `OFM and LAW.jpg` among the field cards has 2 moths | Pass 2; if they stay inseparable at 15 px/mm, review every OFM near the biofix (now flagged, see below) |
 | 5 | 128 vs 224 px input, and a small custom CNN | The architecture comparison itself was run on Oct 8 2026 (EfficientNet-B0, ConvNeXt-T, MobileNetV3-L on an RTX 3060 Ti): none beats the BioCLIP 2 linear head, and all three fail OFM from a second camera (3–6 of 19 against 18), see `ml/README.md`. Input size and a from-scratch CNN were not tried: with every OFM from one camera they would fail the same way | A second source of OFM first |
@@ -29,7 +29,7 @@ claim and the camera is not ours, so they choose between options; they are not t
 | 9 | Carrying classifier error into the counts and the biofix as a model | Needs the head's error rates on our trap. The dashboard now collects them (spot checks, below) but there are none yet | A few weeks of spot checks, then correct counts by the agreement rate |
 | 10 | R² of daily counts, false positives by cause, and whether a spray decision would change | `sentinel-server evaluate` reports count accuracy per liner, mean error per trap-day, false moths by cause and the biofix date; it has never had real truth files. R² is not computed (one trap, few days: mean error says more) | Truth counts from locked cards |
 | 11 | Watching for drift after deployment | Nothing deployed. The two signals to watch are built: spot-check agreement per trap, and the share of catches waiting for review | A season; re-score on locked cards after any change of liner, lure, camera or light |
-| 12 | Throwing out bad web photos | `clean_dataset.py` lists 220 photos far from the rest of their species and 21 the head would label differently; a person has to look, because good photos on odd backgrounds are in the same list. Dropping all 220 blind changed nothing on real liners (OFM 0.95, CM 0.89 either way) | Look at `ml/data/clean/*.jpg`, copy the junk into `ml/data/exclude.csv` |
+| 12 | Throwing out bad web photos | `clean_dataset.py` lists 220 photos far from the rest of their species and 21 the head would label differently; a person has to look, because good photos on odd backgrounds are in the same list. Dropping all 220 blind changed nothing on real liners (OFM 0.95, CM 0.89 either way) | Look at `ml/data/review/cleaning_suspects/*.jpg`, copy the junk into `ml/data/training/classifier/exclude.csv` |
 | 13 | A debris score | 4 held-out debris crops (2 found; 95% interval 15–85%) and 9 on field cards (0 found) | Debris from our own liners; rejected detections on the dashboard become `debris` through `export_server_crops.py` |
 | 14 | Grouping unknown insects to speed up labelling (morphospecies clustering) | Not built. It would help most on the 454 unlabelled boxes of the OFM liners, but the labeller keeps `labels.csv` in memory, so suggestions cannot be written into it while it is open | A `suggested` column the labeller shows; needs the labeller changed |
 | 15 | Results by region | One region (NY). The look-alike and bycatch photos are already NY-only | A second site |
@@ -72,7 +72,7 @@ claim and the camera is not ours, so they choose between options; they are not t
 | Anomaly / OOD filter on detections | Had | The `debris` class, the review and unknown bands, and two-photo confirmation. Not measurable yet (Open 13) |
 | Hierarchical output, stop at the confident rank | Done | Below 0.80 a catch is "the model's guess" and waits for review; the biofix says when it depends on such catches. No new label was added: the six classes are fixed across the repo |
 | Morphospecies clustering + human review | Open 14 | |
-| Active learning loop | Done | Review queue → `export_server_crops.py` → `data/own/` → `train_v1.py` was there for unsure catches. Added: one in ten sure catches is also reviewed, so confident mistakes get corrected and become training data too |
+| Active learning loop | Done | Review queue → `export_server_crops.py` → `data/real_liners/our_trap/` → `train_v1.py` was there for unsure catches. Added: one in ten sure catches is also reviewed, so confident mistakes get corrected and become training data too |
 
 ## What didn't work
 
@@ -98,11 +98,11 @@ claim and the camera is not ours, so they choose between options; they are not t
 | Item | Status | What we do |
 |---|---|---|
 | Posture mismatch (pinned, spread reference photos) | Tested, kept | Without the AMI (GBIF, part museum) photos: OFM 0.49 vs 0.46, CM 0.84 vs 0.82, worse on trap-style. No clear gain; kept. The spread and pinned ones are at the top of `clean_dataset.py`'s list |
-| Clean citizen-science data | Done / Open 12 | Had: duplicates, AMI copies of iNat photos, images under 100 px, annotated larvae. New: `clean_dataset.py` and `data/exclude.csv`. Asking BioCLIP zero-shot "caterpillar or adult?" was tried and is wrong (its picks were adult moths) |
+| Clean citizen-science data | Done / Open 12 | Had: duplicates, AMI copies of iNat photos, images under 100 px, annotated larvae. New: `clean_dataset.py` and `data/training/classifier/exclude.csv`. Asking BioCLIP zero-shot "caterpillar or adult?" was tried and is wrong (its picks were adult moths) |
 | Long tail | Had | OFM has 117 web photos; every photo of every observation is fetched, class weights balance, and 632 real-liner OFM crops now outnumber them |
 | Species missing from training | Tested / Open 3 | See "mimics" above |
 | Cryptic species | Open 4 | None of ours is a true cryptic pair; OFM / lesser appleworm is the hard one |
-| Temporal leakage | Had | Splits by observation, card or liner; a liner's other days go with it (`liners.json`); held-out liners are a fixed list (`liner_crops.TEST_GROUPS`) |
+| Temporal leakage | Had | Splits by observation, card or liner; a liner's other days go with it (`liners.json`); held-out liners are a fixed list (`ml/data/training/held_out/`, in git) |
 | Small test sets | Done / Open 2, 13 | Recall now comes with a 95% interval. Liners are held out rather than added to training because a third of the moths is the only real test there is |
 | Label granularity | Had | Pass 1 (moth / other insect / debris) and pass 2 (species) are scored separately; `eval_field_cards.py` folds the head's classes to pass-1 level |
 | Report by crop size and by region | Done / Open 15 | Tables per px/mm (15 centre, 10 edge) and by crop side in px |
@@ -136,7 +136,7 @@ claim and the camera is not ours, so they choose between options; they are not t
 | Item | Status | What we do |
 |---|---|---|
 | Closed set: targets, look-alikes, other insect, debris | Had / Open 3 | |
-| Train on your own trap images across the season, decayed and crowded included | Open 1 | The route is built and tested: dashboard review → `export_server_crops.py` → `data/own/` |
+| Train on your own trap images across the season, decayed and crowded included | Open 1 | The route is built and tested: dashboard review → `export_server_crops.py` → `data/real_liners/our_trap/` |
 | Lab-to-field drop is steep | Done | Measured the equivalent: 0.99 on web photos, 0.43 on real liners before, 0.96 after |
 | Pre-train on a pest dataset close to yours | Open 6 | |
 | Validate with count error, false positives by cause, and the decision | Had / Open 10 | |

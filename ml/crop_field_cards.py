@@ -1,11 +1,11 @@
 """Crop every insect out of photos of real field cards, for labelling.
 
-    python crop_field_cards.py                      # data/field/inbox/*.jpg -> data/field/; only new photos
+    python crop_field_cards.py                      # data/real_liners/cornell_field_cards/inbox/*.jpg -> data/real_liners/cornell_field_cards/; only new photos
     python crop_field_cards.py --grid-mm 25         # the card's printed grid spacing (default 25)
     python crop_field_cards.py --cutouts            # after labelling: outline the boxes that have none
 
 The photos are phone shots of used liners (e.g. Trécé Pherocon VI delta cards), not trap-camera
-photos, so they are kept apart from data/own/. What they add is real moths on real glue: worn,
+photos, so they are kept apart from data/real_liners/our_trap/. What they add is real moths on real glue: worn,
 flattened, tilted, touching. For each photo:
   1. flatbug finds every insect (it tiles the full-size photo itself);
   2. the server's grid finder (pipeline/detect.find_grid) measures px/mm from the printed grid in
@@ -13,11 +13,11 @@ flattened, tilted, touching. For each photo:
      angle has smaller squares at the far end. The value most patches agree on is the photo's
      scale; each insect keeps its own estimate nearest that. That gives each insect's real length
      (blank when the photo shows no grid);
-  3. each insect is saved as a server-style crop (pad 0.35, data/field/crops/) and as an RGBA
-     cutout (data/field/cutouts/) that make_trap_style.py can paste onto our own liner;
-  4. data/field/boxes/<photo>.jpg shows the photo with every insect numbered.
+  3. each insect is saved as a server-style crop (pad 0.35, data/real_liners/cornell_field_cards/crops/) and as an RGBA
+     cutout (data/real_liners/cornell_field_cards/cutouts/) that make_trap_style.py can paste onto our own liner;
+  4. data/real_liners/cornell_field_cards/boxes/<photo>.jpg shows the photo with every insect numbered.
 
-Label them with label_field_cards.py (or fill in the `label` column of data/field/labels.csv).
+Label them with label_field_cards.py (or fill in the `label` column of data/real_liners/cornell_field_cards/labels.csv).
 Re-runs only add new photos and never touch existing labels.
 
 `--cutouts`, after labelling: boxes drawn by hand or resized have no flatbug outline, so flatbug is
@@ -37,6 +37,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import paths
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "server"))
@@ -224,8 +225,8 @@ def draw_boxes(img: Image.Image, rows: list[dict], dest: Path) -> None:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--data", type=Path, default=Path("data/field"))
-    ap.add_argument("--weights", default="flat_bug_M.pt")
+    ap.add_argument("--data", type=Path, default=paths.DATA / paths.FIELD)
+    ap.add_argument("--weights", default=paths.FLATBUG)
     ap.add_argument("--grid-mm", type=float, default=25.0, help="printed grid spacing on the card")
     ap.add_argument("--min-conf", type=float, default=0.3, help="low on purpose: a miss is worse than a skip")
     ap.add_argument("--cutouts", action="store_true", help="outline labelled boxes that have no cutout, then stop")
@@ -296,7 +297,7 @@ def main(argv=None) -> int:
             w.writeheader()
             w.writerows(old + new)
 
-    print(f"Wrote {len(new)} crops; label them in {labels} (see data/field/boxes/ for the numbers)")
+    print(f"Wrote {len(new)} crops; label them in {labels} (see data/real_liners/cornell_field_cards/boxes/ for the numbers)")
     return 0
 
 

@@ -1,0 +1,4 @@
+# Cornell field-card photos kept out of BOTH models (detector and classifier): their insects and debris are
+# only used to test. Exact photo names, from data/real_liners/cornell_field_cards/inbox/.
+PXL_20250519_210315816.RAW-01.COVER.jpg
+PXL_20240617_131713946.jpg

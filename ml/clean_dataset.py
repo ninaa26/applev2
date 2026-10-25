@@ -1,6 +1,6 @@
 """Find web photos that should not train the species head: not a usable photo of the adult, or mislabelled.
 
-    python clean_dataset.py                 # -> data/clean/suspects.csv and a contact sheet per check and label
+    python clean_dataset.py                 # -> data/review/cleaning_suspects/suspects.csv and a contact sheet per check and label
 
 iNaturalist and GBIF photos are other people's labels. The AMI pipeline cleaned its GBIF photos of larvae,
 thumbnails and placeholders before training, and suspected label errors behind some of its confusions.
@@ -16,7 +16,7 @@ and fetch_ami.py trusts GBIF's lifeStage. Two checks, both on the BioCLIP 2 feat
 
 Neither list is safe to delete from blindly: the head being sure is not proof, and a good photo on a
 strange background is also "odd". Look at the sheets (most suspect first) and copy the rows that really are
-junk into data/exclude.csv (columns path, why); build_dataset.py leaves those out, and their trap-style
+junk into data/training/classifier/exclude.csv (columns path, why); build_dataset.py leaves those out, and their trap-style
 copies go with them. Tiny images are already dropped by build_dataset.py (MIN_SIDE), duplicates by its hash
 check, and photos flatbug finds no insect in never get a trap-style copy (segment_moths.py).
 
@@ -32,6 +32,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import paths
 from train_v1 import MODEL, embeddings, load_rows
 
 
@@ -91,7 +92,7 @@ def main(argv=None) -> int:
 
     rows = [r for r in load_rows(args.data) if r["source"] in ("inat", "ami")]
     slug = MODEL.split("/")[-1].replace(":", "_")
-    X, _ = embeddings(rows, args.data / "embeddings" / f"{slug}.npz", MODEL, 16, args.device)
+    X, _ = embeddings(rows, args.data / paths.EMBEDDINGS / f"{slug}.npz", MODEL, 16, args.device)
     labels = np.array([r["label"] for r in rows])
     suspects = [{"path": rows[k]["path"], "label": rows[k]["label"], "check": "odd", "says": "", "prob": f"{zs:.1f}"}
                 for k, zs in odd_ones(X, labels, args.z)]
@@ -106,7 +107,7 @@ def main(argv=None) -> int:
             suspects.append({"path": r["path"], "label": r["label"], "check": "label", "says": classes[j],
                              "prob": f"{P[k, j]:.2f}"})
 
-    out = args.data / "clean"
+    out = args.data / paths.SUSPECTS
     out.mkdir(parents=True, exist_ok=True)
     with open(out / "suspects.csv", "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=["path", "label", "check", "says", "prob"])

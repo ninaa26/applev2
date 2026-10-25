@@ -1,8 +1,8 @@
 """Pull research-grade, Creative Commons photos of our moths from iNaturalist.
 
-    python fetch_inat.py --out data/inat                 # all classes, default caps
-    python fetch_inat.py --out data/inat --dry-run       # counts only
-    python fetch_inat.py --out data/inat --only OFM      # one class
+    python fetch_inat.py --out data/web_moth_photos/inaturalist                 # all classes, default caps
+    python fetch_inat.py --out data/web_moth_photos/inaturalist --dry-run       # counts only
+    python fetch_inat.py --out data/web_moth_photos/inaturalist --only OFM      # one class
 
 Only research-grade observations (two or more people agree on the species) with a CC
 photo licence. Observations annotated as egg, larva or pupa are skipped; unannotated
@@ -28,6 +28,8 @@ import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+
+import paths
 
 API = "https://api.inaturalist.org/v1/observations"
 UA = {"User-Agent": "orchard-sentinel-capstone/0.1 (educational research)"}
@@ -131,7 +133,7 @@ def download(row: dict, out: Path, retries: int = 3) -> str:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--out", type=Path, default=Path("data/inat"))
+    ap.add_argument("--out", type=Path, default=paths.DATA / paths.INAT)
     ap.add_argument("--only", nargs="*", choices=list(CLASSES), help="fetch just these classes")
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--dry-run", action="store_true")

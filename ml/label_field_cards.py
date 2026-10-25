@@ -3,7 +3,7 @@
     python label_field_cards.py                 # then open http://localhost:8765
     python label_field_cards.py --port 9000
 
-Reads and writes data/field/labels.csv (saved after every change). Standard library + Pillow only.
+Reads and writes data/real_liners/cornell_field_cards/labels.csv (saved after every change). Standard library + Pillow only.
 
 In the page there are two passes (buttons on the right; the page remembers which):
   pass 1, anyone:   click a box, then 1 moth  2 other_insect (not a moth)  3 debris (on the card, not an insect)
@@ -32,6 +32,7 @@ from pathlib import Path
 from statistics import median
 from urllib.parse import unquote
 
+import paths
 from crop_field_cards import FIELDS, server_crop
 from PIL import Image, ImageOps
 
@@ -494,7 +495,7 @@ load();
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--data", type=Path, default=Path("data/field"))
+    ap.add_argument("--data", type=Path, default=paths.DATA / paths.FIELD)
     ap.add_argument("--port", type=int, default=8765)
     args = ap.parse_args(argv)
     if not (args.data / "labels.csv").exists():

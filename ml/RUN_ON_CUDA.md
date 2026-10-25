@@ -35,9 +35,9 @@ Three runs, each a different size of network. Each prints its time after every e
 the run's length: very roughly 15–30 min, 25–45 min and 10–25 min.
 
 ```bash
-python train_v2.py --arch efficientnet_b0    --epochs 20 --batch 64 --samples-per-epoch 24000 --out models/v2
-python train_v2.py --arch convnext_tiny      --epochs 20 --batch 32 --samples-per-epoch 24000 --lr 1e-4 --out models/v2-convnext
-python train_v2.py --arch mobilenet_v3_large --epochs 20 --batch 64 --samples-per-epoch 24000 --out models/v2-mobilenet
+python train_v2.py --arch efficientnet_b0    --epochs 20 --batch 64 --samples-per-epoch 24000 --out models/classifier/cnn/efficientnet_b0
+python train_v2.py --arch convnext_tiny      --epochs 20 --batch 32 --samples-per-epoch 24000 --lr 1e-4 --out models/classifier/cnn/convnext_tiny
+python train_v2.py --arch mobilenet_v3_large --epochs 20 --batch 64 --samples-per-epoch 24000 --out models/classifier/cnn/mobilenet_v3_large
 ```
 
 If one result tonight is enough, run the first.
@@ -54,8 +54,8 @@ glue and that no model trained on. The web-photo and trap-style tables only show
 
 ## 2. Species classifier, linear head on BioCLIP 2 (v1)
 
-Already trained on the Mac (`models/v1/`; its `report.md` is the bar v2 has to beat). Optional: retraining it
-here takes a few minutes with the cached features in `data/embeddings/`, plus a model download of a GB or
+Already trained on the Mac (`models/classifier/bioclip_head/current/`; its `report.md` is the bar v2 has to beat). Optional: retraining it
+here takes a few minutes with the cached features in `data/training/classifier/bioclip_embeddings/`, plus a model download of a GB or
 more the first time.
 
 ```bash
@@ -71,10 +71,10 @@ stops improving, so it can be left overnight. Batch 16 for 8 GB; drop to 8 if it
 
 ```bash
 python train_yolo.py --device 0 --batch 16 --out data/yolo-cuda --name yolo11s-ppm12-cuda \
-    --blank 'data/trap_camera/capture_2026-10-06/calibrated_*.jpg' --blank-ppm 15.3
+    --blank 'data/real_liners/our_trap_bench_tests/capture_2026-10-06/calibrated_*.jpg' --blank-ppm 15.3
 ```
 
-Read the `test` block of `models/yolo11/yolo11s-ppm12-cuda/summary.json`; the `val` block picked the
+Read the `test` block of `models/detector/yolo/yolo11s-ppm12-cuda/summary.json`; the `val` block picked the
 checkpoint and flatters it.
 
 ## Bring back
@@ -82,16 +82,16 @@ checkpoint and flatters it.
 Zip the results and copy the zip to Windows, then to the Mac:
 
 ```bash
-cd ~/orchard-train/ml && zip -qr results.zip models -x 'models/v1/*' && cp results.zip /mnt/c/Users/YOU/Downloads/
+cd ~/orchard-train/ml && zip -qr results.zip models -x 'models/classifier/bioclip_head/current/*' && cp results.zip /mnt/c/Users/YOU/Downloads/
 ```
 
 On the Mac, unzip it inside `ml/` so the folders land under `ml/models/`:
 
-- `models/v2/`, `models/v2-convnext/`, `models/v2-mobilenet/`
-- `models/yolo11/yolo11s-ppm12-cuda/` (`weights/best.pt` and `summary.json` are what matter)
+- `models/classifier/cnn/efficientnet_b0/`, `models/classifier/cnn/convnext_tiny/`, `models/classifier/cnn/mobilenet_v3_large/`
+- `models/detector/yolo/yolo11s-ppm12-cuda/` (`weights/best.pt` and `summary.json` are what matter)
 
-Then in `server/.env`: `SENTINEL_CLASSIFIER=cnn-v2` with `SENTINEL_CLASSIFIER_MODEL=../ml/models/v2/<arch>.pt`,
-or `bioclip-v1` with `SENTINEL_CLASSIFIER_HEAD=../ml/models/v1/head.npz`, whichever scored better on the real
+Then in `server/.env`: `SENTINEL_CLASSIFIER=cnn-v2` with `SENTINEL_CLASSIFIER_MODEL=../ml/models/classifier/cnn/<arch>/<arch>.pt`,
+or `bioclip-v1` with `SENTINEL_CLASSIFIER_HEAD=../ml/models/classifier/bioclip_head/current/head.npz`, whichever scored better on the real
 liners.
 
 Done once, Oct 8 2026, on an RTX 3060 Ti: v1 scored better (the CNNs miss most OFM from a second camera), so
@@ -101,5 +101,5 @@ the server stays on `bioclip-v1`. The numbers are in [README.md](README.md), "Th
 
 The species on real liners comes from three places: the uploader of each public set, pass-1 labels on the
 OFM liners (454 of them by Claude on Oct 7 2026, listed in `labelled_by_claude.csv`), and species on the
-field-card moths read from the photos by Claude (`data/field/species.csv`, not yet checked by anyone who
+field-card moths read from the photos by Claude (`data/real_liners/cornell_field_cards/species.csv`, not yet checked by anyone who
 knows the moths). Treat every score as provisional until those are checked.

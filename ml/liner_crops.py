@@ -1,13 +1,13 @@
 """Collect crops of real insects on real liners, at trap resolution, for training and scoring the species head.
 
-    python liner_crops.py                      # -> data/web_liners/species/<px/mm>/..., manifest.csv
+    python liner_crops.py                      # -> data/real_liners/from_the_web/species/<px/mm>/..., manifest.csv
     python liner_crops.py --trap-ppm 15 10 6
 
 Web photos and their trap-style paste-ups are not moths that sat on glue. On other people's trap photos the
 gap is large (AMI: 8-16 points; Gardiner et al. 2025: labelling 5% of the target photos gave +13-15 points),
-and it is the same here (ml/README.md). Until our own trap has reviewed photos (data/own/), these are the
+and it is the same here (ml/README.md). Until our own trap has reviewed photos (data/real_liners/our_trap/), these are the
 nearest thing:
-  OFM liners   data/web_liners/label/ofm-ervins/labels.csv: the uploader's boxes (source roboflow:OFM, trap
+  OFM liners   data/real_liners/from_the_web/label/ofm-ervins/labels.csv: the uploader's boxes (source roboflow:OFM, trap
                camera, ~26 px/mm) are OFM unless pass 2 gave them another species; boxes labelled other_insect
                or debris in pass 1 count as that. `skip` and unlabelled boxes are left out.
   CM cards     the full-size phone photos of codling-moth-ervins (~10 px/mm), every box CM, cropped like the
@@ -18,20 +18,22 @@ nearest thing:
                OFM. Phone photos at ~6-8 px/mm whose grid often reads wrongly, so crops are kept as
                photographed, only boxes 45-140 px long (a moth the size the trap sees at its edges), at most
                --per-photo from each photo. The set's "Count-other" boxes are not used: other is not a label.
-  Field cards  data/field (phone photos of used Trécé cards from the orchard): moths with a species, from pass 2
-               in labels.csv or, until someone has done pass 2, from data/field/species.csv (photo, n, species,
+  Field cards  data/real_liners/cornell_field_cards (phone photos of used Trécé cards from the orchard): moths with a species, from pass 2
+               in labels.csv or, until someone has done pass 2, from data/real_liners/cornell_field_cards/species.csv (photo, n, species,
                by, note; Oct 7 2026: Claude's reading of the full-size crops, to be checked: 35 OBLR, 20 OFM,
                13 CM, 2 others, 24 left blank as unsure). The only real-liner OBLR there is, and a second
-               source of OFM and CM. Held out: the cards in data/field/test_cards.txt (CM) plus FIELD_TEST, the
-               April 2025 OFM card and the June 2024 OBLR photos, so each target has field moths the head never saw.
+               source of OFM and CM. Held out: the cards in held_out/field_cards.txt (CM) plus
+               held_out/field_cards_classifier_only.txt, the April 2025 OFM card and the June 2024 OBLR photos, so
+               each target has field moths the head never saw.
 The species is the uploader's claim (a pheromone trap's target), not an expert's ID of each moth, and the
 liner, camera and light are not ours.
 
 Each crop is shrunk to each --trap-ppm (from its photo's printed grid; never enlarged), so one insect gives one
 row per resolution its photo is sharp enough for (the CM cards, at ~10 px/mm, only give the lower one). `group` is the liner (liners.json: a liner photographed on several days shows the same
 moths) or the card; build_dataset.py keeps a group on one side of every split. Groups whose photo names start
-with one of TEST_GROUPS are marked `test`: never trained on, and the only real-liner score to quote. The list
-is fixed here, includes train_yolo.py's test liners, and is about a third of the moths. The PTM liners are 86
+with one of the prefixes in data/training/held_out/web_liners_classifier.txt are marked `test`: never trained
+on, and the only real-liner score to quote. The list is in git, includes train_yolo.py's test liners, and is
+about a third of the moths. The PTM liners are 86
 photos, so there a fixed quarter is held out by a hash of the photo's name.
 """
 
@@ -45,14 +47,11 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+import paths
 from build_dataset import CLASS_OF
 from PIL import Image
 
 FIELDS = ["path", "label", "set", "photo", "group", "split", "ppm", "length_mm"]
-# Photo-name prefixes of the held-out liners and cards (a liner's other days go with it).
-TEST_GROUPS = ["om20180514_121032_1", "ap20210804_115441_3", "om20210425_110040_1", "om20210815_110841_1",
-               "trap_positive__20250717_083644_5B", "trap_positive__20250717_082713_6C",
-               "trap_positive__20250717_081351_no_label_5"]
 
 
 def ofm_liner_rows(data: Path) -> list[dict]:
@@ -102,20 +101,14 @@ def cm_card_rows(data: Path, grid_mm: float) -> list[dict]:
     return out
 
 
-FIELD_TEST = ["PXL_20250422_174434151", "PXL_20240617_1319"]  # on top of data/field/test_cards.txt
-
-
-def field_card_rows(field: Path) -> list[dict]:
+def field_card_rows(field: Path, held: list[str]) -> list[dict]:
+    """`held`: photo names or prefixes kept out of the classifier (held_out/field_cards*.txt)."""
     if not (field / "labels.csv").exists():
         return []
     species = {}
     if (field / "species.csv").exists():
         with open(field / "species.csv", newline="") as f:
             species = {(r["photo"], r["n"]): r["species"] for r in csv.DictReader(f) if r["species"]}
-    held = set()
-    if (field / "test_cards.txt").exists():
-        held = {ln.strip() for ln in (field / "test_cards.txt").read_text().splitlines()
-                if ln.strip() and not ln.startswith("#")}
     out = []
     with open(field / "labels.csv", newline="") as f:
         for r in csv.DictReader(f):
@@ -124,7 +117,7 @@ def field_card_rows(field: Path) -> list[dict]:
             if label in CLASS_OF and r["ppm"]:
                 out.append({"set": "field-cards", "photo": r["photo"], "crop": r["crop"], "label": label,
                             "group": Path(r["photo"]).stem, "src_ppm": float(r["ppm"]), "length_mm": r["length_mm"],
-                            "held_out": r["photo"] in held or any(r["photo"].startswith(t) for t in FIELD_TEST)})
+                            "held_out": paths.is_listed(r["photo"], held)})
     return out
 
 
@@ -180,17 +173,24 @@ def resolutions(src_ppm: float, wanted: list[float]) -> list[float]:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--data", type=Path, default=Path("data/web_liners"))
+    ap.add_argument("--root", type=Path, default=paths.DATA, help="data/: the field cards and held-out lists")
+    ap.add_argument("--data", type=Path, default=None, help="the web liners (default: <root>/real_liners/from_the_web)")
     ap.add_argument("--trap-ppm", type=float, nargs="+", default=[15.0, 10.0],
                     help="px/mm to write (IMX219 trap camera: ~15 in the centre, 10-11 at the edges)")
     ap.add_argument("--grid-mm", type=float, default=25.0)
     ap.add_argument("--per-photo", type=int, default=12, help="most moths taken from one PTM liner photo")
     args = ap.parse_args(argv)
+    args.data = args.data or args.root / paths.WEB_LINERS
 
+    field_held = (paths.held_out_list(args.root, paths.FIELD_TEST)
+                  + paths.held_out_list(args.root, paths.FIELD_TEST_CLASSIFIER))
+    test_groups = paths.held_out_list(args.root, paths.WEB_LINER_TEST_CLASSIFIER)
+    if not test_groups:
+        raise SystemExit(f"no {paths.WEB_LINER_TEST_CLASSIFIER} in {args.root / paths.HELD_OUT}: every liner would train")
     rows = (ofm_liner_rows(args.data) + cm_card_rows(args.data, args.grid_mm) + ptm_liner_rows(args.data, args.per_photo)
-            + field_card_rows(args.data.parent / "field"))
+            + field_card_rows(args.root / paths.FIELD, field_held))
     for r in rows:
-        r.setdefault("held_out", any(r["group"].startswith(t) for t in TEST_GROUPS))
+        r.setdefault("held_out", paths.is_listed(r["group"], test_groups))
     if not rows:
         raise SystemExit(f"no labelled liner crops under {args.data}")
     manifest = []
