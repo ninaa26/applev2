@@ -11,7 +11,7 @@ items 1, 2, 6 and 11 and was checked; this branch did items 4, 7, 8 (rate limiti
 (`SECURITY.md`), 15 and 16. Round 11 (Oct 25): dismissed the CodeQL alerts and set the
 GitHub settings for items 10, 14 and 17. Round 12: checked Dependabot PRs #61–#63 (item 6). Round 13: #61–#63 and #66 merged; checked
 the top-level folder layout (under "Skipped on purpose"). Round 14: organization ideas, checked
-against the repo (new section below).
+against the repo (new section below). Round 15: all eight organization ideas done (O1–O8).
 
 ## Already in place
 
@@ -180,20 +180,20 @@ the reason below, and none is open now:
 **Next:** choose a license (item 13). Item 3 (loose `mypy` in CI) is done; tightening it module by
 module (`check_untyped_defs` first) is the next step there. Alembic (item 5) is done in PR #66.
 
-## Organization ideas (round 14)
+## Organization ideas (round 14, done in round 15)
 
-Checked against the repo on Oct 25 2026, most useful first. None is urgent; each is small.
+Checked against the repo on Oct 25 2026, most useful first, and all done the same day.
 
-| # | Idea | What was found |
-|---|------|----------------|
-| O1 | Delete merged remote branches | 61 remote branches, 52 already merged into `master`. Auto-delete (item 17) only covers new PRs |
-| O2 | Tag what's deployed and released | No tags at all. `deploy.sh` writes the commit only to `~/applev2/DEPLOYED` on the Pi, and firmware versions live only in `FW_VERSION` in `main.cpp` |
-| O3 | Move team conventions into `CONTRIBUTING.md` | Branch/PR flow, commit prefixes, bench-Pi etiquette and deploy steps are only in `CLAUDE.md`, which a teammate may never open. Commit prefixes now include `CI:` but `CLAUDE.md` lists only four |
-| O4 | PR template | PR bodies already follow What / Checked / Not tested; `.github/pull_request_template.md` would make that the default |
-| O5 | A docs index | The README links 10 docs but not `wiring.md` or this file. The two `*-research-status.md` files are dated snapshots mixed in with how-to guides |
-| O6 | One command for every check | Tests run per folder with different commands; a root `justfile` or `Makefile` (`test`, `lint`, `types`) would match CI in one step |
-| O7 | Tidy `ml/` | 25 scripts, already grouped by prefix (`fetch_`, `eval_`, `train_`). `mobilenet_cm_patti.py` is the only one `ml/README.md` doesn't mention |
-| O8 | `code-review/` | 1.1 MB of process material at the top level; move under `docs/` or archive at semester end |
+| # | Idea | What was found | Done |
+|---|------|----------------|------|
+| O1 | Delete merged remote branches | 61 remote branches, 52 already merged into `master`. Auto-delete (item 17) only covers new PRs | 42 merged branches deleted on GitHub; 6 unmerged ones kept |
+| O2 | Tag what's deployed and released | No tags at all. `deploy.sh` writes the commit only to `~/applev2/DEPLOYED` on the Pi, and firmware versions live only in `FW_VERSION` in `main.cpp` | `deploy.sh`, `deploy-hub.sh` and `release.sh` tag `server-*`, `hub-*` and `fw-*` |
+| O3 | Move team conventions into `CONTRIBUTING.md` | Branch/PR flow, commit prefixes, bench-Pi etiquette and deploy steps are only in `CLAUDE.md`, which a teammate may never open. Commit prefixes now include `CI:` but `CLAUDE.md` lists only four | `CONTRIBUTING.md`; `CLAUDE.md` imports it and keeps only Claude-specific notes |
+| O4 | PR template | PR bodies already follow What / Checked / Not tested; `.github/pull_request_template.md` would make that the default | `.github/pull_request_template.md` |
+| O5 | A docs index | The README links 10 docs but not `wiring.md` or this file. The two `*-research-status.md` files are dated snapshots mixed in with how-to guides | `docs/README.md`, linked from the README (the research pages already carried "as of" dates) |
+| O6 | One command for every check | Tests run per folder with different commands; a root `justfile` or `Makefile` (`test`, `lint`, `types`) would match CI in one step | root `Makefile`: `make check` runs what CI runs |
+| O7 | Tidy `ml/` | 25 scripts, already grouped by prefix (`fetch_`, `eval_`, `train_`). `mobilenet_cm_patti.py` is the only one `ml/README.md` doesn't mention | `mobilenet_cm_patti.py` documented in `ml/README.md` (kept, as the start of `train_v2.py`) |
+| O8 | `code-review/` | 1.1 MB of process material at the top level; move under `docs/` or archive at semester end | moved to `docs/code-review/`; its scripts, `CLAUDE.md` and `ruff.toml` updated |
 
 Details:
 
@@ -269,7 +269,6 @@ Details:
 - **Top-level layout (checked Oct 25).** One folder per part of the system (`device/`, `server/`,
   `ml/`, `hardware/`, `docs/`) is the usual shape for a hardware + server + ML project, and each
   Python folder is its own package with its own env and lock, so CI and deploys stay separate. Not
-  worth a reshuffle. Two optional tidy-ups: `code-review/` (1.1 MB, mostly raw Gemini output) is
-  project process rather than product, so it could move under `docs/` or be archived at the end of
-  the semester; and a `LICENSE` at the root (item 13). `field-tests/` stays at the top because a
+  worth a reshuffle; `code-review/` moved under `docs/` (O8), and a `LICENSE` is still to come
+  (item 13). `field-tests/` stays at the top because a
   run spans the cameras, the hub and the server.
