@@ -35,9 +35,9 @@ EOF
 fi
 
 sha=$(git rev-parse --short HEAD)
-branch=$(git rev-parse --abbrev-ref HEAD)
 if [[ -n $(git status --porcelain -- .) ]]; then echo "server/ has uncommitted changes: commit them first"; exit 1; fi
-[[ $branch == master ]] || echo "note: deploying $branch, not master"
+git fetch -q origin master 2>/dev/null || true
+[[ $(git rev-parse HEAD) == $(git rev-parse origin/master) ]] || echo "note: deploying $sha, which is not origin/master"
 
 echo "backing up the server's code and database"
 stamp=$(date +%Y%m%d-%H%M%S)
