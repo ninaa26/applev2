@@ -30,7 +30,8 @@ cd ml && .venv/bin/python -m unittest discover tests
 
 CI runs the same three suites and `uvx ruff check .` (settings in `ruff.toml`) on every pull request
 (`.github/workflows/tests.yml`). Dependabot opens weekly PRs for the locked versions and Actions; CodeQL
-scans the Python and the workflows.
+scans the Python and the workflows. `uvx pre-commit install` (once per clone) runs Ruff and checks for large
+files and private keys before each commit (`.pre-commit-config.yaml`).
 
 The labeller and model playground are preview servers in `.claude/launch.json`
 (`field-labeler`, `ofm-labeler`, `model-playground`).

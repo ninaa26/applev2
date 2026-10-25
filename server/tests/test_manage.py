@@ -222,3 +222,26 @@ def test_stylesheet_url_changes_with_its_contents():
     with TestClient(create_app()) as client:
         page = client.get("/").text
         assert f'href="/static/app.css?v={hashlib.sha256(css).hexdigest()[:12]}"' in page
+
+
+def test_dashboard_forms_from_another_site_are_refused():
+    with TestClient(create_app()) as client:  # TestClient sends Host: testserver
+        form = {"trap_id": "T1", "kind": "pi", "name": "", "block": "", "lure": "CM"}
+        r = client.post("/manage/traps", data=form, headers={"Origin": "https://evil.example"})
+        assert r.status_code == 403
+        assert client.post("/manage/traps", data=form, headers={"Origin": "null"}).status_code == 403
+        r = client.post("/manage/traps", data=form, headers={"Referer": "https://evil.example/page"})
+        assert r.status_code == 403
+        with session_scope() as db:
+            assert db.get(Trap, "T1") is None
+
+        # the dashboard's own form, and a script with no Origin, still work
+        assert client.post("/manage/traps", data=form, headers={"Origin": "http://testserver"}).status_code == 200
+        assert _add(client, trap_id="T2", kind="pi")[0] == 200
+        # the device API is signed with the trap's own key, so Origin doesn't matter there
+        r = client.post("/api/v1/hub/claim", json={"code": "ABCDEFGHJK"}, headers={"Origin": "https://evil.example"})
+        assert r.status_code == 404
+
+        page = client.get("/manage")
+        assert page.headers["x-frame-options"] == "DENY"
+        assert page.headers["x-content-type-options"] == "nosniff"
