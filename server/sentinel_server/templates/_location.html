@@ -1,58 +1,119 @@
-{# Latitude and longitude fields, filled by searching for a town (Open-Meteo's geocoder, from the browser)
-   or from this device's location. Used inside a form; posts `lat` and `lon`. #}
+{# Latitude and longitude fields, filled by picking an address from the suggestions shown while typing
+   (Photon, https://photon.komoot.io: OpenStreetMap addresses, free, no key, called from the browser) or
+   from this device's location. Under them, the place the numbers point to, so a slip such as a western
+   longitude typed without its minus sign shows at once. Used inside a form; posts `lat` and `lon`. #}
 {% macro location_fields(lat=None, lon=None) %}
 <div class="loc">
-  <label>Town or address
-    <span class="loc-find"><input type="search" class="loc-q" placeholder="Ithaca, NY" autocomplete="off">
-      <button type="button" class="small loc-search">Find</button>
+  <label>Address
+    <span class="loc-find">
+      <span class="loc-combo">
+        <input type="search" class="loc-q" placeholder="111 Wing Drive, Ithaca, NY" autocomplete="off"
+               role="combobox" aria-autocomplete="list" aria-expanded="false">
+        <ul class="loc-list" role="listbox" hidden></ul>
+      </span>
       <button type="button" class="small loc-here" title="Use where this phone or computer is">Use my location</button></span></label>
-  <label>Latitude <input name="lat" class="loc-lat" inputmode="decimal" placeholder="42.4534" value="{{ lat if lat is not none else '' }}"></label>
-  <label>Longitude <input name="lon" class="loc-lon" inputmode="decimal" placeholder="-76.4735" value="{{ lon if lon is not none else '' }}"></label>
-  <p class="loc-msg faint small"></p>
+  <label>Latitude <input name="lat" class="loc-lat" inputmode="decimal" placeholder="42.4459" value="{{ lat if lat is not none else '' }}"></label>
+  <label>Longitude <input name="lon" class="loc-lon" inputmode="decimal" placeholder="-76.4712" value="{{ lon if lon is not none else '' }}"></label>
+  <p class="loc-msg small"></p>
 </div>
 {% endmacro %}
 
 {% macro location_script() %}
 <script>
+  const PHOTON = 'https://photon.komoot.io';
+  // "42.446, -76.4712", "76.4712° W", "76.4712W": a number, signed by its hemisphere letter if it has one.
+  const coord = s => {
+    const m = String(s).trim().match(/^([-+]?\d+(?:\.\d+)?)\s*°?\s*([NSEWnsew])?$/);
+    if (!m) return null;
+    const v = parseFloat(m[1]);
+    return m[2] && 'SWsw'.includes(m[2]) ? -Math.abs(v) : v;
+  };
+  const placeName = p => [p.name !== p.street ? p.name : '', [p.housenumber, p.street].filter(Boolean).join(' '),
+                          p.city || p.town || p.village || p.county, p.state, p.countrycode === 'US' ? '' : p.country]
+                         .filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).join(', ');
+
   document.querySelectorAll('.loc').forEach(box => {
-    const q = box.querySelector('.loc-q'), lat = box.querySelector('.loc-lat'), lon = box.querySelector('.loc-lon'),
-          msg = box.querySelector('.loc-msg');
-    const put = (la, lo, what) => { lat.value = (+la).toFixed(4); lon.value = (+lo).toFixed(4); msg.textContent = what; };
-    // The geocoder takes a town name only, so "Geneva, NY" is matched here: the part after the comma against
-    // the state (or its two-letter code) and country. With nothing after it, a US town comes first.
-    const STATES = {AL:'Alabama',AK:'Alaska',AZ:'Arizona',AR:'Arkansas',CA:'California',CO:'Colorado',CT:'Connecticut',
-      DE:'Delaware',FL:'Florida',GA:'Georgia',HI:'Hawaii',ID:'Idaho',IL:'Illinois',IN:'Indiana',IA:'Iowa',KS:'Kansas',
-      KY:'Kentucky',LA:'Louisiana',ME:'Maine',MD:'Maryland',MA:'Massachusetts',MI:'Michigan',MN:'Minnesota',
-      MS:'Mississippi',MO:'Missouri',MT:'Montana',NE:'Nebraska',NV:'Nevada',NH:'New Hampshire',NJ:'New Jersey',
-      NM:'New Mexico',NY:'New York',NC:'North Carolina',ND:'North Dakota',OH:'Ohio',OK:'Oklahoma',OR:'Oregon',
-      PA:'Pennsylvania',RI:'Rhode Island',SC:'South Carolina',SD:'South Dakota',TN:'Tennessee',TX:'Texas',UT:'Utah',
-      VT:'Vermont',VA:'Virginia',WA:'Washington',WV:'West Virginia',WI:'Wisconsin',WY:'Wyoming'};
-    const best = (hits, rest) => {
-      const want = rest.map(w => (STATES[w.toUpperCase()] || w).toLowerCase());
-      const fits = h => want.every(w => [h.admin1, h.country, h.country_code].some(v => (v || '').toLowerCase() === w));
-      return want.length ? hits.find(fits) : hits.find(h => h.country_code === 'US') || hits[0];
+    const q = box.querySelector('.loc-q'), list = box.querySelector('.loc-list'),
+          lat = box.querySelector('.loc-lat'), lon = box.querySelector('.loc-lon'), msg = box.querySelector('.loc-msg');
+    let hits = [], active = -1, typing, asking, naming;
+
+    const say = (text, warn) => { msg.textContent = text; msg.className = 'loc-msg small ' + (warn ? 'warn-text' : 'faint'); };
+    // Where the numbers point, looked up again whenever they change.
+    const where = () => {
+      clearTimeout(naming);
+      const la = coord(lat.value), lo = coord(lon.value);
+      if (la === null || lo === null) { if (lat.value || lon.value) say('Give both latitude and longitude as numbers.', true); else say(''); return; }
+      naming = setTimeout(async () => {
+        try {
+          const f = ((await (await fetch(`${PHOTON}/reverse?lat=${la}&lon=${lo}`)).json()).features || [])[0];
+          const p = f ? f.properties : null;
+          if (!p) say(`Points to ${la}, ${lo}: nowhere with an address nearby.` +
+                      (lo > 0 ? ' In the US the longitude is negative (west of Greenwich).' : ''), true);
+          else if (p.countrycode !== 'US') say(`Points to ${placeName(p)}, outside the US. A longitude west of Greenwich, as in the US, is negative.`, true);
+          else say('Points to ' + placeName(p));
+        } catch (e) { say(''); }
+      }, 300);
     };
-    const find = async () => {
-      const [town, ...rest] = q.value.split(',').map(s => s.trim()).filter(Boolean);
-      if (!town) return;
-      msg.textContent = 'Looking…';
-      try {
-        const r = await fetch('https://geocoding-api.open-meteo.com/v1/search?count=20&name=' + encodeURIComponent(town));
-        const hit = best((await r.json()).results || [], rest);
-        if (!hit) { msg.textContent = 'No place by that name. Try the nearest town.'; return; }
-        put(hit.latitude, hit.longitude, [hit.name, hit.admin1, hit.country].filter(Boolean).join(', '));
-      } catch (e) { msg.textContent = "Couldn't reach the place search. Type the latitude and longitude instead."; }
+    const put = (la, lo) => { lat.value = (+la).toFixed(4); lon.value = (+lo).toFixed(4); where(); };
+    [lat, lon].forEach(f => f.addEventListener('change', () => {  // "76.4712 W" becomes -76.4712
+      const v = coord(f.value); if (v !== null) f.value = v; where();
+    }));
+
+    const close = () => { list.hidden = true; q.setAttribute('aria-expanded', 'false'); active = -1; };
+    const show = () => {
+      list.innerHTML = '';
+      hits.forEach((h, i) => {
+        const li = document.createElement('li');
+        li.role = 'option'; li.textContent = h.label; li.className = i === active ? 'on' : '';
+        li.addEventListener('mousedown', e => { e.preventDefault(); pick(i); });  // before the box loses focus
+        list.appendChild(li);
+      });
+      list.hidden = !hits.length; q.setAttribute('aria-expanded', String(!!hits.length));
     };
-    box.querySelector('.loc-search').addEventListener('click', find);
-    q.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); find(); } });
+    const pick = i => { const h = hits[i]; q.value = h.label; close(); put(h.lat, h.lon); };
+
+    q.addEventListener('input', () => {
+      clearTimeout(typing);
+      const text = q.value.trim(), pair = text.split(/\s*,\s*|\s+(?=[-+]?\d)/);
+      if (pair.length === 2 && coord(pair[0]) !== null && coord(pair[1]) !== null) {  // pasted "42.446, -76.4712"
+        hits = []; close(); put(coord(pair[0]), coord(pair[1])); return;
+      }
+      if (text.length < 3) { hits = []; close(); return; }
+      typing = setTimeout(async () => {
+        if (asking) asking.abort();
+        asking = new AbortController();
+        // Suggestions near the location already set come first.
+        const near = coord(lat.value) !== null && coord(lon.value) !== null ? `&lat=${coord(lat.value)}&lon=${coord(lon.value)}` : '';
+        try {
+          const r = await fetch(`${PHOTON}/api/?limit=6&lang=en&q=${encodeURIComponent(text)}${near}`, {signal: asking.signal});
+          hits = ((await r.json()).features || []).map(f => ({label: placeName(f.properties),
+                                                             lon: f.geometry.coordinates[0], lat: f.geometry.coordinates[1]}));
+          active = -1; show();
+          if (!hits.length) say('No address found. Try the street and town, or the nearest town.', true);
+        } catch (e) { if (e.name !== 'AbortError') say("Couldn't reach the address search. Type the latitude and longitude instead.", true); }
+      }, 250);
+    });
+    q.addEventListener('keydown', e => {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        if (!hits.length) return;
+        e.preventDefault();
+        active = (active + (e.key === 'ArrowDown' ? 1 : hits.length - 1)) % hits.length; show();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();  // never submit the form from the search box
+        if (hits.length) pick(Math.max(active, 0));
+      } else if (e.key === 'Escape') close();
+    });
+    q.addEventListener('blur', close);
+
     box.querySelector('.loc-here').addEventListener('click', () => {
-      if (!navigator.geolocation) { msg.textContent = "This browser can't share its location."; return; }
-      msg.textContent = 'Asking for your location…';
+      if (!navigator.geolocation) { say("This browser can't share its location.", true); return; }
+      say('Asking for your location…');
       navigator.geolocation.getCurrentPosition(
-        p => put(p.coords.latitude, p.coords.longitude, 'Where this device is now'),
-        () => { msg.textContent = "No location: the browser said no (it only shares it over https or on localhost). Search for the town instead."; },
+        p => put(p.coords.latitude, p.coords.longitude),
+        () => say("No location: the browser only shares it over https or on localhost. Type the address instead.", true),
         {timeout: 15000});
     });
+    where();
   });
 </script>
 {% endmacro %}

@@ -251,9 +251,12 @@ def create_app(start_worker: bool = False) -> FastAPI:
         if trap is None:
             raise HTTPException(404, "no such trap")
         try:
-            trap.lat, trap.lon = weather.parse_location(lat, lon)
+            where = weather.parse_location(lat, lon)
         except ValueError as e:
             raise HTTPException(422, str(e))
+        if where != (trap.lat, trap.lon):
+            trap.lat, trap.lon = where
+            weather.forget(db, trap)
         return RedirectResponse(f"/traps/{trap_id}", status_code=303)
 
     @app.post("/traps/{trap_id}/request-photo")

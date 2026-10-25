@@ -152,3 +152,33 @@ def test_no_station_reporting_falls_back_to_open_meteo(monkeypatch):
                        for u in asked)  # the week-old photo never asked the stations
         assert "Open-Meteo's weather model" in client.get(f"/captures/{gap_id}").text
         assert "no weather found for this time" in client.get(f"/captures/{ancient_id}").text
+
+
+def test_hemisphere_letters_sign_the_numbers():
+    assert weather.parse_location("42.4460° N", "76.4712° W") == (42.446, -76.4712)
+    assert weather.parse_location("42.446", "76.4712W") == (42.446, -76.4712)
+    assert weather.parse_location("33.9 S", "151.2 E") == (-33.9, 151.2)
+    for bad in [("42.4 X", "1"), ("north", "1"), ("42.4", "")]:
+        try:
+            weather.parse_location(*bad)
+        except ValueError:
+            continue
+        raise AssertionError(bad)
+
+
+def test_moving_the_hub_looks_its_cameras_weather_up_again(monkeypatch):
+    _fake_service(monkeypatch)
+    with TestClient(create_app()) as client:
+        _add(client, trap_id="T1", kind="hub", lat="42.45", lon="76.47")  # the minus sign forgotten
+        _, key = _add(client, trap_id="T2", kind="esp32", hub_id="T1")
+        _upload(client, key, "T2", "a1", datetime.now(timezone.utc) - timedelta(hours=2))
+        with session_scope() as db:
+            assert weather.fill(db) == 1
+        client.post("/traps/T1/location", data={"lat": "42.45", "lon": "76.47"})  # saved again, unchanged
+        with session_scope() as db:
+            assert "weather" in db.query(Capture).one().meta
+        client.post("/traps/T1/location", data={"lat": "42.45", "lon": "76.47 W"})
+        with session_scope() as db:
+            assert db.get(Trap, "T1").lon == -76.47
+            assert "weather" not in db.query(Capture).one().meta
+            assert weather.fill(db) == 1

@@ -35,8 +35,9 @@ ESP32 trap T4 ─┘  or the fieldhouse Wi-Fi)        gateway.py, always on:    
   so a late station report still wins. The weather service keeps only about a week of observations, so
   older photos go straight to Open-Meteo; photos older than 60 days aren't looked up. The readings show on the photo's page with
   the station they came from, and are kept apart from a sensor's (`meta["weather"]`), so they do not feed
-  the degree days. The town search on the location form uses Open-Meteo's place search, since the
-  weather service has none.
+  the degree days. The location form suggests addresses as you type (Photon, OpenStreetMap
+  addresses, free, no key), reads "76.4712° W" as -76.4712, and shows the place the numbers point to.
+  Changing a hub's location looks its cameras' weather up again.
 - **Hub:** `sentinel_device/gateway.py`, run always on by `systemd/sentinel-gateway.service`. Every 30 s
   it asks the server which ESP32 traps are its own (`GET /api/v1/hub/nodes`: their ids and key hashes,
   cached for when the server can't be reached), so the hub needs no change when cameras are added or
