@@ -1,23 +1,26 @@
 {% extends "base.html" %}
 {% set nav = 'overview' %}
-{% block title %}{{ trap.id }} photos · Orchard Sentinel{% endblock %}
+{% block title %}Photos from {{ trap.name or trap.id }} · Orchard Sentinel{% endblock %}
 {% block main %}
-<div>
-  <h1><a href="/traps/{{ trap.id }}" style="color:inherit;text-decoration:none">{{ trap.id }}</a> photos <span class="muted" style="font-size:18px">{{ trap.name }}</span></h1>
-  <p class="muted">{{ total }} photo{{ 's' if total != 1 }}, newest first.</p>
+<div class="page-head">
+  <div>
+    <a class="back" href="/traps/{{ trap.id }}">{{ trap.name or trap.id }}</a>
+    <h1>All photos</h1>
+    <p class="sub">{{ total }} photo{{ 's' if total != 1 }}, newest first</p>
+  </div>
 </div>
 {% if caps %}
 <div class="gallery">
   {% for c in caps %}
   <a href="/captures/{{ c.id }}"><img src="/media/{{ c.image_path }}" alt="Liner photo from {{ c.captured_at|local }}" loading="lazy">
-    <span>{{ c.captured_at|local }} · {{ c.detections|length }} boxes · <span class="pill {{ c.status }}">{{ c.status }}</span></span></a>
+    <span>{{ c.captured_at|local('%b %-d, %H:%M') }}, {{ c.detections|length }} insect{{ 's' if c.detections|length != 1 }}{% if c.status != 'processed' %} <span class="pill {{ c.status }}">{{ {'new': 'Waiting', 'failed': 'Not used'}.get(c.status, c.status) }}</span>{% endif %}</span></a>
   {% endfor %}
 </div>
 {% if pages > 1 %}
-<nav class="pager">
-  {% if page > 1 %}<a href="?page={{ page - 1 }}">← Newer</a>{% endif %}
-  <span class="muted mono">page {{ page }} of {{ pages }}</span>
-  {% if page < pages %}<a href="?page={{ page + 1 }}">Older →</a>{% endif %}
+<nav class="pager" aria-label="Pages">
+  {% if page > 1 %}<a class="btn small" href="?page={{ page - 1 }}">Newer</a>{% endif %}
+  <span class="muted">page {{ page }} of {{ pages }}</span>
+  {% if page < pages %}<a class="btn small" href="?page={{ page + 1 }}">Older</a>{% endif %}
 </nav>
 {% endif %}
 {% else %}

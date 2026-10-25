@@ -57,3 +57,30 @@ def test_label_matches_the_biofix_rule_the_code_applies():
     for code in ("CM", "OFM", "OBLR"):
         assert "first sustained catch" in ph.MODELS[code].start, code
     assert ph.MODELS["OBLR"].base_f == 43  # NEWA's OBLR tool: base 43 °F BE degree days
+
+
+def test_outlook_says_what_is_due_and_when():
+    """The grower's sentence for a trap: what is due now or next, and in about how many days at this week's
+    temperatures (L-25's "what to do this week")."""
+    from datetime import timedelta
+
+    cm, today = ph.MODELS["CM"], date(2026, 6, 20)
+    warm = {today - timedelta(days=i): (70, 50) for i in range(10)}  # ~10 DD50 a day
+    o = ph.outlook(cm, None, None, warm, today)
+    assert o["state"] == "waiting" and o["headline"] == "Waiting for biofix"
+    o = ph.outlook(cm, date(2026, 6, 1), 230, warm, today)
+    assert o["state"] == "soon" and o["next"].short == "First spray" and o["dd_to_go"] == 20 and o["days_to_go"] == 2
+    assert o["headline"] == "First spray in about 2 days"
+    o = ph.outlook(cm, date(2026, 6, 1), 262, warm, today)
+    assert o["state"] == "now" and o["headline"] == "First spray due now" and o["next"] is None
+    assert o["detail"].startswith("First spray for overwintering generation")
+    mild = {today - timedelta(days=i): (60, 46) for i in range(10)}  # ~3.6 DD50 a day
+    o2 = ph.outlook(cm, date(2026, 6, 1), 60, mild, today)  # next (100) is 12 days off: "now" wins
+    assert o2["headline"] == "Egg laying begins now" and "Then early egg laying in about" in o2["detail"], o2
+    assert [m.short for m in o["passed"]] == ["Egg laying begins", "Early egg laying", "First eggs hatch", "First spray"]
+    o = ph.outlook(cm, date(2026, 6, 1), 140, warm, today)  # early egg laying (100) is 40 DD back
+    assert o["state"] == "later" and o["days_to_go"] == 8 and o["headline"] == "Next: first eggs hatch in about 8 days"
+    cold = {today - timedelta(days=i): (48, 35) for i in range(10)}
+    o = ph.outlook(cm, date(2026, 6, 1), 140, cold, today)
+    assert o["days_to_go"] is None and "too cool" in o["detail"].lower()
+    assert all(m.short for model in ph.MODELS.values() for m in model.milestones)
