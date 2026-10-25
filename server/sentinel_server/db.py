@@ -75,7 +75,7 @@ def _add_missing_columns() -> None:
                 ddl = col.type.compile(eng.dialect)
                 if col.server_default is not None:
                     conn.execute(text(f'ALTER TABLE {table.name} ADD COLUMN {col.name} {ddl} '
-                                      f"NOT NULL DEFAULT '{col.server_default.arg}'"))
+                                      f"NOT NULL DEFAULT '{col.server_default.arg}'"))  # type: ignore[attr-defined]  # models give server_default as a string, so it's a DefaultClause
                 elif col.nullable:
                     conn.execute(text(f"ALTER TABLE {table.name} ADD COLUMN {col.name} {ddl}"))
 
