@@ -8,7 +8,8 @@ GitHub's "Best practices for repositories", a beginner setup tutorial, Sairyss/b
 DataCamp's Python backend tutorial, and three dev.to articles (repository practices, GitHub Secrets,
 securing code). Round 10 (Oct 25): [PR #60](https://github.com/ninaa26/applev2/pull/60) landed
 items 1, 2, 6 and 11 and was checked; this branch did items 4, 7, 8 (rate limiting), 14
-(`SECURITY.md`), 15 and 16.
+(`SECURITY.md`), 15 and 16. Round 11 (Oct 25): dismissed the CodeQL alerts and set the
+GitHub settings for items 10, 14 and 17.
 
 ## Already in place
 
@@ -66,14 +67,14 @@ items 1, 2, 6 and 11 and was checked; this branch did items 4, 7, 8 (rate limiti
 | 7 | Pre-commit hooks | done: `.pre-commit-config.yaml` (Ruff, large files, private keys); each person runs `uvx pre-commit install` once |
 | 8 | Require auth on anything exposed | rate limiting done (10 wrong passwords per address per 10 min); required password + HTTPS wait for a public host |
 | 9 | Ops basics | mostly done; only JSON logs are left (optional) |
-| 10 | Branch protection on `master` | to do (checked: not protected) |
-| 11 | GitHub Dependabot alerts + code scanning | done in PR #60: Dependabot alerts + security updates on, CodeQL default setup (Python, Actions). 12 CodeQL alerts open, all false positives or intended; dismiss them (see below) |
+| 10 | Branch protection on `master` | done Oct 25: PRs required (no approvals, so either teammate can merge their own), `lint`, `server`, `device` and `ml` must pass, no force-push or deletion; admins can still bypass in an emergency |
+| 11 | GitHub Dependabot alerts + code scanning | done in PR #60: Dependabot alerts + security updates on, CodeQL default setup (Python, Actions). its 12 first-scan alerts were checked and dismissed with reasons (see below) |
 | 12 | Least privilege for keys and accounts | to check |
 | 13 | Add a `LICENSE` | to decide (checked: the public repo has none) |
-| 14 | `SECURITY.md` + private vulnerability reporting | `SECURITY.md` done; private vulnerability reporting still off (repo setting) |
+| 14 | `SECURITY.md` + private vulnerability reporting | done: `SECURITY.md`, and private vulnerability reporting turned on Oct 25 |
 | 15 | Graceful shutdown of the worker | checked, safe: each photo is one transaction and the worker writes no files, so a restart mid-photo just redoes it |
 | 16 | CSRF protection + security headers on the dashboard | done: same-site check on dashboard POSTs + `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy` |
-| 17 | Repo housekeeping: topics, auto-delete merged branches | to do (checked: no topics, auto-delete off) |
+| 17 | Repo housekeeping: topics, auto-delete merged branches | done Oct 25: topics `agriculture`, `computer-vision`, `esp32`, `fastapi`, `integrated-pest-management`, `raspberry-pi`; merged branches are deleted automatically |
 
 1. **Lock your dependencies.** [server/pyproject.toml](../server/pyproject.toml) only gives minimum
    versions (`fastapi>=0.110`), so CI and the Pi 5 can each install different versions. Commit a
@@ -157,8 +158,8 @@ items 1, 2, 6 and 11 and was checked; this branch did items 4, 7, 8 (rate limiti
     `claude/...` branches don't pile up.
 
 **CodeQL alerts (round 10).** The first scan after PR #60 opened 12 alerts on master; each was
-checked and none is a real problem. They need dismissing in the Security tab (Claude's attempt was
-blocked as an external write):
+checked and none is a real problem. All 12 were dismissed in the Security tab on Oct 25, each with
+the reason below, and none is open now:
 
 | Alerts | Rule | Why it's not a problem |
 |---|---|---|
@@ -168,11 +169,11 @@ blocked as an external write):
 | #9, #10 | path injection | the upload's uid must match `SAFE_UID`, and the trap id comes from the database |
 | #4–#8 | URL redirection | redirects go to `/traps/{id}` after the id was found, or to a `next` that must be a local path |
 
-**Left for a person:** items 10, 11's dismissals, 14's reporting toggle and 17 are GitHub settings;
-13 needs a decision about the license. Item 5 (Alembic) is a bigger piece of work, worth its own PR.
+**Left for a person:** item 13 needs a decision about the license. Item 5 (Alembic) is a bigger piece
+of work, worth its own PR.
 
-**Next:** the GitHub settings above take about five minutes. Item 3 (loose `mypy` in CI) is now
-done; tightening it module by module (`check_untyped_defs` first) is the next step there.
+**Next:** choose a license (item 13). Item 3 (loose `mypy` in CI) is done; tightening it module by
+module (`check_untyped_defs` first) is the next step there. Alembic (item 5) is being done in its own session.
 
 ## Skipped on purpose
 
