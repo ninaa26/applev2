@@ -31,6 +31,9 @@ pio run -t upload
 pio device monitor                                        # 115200 baud
 ```
 
+For a camera just added on the dashboard, `./flash-camera.sh T3 <key>` (the command the dashboard shows)
+does the copy and the upload: it writes the trap id and key into `node_config.h` and keeps the Wi-Fi and pins.
+
 The board this was written for: a Freenove-style ESP32-S3 CAM (N8R8: 8 MB flash, 8 MB octal PSRAM,
 CH343 USB serial, ESP32-S3-EYE camera pins) with an OV3660. On a Mac the CH343 garbles uploads above
 115200 baud, which is why `upload_speed` is 115200 (about 20 s per flash). Other boards need their
