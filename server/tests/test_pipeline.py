@@ -100,6 +100,26 @@ def test_dashboard_password_guards_pages_but_not_trap_uploads(monkeypatch):
         assert upload(client, key, datetime.now(UTC), MOTHS, "a").status_code == 201
 
 
+def test_too_many_wrong_dashboard_passwords_have_to_wait(monkeypatch):
+    from sentinel_server import app as app_mod, settings as settings_mod
+
+    key = add_trap()
+    monkeypatch.setenv("SENTINEL_DASHBOARD_PASSWORD", "orchard")
+    settings_mod.reset_settings()
+    with TestClient(create_app()) as client:
+        for _ in range(5):
+            assert client.get("/").status_code == 401  # no password sent yet: not counted
+        for _ in range(app_mod.WRONG_LIMIT):
+            assert client.get("/", auth=("anyone", "guess")).status_code == 401
+        r = client.get("/", auth=("anyone", "orchard"))
+        assert r.status_code == 429 and int(r.headers["retry-after"]) > 0  # even the right one, for now
+        assert upload(client, key, datetime.now(UTC), MOTHS, "b").status_code == 201  # traps aren't held up
+        assert client.get("/healthz").status_code == 200
+
+        monkeypatch.setattr(app_mod, "WRONG_WINDOW_S", 0)  # the window has passed
+        assert client.get("/", auth=("anyone", "orchard")).status_code == 200
+
+
 def test_counts_each_insect_once_and_new_card_resets():
     key = add_trap()
     t0 = datetime.now(UTC) - timedelta(hours=6)
