@@ -2,7 +2,7 @@
 
 Everything the reviews found, after checking: what to change or build, what we know, what turned out
 wrong, and what's still open. One file, updated every review round. The published page is built from this
-file (`python3 code-review/build_ledger.py`).
+file (`python3 docs/code-review/build_ledger.py`).
 
 **Status marks:**
 - ✅ checked against the code, the live data or the source
@@ -32,7 +32,7 @@ checking it yourself first.
    measure and leave them open.
 6. **Never run anything on the bench Pi (`apple-pi-hub`) without asking,** and don't run `device/install.sh` there.
 7. **When a row's PR is open,** set its Status to `in review: PR #n`; **when it is merged,** `done <date> (PR #n)`. Then rebuild the page:
-   `python3 code-review/make_unverified.py && python3 code-review/build_ledger.py`.
+   `python3 docs/code-review/make_unverified.py && python3 docs/code-review/build_ledger.py`.
 8. **If you check an Unverified item,** move it here (as a to-do, a fact, or a wrong claim) and delete it from
    `make_unverified.py`'s lists, or add its title to `CHECKED` there.
 
