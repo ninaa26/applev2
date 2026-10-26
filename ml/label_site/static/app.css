@@ -125,4 +125,20 @@ button.krow.on { background:var(--pink); border-color:transparent; color:#fff; f
 .item, .item .name, .item .count, .item .sub, #queueInfo, #info, #info b, #taskActions .mute, .krow, .krow .n {
   font-family:var(--data); font-weight:400; letter-spacing:.005em; }
 #info b, .item.on .name, button.krow.on { font-weight:500; }
+/* the label cards: side by side, each with its drawing in the label's colour (--c) */
+:root { --insect-ui:#2F4470; }  /* the insect drawing: the box colour, lighter on dark panels so it shows */
+@media (prefers-color-scheme: dark) { :root { --insect-ui:#8AA2DC; } }
+.lcards { display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; }
+.lcards.many { grid-template-columns:repeat(auto-fill, minmax(76px, 1fr)); }
+.lcard { position:relative; display:flex; flex-direction:column; align-items:center; gap:2px; padding:8px 4px 6px; border-radius:10px;
+         border:1px solid var(--hair); background:var(--field); color:var(--ink); font-family:var(--data); font-weight:400; font-size:12px; }
+.lcard svg { width:34px; height:34px; color:var(--c); fill:currentColor; }
+.lcards.many .lcard svg { width:26px; height:26px; }
+.lcard kbd { position:absolute; top:5px; left:5px; font:500 10px ui-monospace, "SF Mono", monospace; color:var(--mute);
+             border:1px solid var(--hair-strong); border-radius:4px; padding:0 4px; background:var(--panel); }
+.lcard .n { position:absolute; top:5px; right:7px; font-size:11px; color:var(--mute); font-variant-numeric:tabular-nums; }
+.lcard .lname { line-height:1.15; text-align:center; }
+.lcard:hover:not(:disabled) { background:var(--hover); border-color:var(--hair-strong); }
+.lcard:disabled { opacity:1; cursor:default; }
+.lcard.on { border:2px solid var(--c); padding:7px 3px 5px; background:color-mix(in srgb, var(--c) 16%, var(--field)); font-weight:500; }
 [hidden] { display:none !important; }

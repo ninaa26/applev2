@@ -254,6 +254,24 @@ function colorOf(b) {
   if (l === "skip") return "#ffffff55";
   return l === "moth" ? "#FF9E1B" : "#EE4A7F";
 }
+// Little drawings for the label cards, in the label's colour (currentColor): a moth with spread wings, a beetle for
+// "other insect", and scattered bits for debris. Every moth species uses the moth.
+const ICONS = {
+  moth: `<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 9.8C12.2 7 5.4 6.4 3.2 9c.4 4.3 6 9.6 12.8 10.3Z"/>
+    <path d="M16 9.8c3.8-2.8 10.6-3.4 12.8-.8-.4 4.3-6 9.6-12.8 10.3Z"/><path d="M16 17.4c-2.9.9-5.6 2.7-5 4.6.7 1.6 3.2.9 5-2Z" opacity=".75"/>
+    <path d="M16 17.4c2.9.9 5.6 2.7 5 4.6-.7 1.6-3.2.9-5-2Z" opacity=".75"/><ellipse cx="16" cy="15.6" rx="1.7" ry="7"/>
+    <path d="M15.2 9.3c-1.2-2.4-3-4-5.2-4.6M16.8 9.3c1.2-2.4 3-4 5.2-4.6" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`,
+  insect: `<svg viewBox="0 0 32 32" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+    <path d="M11.5 13 7 10.5M11 17H6M11.5 21 7 24M20.5 13l4.5-2.5M21 17h5M20.5 21l4.5 3M14.5 8.5 12.5 4.5M17.5 8.5l2-4"/></g>
+    <circle cx="16" cy="10" r="2.8"/><ellipse cx="16" cy="19" rx="5.6" ry="7.6"/>
+    <path d="M16 12.2v14.2" style="stroke:var(--field)" stroke-width="1.1"/></svg>`,
+  debris: `<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 9.5 10.5 7l2 3.6-3.4 2.6Z"/><path d="M19.5 6.5l4.2.8-.9 3.9-3.8-.6Z"/>
+    <path d="M13 19.5l3.6-1.6 1.6 3.4-4.2 1.4Z"/><circle cx="24.5" cy="19" r="1.8"/><circle cx="8" cy="22.5" r="1.3"/><circle cx="20" cy="26" r="1.1"/>
+    <path d="M17 12.5c2.2 1 4.2 1.3 6.4 1" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
+};
+const iconFor = l => l === "debris" ? ICONS.debris : l === "other_insect" ? ICONS.insect : ICONS.moth;
+const SHORT = {lookalike_RBLR: "RBLR", lookalike_LAW: "LAW", other_tortricid: "tortricid", other_moth: "other moth",
+               other_insect: "other insect", debris: "debris"};
 function confirmSel() {  // Enter, or the ⏎ row: the guess is right, on to the next
   if (sel < 0) { setStatus("select a box first"); return; }
   const b = boxes[sel];
@@ -275,13 +293,18 @@ function renderKey() {  // the key doubles as buttons: a row does what its key d
   const row = (k, text, n, act, on = false) =>
     `<button class="krow${on ? " on" : ""}" data-act="${esc(act)}" ${sel < 0 ? "disabled" : ""}><kbd>${k}</kbd><span>${text}</span><span class="n">${n}</span></button>`;
   const info = (k, text) => `<div class="krow info"><kbd>${k}</kbd><span>${text}</span><span></span></div>`;
-  $("labelKeys").innerHTML = keys.map(([k, l]) => row(k, `<span class="sw" style="background:${colorOf({label:l})}"></span> ${pass === 1 ? NAMES[l] : (k === "0" ? "moth, unsure" : l)}`,
-      counts[l] || 0, "label:" + l, cur === l)).join("");
+  $("labelKeys").className = "lcards" + (pass === 2 ? " many" : "");
+  $("labelKeys").innerHTML = keys.map(([k, l]) => {
+    const name = pass === 1 ? NAMES[l] : (k === "0" ? "moth?" : SHORT[l] || l);
+    const full = pass === 1 ? NAMES[l] : (k === "0" ? "moth, species unsure" : l);
+    return `<button class="lcard${cur === l ? " on" : ""}" data-act="label:${esc(l)}" title="${esc(full)} (${k})" ${sel < 0 ? "disabled" : ""}
+      style="--c:${l === "other_insect" ? "var(--insect-ui)" : colorOf({label:l})}"><kbd>${k}</kbd>${iconFor(l)}<span class="lname">${esc(name)}</span><span class="n">${counts[l] || 0}</span></button>`;
+  }).join("");
   $("key").innerHTML = row("⏎", "the guess is right, next", `${boxes.filter(unchecked).length} left`, "confirm")
     + row("⌫", "delete (not on the card)", counts.skip || 0, "delete")
     + info("B", "draw (click an insect, or drag)") + info("Tab", "next to check · [ ] photos")
     + info(", .", "previous / next box you were on") + info("?", "guide · right-click: comment");
-  document.querySelectorAll("#key button.krow, #labelKeys button.krow").forEach(x => x.onclick = () => {
+  document.querySelectorAll("#key button.krow, #labelKeys button.lcard").forEach(x => x.onclick = () => {
     const a = x.dataset.act;
     if (a === "confirm") confirmSel(); else if (a === "delete") deleteSel(); else if (sel >= 0) setLabel(a.slice(6));
   });
