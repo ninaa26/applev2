@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Morning Note · Orchard Sentinel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="kit.css">
+<style>
+/* Direction 4, Morning note (taste-skill app style editorial-greeting).
+   The move: the greeting is the h1, set from today's one fact, in a centred 1100px column on a 12-column
+   grid (77px columns, 16px gutters); spans change by row and share column lines: 4/4/4, then 8/4,
+   then 6/6. Every figure at regular weight on tonal sage panels, one layer each.
+   Face: the sage of a leaf's underside as the panel tone; the signature is the season in lanes, one per
+   pest, each week's catch as a column from the first trap out to today. */
+:root{
+  --ground:#fff; --panel:#f2f5f0; --panel-2:#e8ede5; --inner:#fff; --rule:#dfe5dc;
+  --ink:#1c211c; --muted:#5b655c; --grid:#dfe5dc; --track:#dde4da;
+  --cm:#b02c3c; --ofm:#b8650f; --oblr:#2c6a8a; --other:#a6aea5; --negative:#b3261e;
+  --r:22px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font:15px/1.55 "Instrument Sans",system-ui,sans-serif;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+.top{max-width:1100px;margin:0 auto;padding:16px 16px 0;display:flex;align-items:center;gap:24px}
+.mark{display:flex;align-items:center;gap:8px;font-weight:600}
+.top nav{display:flex;gap:4px;margin-left:auto}
+.top nav a{color:var(--muted);text-decoration:none;padding:6px 12px;border-radius:999px}
+.top nav a.on{background:var(--panel);color:var(--ink)}
+.top nav a:hover{color:var(--ink)}
+.wrap{max-width:1100px;margin:0 auto;padding:40px 16px 64px}
+.date{color:var(--muted)}
+h1{font:400 40px/1.1 "Instrument Serif",Georgia,serif;letter-spacing:-.01em;margin:6px 0 0}
+h1 em{font-style:normal;color:var(--cm)}
+.lede{color:var(--muted);margin:12px 0 0;max-width:62ch}
+.acts{display:flex;gap:10px;margin-top:20px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;height:40px;padding:0 18px;border-radius:999px;border:0;font:500 14.5px "Instrument Sans",sans-serif;text-decoration:none;cursor:pointer;transition:transform 140ms cubic-bezier(.23,1,.32,1),background-color 150ms ease}
+.btn:active{transform:scale(.97)}
+.btn.primary{background:var(--ink);color:#fff}.btn.primary:hover{background:#333a33}
+.btn.soft{background:var(--panel);color:var(--ink)}.btn.soft:hover{background:var(--panel-2)}
+.g{display:grid;grid-template-columns:repeat(12,1fr);gap:16px;margin-top:36px}
+.s4{grid-column:span 4}.s8{grid-column:span 8}.s6{grid-column:span 6}
+.p{background:var(--panel);border-radius:var(--r);padding:20px 22px;min-width:0}
+.p h2{font-size:15px;font-weight:600;margin:0 0 10px;display:flex;align-items:center;gap:8px}
+.p .big{font-size:34px;line-height:1.1;font-weight:400}
+.p .big small{font-size:14px;color:var(--muted);margin-left:6px}
+.p .hl{margin:10px 0 14px}
+.p .hl b{font-weight:600}
+.lanes{display:grid;grid-template-columns:110px 1fr;row-gap:14px;column-gap:12px;align-items:end;margin-top:6px}
+.lanes .nm{font-size:13.5px;display:flex;align-items:center;gap:6px;align-self:center}
+.lane{display:flex;align-items:flex-end;gap:3px;height:56px;border-bottom:1px solid var(--rule)}
+.lane i{flex:1;border-radius:3px 3px 0 0;min-height:2px}
+.lane i.bf{outline:2px solid var(--ink);outline-offset:1px}
+.wk{display:flex;justify-content:space-between;color:var(--muted);font-size:12px;grid-column:2}
+.look{list-style:none;margin:0;padding:0}
+.look li{padding:10px 0;border-top:1px solid var(--rule)}
+.look li:first-child{border-top:0;padding-top:0}
+.look span{display:block;color:var(--muted);font-size:13px}
+.look a{font-size:13.5px;color:var(--ink)}
+.tl{list-style:none;margin:0;padding:0}
+.tl li{display:grid;grid-template-columns:1fr auto auto;gap:14px;align-items:center;padding:10px 0;border-top:1px solid var(--rule)}
+.tl li:first-child{border-top:0}
+.tl .s{display:block;color:var(--muted);font-size:12.5px}
+.tl .n{min-width:3ch;text-align:right;font-size:18px}
+.tl .st{font-size:12.5px;color:var(--muted)}
+.tl .st.off{color:var(--negative)}
+.crops{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.crops figure{margin:0;background:var(--inner);border-radius:14px;padding:8px}
+.crops .k-crop{width:100%;height:auto}
+.crops figcaption{font-size:12.5px;color:var(--muted);padding:6px 2px 0}
+.crops figcaption b{color:var(--ink);font-weight:500;display:block}
+@media (max-width:900px){.s4,.s8,.s6{grid-column:1/-1}}
+@media (max-width:640px){
+  .top nav{display:none}
+  .wrap{padding-top:20px}
+  h1{font-size:30px}
+  .acts .btn{flex:1;height:46px}
+  .lanes{grid-template-columns:1fr}.wk{grid-column:1}
+  .crops{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <span class="mark"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><circle cx="11" cy="12" r="8" fill="#1c211c"/><path d="M11 4c.3-1.7 1.4-2.6 3-3" stroke="#1c211c" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>Orchard Sentinel</span>
+  <nav aria-label="Main"><a class="on" href="#">Today</a><a href="#">Season</a><a href="#">Traps</a><a href="#">Set up</a></nav>
+</header>
+<main class="wrap">
+  <p class="date" id="date"></p>
+  <h1>Morning. <em>Codling moth spray is due tomorrow.</em></h1>
+  <p class="lede">236 degree days since the May 18 biofix; first spray at 250. Honeycrisp Hill and North Gala carry most of this week's 13. One camera on Road Block has been quiet since Sunday.</p>
+  <div class="acts"><a class="btn primary" href="#">Confirm 6 insects</a><a class="btn soft" href="#">Spray record</a></div>
+  <div class="g" id="pests"></div>
+  <div class="g" style="margin-top:16px">
+    <section class="p s8" aria-labelledby="s-h"><h2 id="s-h">The season by week, confirmed catches</h2><div class="lanes" id="lanes"></div></section>
+    <section class="p s4" aria-labelledby="l-h"><h2 id="l-h">Before you head out</h2><ul class="look" id="look"></ul></section>
+  </div>
+  <div class="g" style="margin-top:16px">
+    <section class="p s6" aria-labelledby="t-h"><h2 id="t-h">Traps, this week</h2><ul class="tl" id="traps"></ul></section>
+    <section class="p s6" aria-labelledby="c-h"><h2 id="c-h">Is this the moth we think?</h2><div class="crops" id="crops"></div></section>
+  </div>
+</main>
+<script src="data.js"></script><script src="kit.js"></script>
+<script>
+const { traps, pheno, week, review, daily, LABEL, PESTS, weekday, ago, LINER_MAX_DAYS, DAYS, sum } = OS;
+const $ = (id) => document.getElementById(id);
+$('date').textContent = `${weekday} · Lansing Ridge`;
+$('pests').innerHTML = PESTS.map((sp) => { const p = pheno[sp];
+  return `<section class="p s4"><h2><i class="dot c-${sp}"></i>${LABEL[sp]}</h2><div class="big">${week[sp]}<small>this week</small></div><p class="hl"><b>${p.headline}.</b> ${p.detail.split('.')[0]}.</p>${Kit.dd(sp, { compact: true })}</section>`; }).join('');
+// weekly lanes from the 30 daily values: 4 full weeks plus the current one, oldest first
+const weeks = [[0, 2], [2, 9], [9, 16], [16, 23], [23, 30]];
+const maxW = Math.max(...PESTS.flatMap((sp) => weeks.map(([a, b]) => sum(daily[sp].slice(a, b)))));
+$('lanes').innerHTML = PESTS.map((sp) => `<span class="nm"><i class="dot c-${sp}"></i>${sp}</span><div class="lane" role="img" aria-label="${LABEL[sp]} by week: ${weeks.map(([a, b]) => sum(daily[sp].slice(a, b))).join(', ')}">${weeks.slice(1).map(([a, b]) => { const v = sum(daily[sp].slice(a, b)); return `<i title="${v}" style="height:${Math.max(3, v / maxW * 100)}%;background:var(--${sp.toLowerCase()})"></i>`; }).join('')}</div>`).join('')
+  + `<div class="wk"><span>Week of May 19</span><span>May 26</span><span>Jun 2</span><span>This week</span></div>`;
+$('look').innerHTML = `<li>Road Block T5 is quiet<span>No photo for ${ago(traps[4].lastMin).replace(' ago', '')}; battery was ${traps[4].battery.toFixed(2)} V. Bring a charged pack.</span></li><li>Honeycrisp Hill T3 needs a new liner<span>It has been in ${traps[2].linerDays} days. Liners last about ${LINER_MAX_DAYS}.</span></li><li>Hub checked in 1 min ago<span>6 cameras, cellular link fine.</span></li>`;
+$('traps').innerHTML = traps.map((t) => { const off = t.state === 'offline', n = t.week[t.lure] || 0;
+  return `<li><div>${t.name} ${t.id}<span class="s">${t.lure} lure · ${t.block}</span></div><span class="st${off ? ' off' : ''}">${off ? 'Quiet ' + ago(t.lastMin).replace(' ago', '') : ago(t.lastMin)}</span><span class="n">${off ? '—' : n}</span></li>`; }).join('');
+$('crops').innerHTML = review.map((r) => `<figure>${Kit.moth(r.guess, r.seed, 120)}<figcaption><b>${r.guess === 'other_moth' ? 'Other moth' : r.guess}?</b>${r.trap} · ${Math.round(r.conf * 100)}% sure</figcaption></figure>`).join('');
+</script>
+</body>
+</html>

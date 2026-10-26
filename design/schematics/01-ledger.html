@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ledger · Orchard Sentinel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="kit.css">
+<style>
+/* Direction 1, Ledger (taste-skill app style achromatic-ledger, seed 2124343963).
+   The move: no colour in the chrome. Ink everywhere; the one hue is apple red on codling moth, the pest
+   whose spray comes due next. Face: a sage ground from the orchard instead of #f8f8f8.
+   Grid: one centred 1120px column; main 1fr + rail 352px + 24px gap. */
+:root{
+  --ground:#f2f5f2; --surface:#fff; --raised:#e9ece9; --border:#e2e6e2; --rule:#eef1ee; --control:#d0d5d0;
+  --ink:#0d110e; --muted:#5f6862; --grid:#e8ebe8; --track:#e6e9e6;
+  --cm:#b3243a; --ofm:#3a3f3b; --oblr:#8d948f; --other:#c9cec9;
+  --negative:#b3261e; --warning:#8a4b06;
+  --pill-neg-bg:#ffedea; --pill-neg-ink:#7f1d1a; --pill-warn-bg:#fdf2dc; --pill-warn-ink:#7a4306; --pill-ok-bg:#e3f3e6; --pill-ok-ink:#14401f;
+  --r-card:8px; --r-ctl:6px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font:14px/1.5 Geist,system-ui,sans-serif;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+.col{max-width:1120px;margin:0 auto;padding:0 24px}
+header{height:52px;display:flex;align-items:center;gap:28px}
+.mark{display:flex;align-items:center;gap:9px;font-weight:600;font-size:15px;text-decoration:none}
+nav{display:flex;gap:2px}
+nav a{padding:6px 10px;border-radius:var(--r-ctl);text-decoration:none;color:var(--muted);font-weight:500}
+nav a:hover{color:var(--ink)} nav a.on{color:var(--ink);background:var(--raised)}
+nav a .n{color:var(--muted);margin-left:4px}
+header .who{margin-left:auto;color:var(--muted);font-size:13px}
+.menu{display:none}
+.title{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;padding:20px 0 20px}
+h1{font-size:24px;font-weight:600;margin:0;letter-spacing:-.01em}
+.title p{margin:4px 0 0;color:var(--muted)}
+.title p b{color:var(--cm);font-weight:600}
+.btn{display:inline-flex;align-items:center;height:36px;padding:0 14px;border-radius:var(--r-ctl);border:0;font:500 14px Geist,sans-serif;cursor:pointer;text-decoration:none;transition:transform 140ms cubic-bezier(.23,1,.32,1),background-color 150ms ease}
+.btn:active{transform:scale(.97)}
+.btn.primary{background:var(--ink);color:#fff} .btn.primary:hover{background:#2a302b}
+.btn.ghost{background:var(--surface);border:1px solid var(--control);height:30px;font-size:13px}
+.grid{display:grid;grid-template-columns:1fr 352px;gap:24px;padding-bottom:56px}
+.main{display:flex;flex-direction:column;gap:16px;min-width:0}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-card)}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr)}
+.kpi{padding:16px 20px}
+.kpi+.kpi{border-left:1px solid var(--border)}
+.kpi .l{color:var(--muted);font-size:13px;display:flex;align-items:center;gap:6px}
+.kpi .v{font-size:28px;font-weight:500;margin-top:2px;letter-spacing:-.01em}
+.kpi .c{font-size:12px;color:var(--muted)}
+.kpi.lead .v{color:var(--cm)}
+.ch{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:16px 20px 0}
+.ch h2{font-size:15px;font-weight:600;margin:0}
+.ch .aside{color:var(--muted);font-size:12.5px}
+.timing{padding:6px 20px 8px}
+.trow{display:grid;grid-template-columns:200px 1fr 260px;gap:24px;align-items:center;padding:14px 0}
+.trow+.trow{border-top:1px solid var(--rule)}
+.trow .who{font-weight:600;display:flex;gap:8px;align-items:center}
+.trow .sub{color:var(--muted);font-size:12.5px;margin-top:2px}
+.trow .head{font-weight:500}
+.trow.soon .head{color:var(--cm)}
+.trow .det{color:var(--muted);font-size:12.5px}
+.chart{padding:12px 20px 16px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--muted)}
+.legend span{display:flex;align-items:center;gap:6px}
+table{width:100%;border-collapse:collapse}
+th{font-size:12px;font-weight:500;color:var(--muted);text-align:left;padding:10px 12px;border-bottom:1px solid var(--border)}
+td{padding:0 12px;height:44px;border-bottom:1px solid var(--rule)}
+tr:last-child td{border-bottom:0}
+th:first-child,td:first-child{padding-left:20px} th:last-child,td:last-child{padding-right:20px}
+.n{text-align:right}
+.z{color:#a3aaa5}
+tbody tr{transition:background-color 120ms ease} tbody tr:hover{background:#f7f9f7}
+td .s{display:block;color:var(--muted);font-size:12px;line-height:1.2}
+td a{text-decoration:none;font-weight:500} td a:hover{text-decoration:underline}
+.pill{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:11px;font-size:12px;font-weight:500;white-space:nowrap}
+.pill.ok{background:var(--pill-ok-bg);color:var(--pill-ok-ink)} .pill.neg{background:var(--pill-neg-bg);color:var(--pill-neg-ink)} .pill.warn{background:var(--pill-warn-bg);color:var(--pill-warn-ink)}
+.rail{display:flex;flex-direction:column}
+.rail h3{font-size:14px;font-weight:600;margin:0 0 8px}
+.rail h3:not(:first-child){margin-top:20px}
+.list{list-style:none;margin:0;padding:0}
+.list li{display:flex;gap:12px;align-items:flex-start;padding:12px 16px;border-bottom:1px solid var(--rule)}
+.list li:last-child{border-bottom:0}
+.list .t{flex:1}
+.list .t b{font-weight:600}
+.list .t span{display:block;color:var(--muted);font-size:12.5px}
+.list li a{font-size:13px;font-weight:500;white-space:nowrap}
+.mk{width:8px;height:8px;border-radius:50%;margin-top:6px;flex:none;background:var(--muted)}
+.mk.neg{background:var(--negative)} .mk.warn{background:#c47a12}
+.crops{display:flex;gap:8px;padding:12px 16px 4px;flex-wrap:wrap}
+.crops .k-crop{width:52px;height:52px}
+.rail .foot{padding:8px 16px 14px}
+.hubrow{padding:14px 16px;display:flex;justify-content:space-between;gap:12px}
+.hubrow span{color:var(--muted);font-size:12.5px;display:block}
+@media (max-width:900px){
+  .grid{grid-template-columns:1fr}
+  .trow{grid-template-columns:1fr;gap:6px}
+}
+@media (max-width:640px){
+  .col{padding:0 16px}
+  nav,header .who{display:none}
+  .menu{display:inline-flex;margin-left:auto;height:44px;width:44px;align-items:center;justify-content:center;background:none;border:0}
+  .title{flex-direction:column;align-items:stretch;padding-top:8px}
+  .title .btn{height:44px;justify-content:center}
+  h1{font-size:22px}
+  .kpis{grid-template-columns:1fr 1fr}
+  .kpi:nth-child(3){border-left:0} .kpi:nth-child(n+3){border-top:1px solid var(--border)}
+  .trap-table thead{display:none}
+  .trap-table tr{display:grid;grid-template-columns:1fr auto;padding:10px 16px;border-bottom:1px solid var(--rule)}
+  .trap-table td{height:auto;border:0;padding:0!important}
+  .trap-table td.hide{display:none}
+  .trap-table td.m2{grid-column:1/-1;color:var(--muted);font-size:12.5px}
+}
+@media (prefers-reduced-motion:reduce){.btn{transition:none}}
+</style>
+</head>
+<body>
+<header class="col">
+  <a class="mark" href="#"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><path d="M11 6.5c-2-1.6-6.5-1.4-7 3.2-.5 4.4 2.8 9 5 9 .9 0 1.3-.5 2-.5s1.1.5 2 .5c2.2 0 5.5-4.6 5-9-.5-4.6-5-4.8-7-3.2Z" fill="#0d110e"/><path d="M11 6.5c0-2 .8-3.4 2.4-4" stroke="#0d110e" stroke-width="1.6" fill="none" stroke-linecap="round"/><circle cx="11" cy="12.2" r="2.2" fill="#f2f5f2"/></svg>Orchard Sentinel</a>
+  <nav aria-label="Main"><a class="on" href="#">Orchard</a><a href="#">Review<span class="n">6</span></a><a href="#">Traps</a><a href="#">Set up</a></nav>
+  <span class="who">Lansing Ridge Orchard</span>
+  <button class="menu" aria-label="Menu"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M3 6h14M3 10h14M3 14h14" stroke="#0d110e" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+</header>
+<main class="col">
+  <div class="title">
+    <div><h1>This week in the orchard</h1><p id="line"></p></div>
+    <a class="btn primary" href="#">Review 6 insects</a>
+  </div>
+  <div class="grid">
+    <div class="main">
+      <div class="card kpis" id="kpis"></div>
+      <section class="card" aria-labelledby="t-h">
+        <div class="ch"><h2 id="t-h">Spray timing</h2><span class="aside">From each lure's biofix and NEWA degree days</span></div>
+        <div class="timing" id="timing"></div>
+      </section>
+      <section class="card" aria-labelledby="c-h">
+        <div class="ch"><h2 id="c-h">New catches per day, last 30 days</h2><span class="legend" id="legend"></span></div>
+        <div class="chart" id="chart"></div>
+      </section>
+      <section class="card" aria-labelledby="tr-h">
+        <div class="ch" style="padding-bottom:6px"><h2 id="tr-h">Each trap, last 7 days</h2><a href="#" style="font-size:13px">Add or remove traps</a></div>
+        <table class="trap-table"><thead><tr><th>Trap</th><th>Status</th><th class="n">CM</th><th class="n">OFM</th><th class="n">OBLR</th><th class="n">Liner</th><th class="n">Battery</th></tr></thead><tbody id="traps"></tbody></table>
+      </section>
+    </div>
+    <aside class="rail">
+      <h3>Needs a look</h3>
+      <ul class="card list" id="look"></ul>
+      <h3>Waiting for you</h3>
+      <div class="card"><div class="crops" id="crops"></div><div class="foot"><a class="btn ghost" href="#">Open the review queue</a></div></div>
+      <h3>Hub</h3>
+      <div class="card hubrow" id="hub"></div>
+      <h3>Recent</h3>
+      <ul class="card list" id="events"></ul>
+    </aside>
+  </div>
+</main>
+<script src="data.js"></script><script src="kit.js"></script>
+<script>
+const { traps, pheno, week, pending, reporting, hub, review, events, LABEL, PESTS, weekday, ago, LINER_MAX_DAYS } = OS;
+const $ = (id) => document.getElementById(id);
+$('line').innerHTML = `${weekday} · ${reporting} of ${traps.length} traps reporting · <b>Codling moth first spray in about 1 day</b>`;
+$('kpis').innerHTML = PESTS.map((sp) => `<div class="kpi${sp === 'CM' ? ' lead' : ''}"><div class="l">${LABEL[sp]}</div><div class="v">${week[sp]}</div><div class="c">caught Jun 9–15, all traps</div></div>`).join('')
+  + `<div class="kpi"><div class="l">To confirm</div><div class="v">${pending}</div><div class="c">not counted until confirmed</div></div>`;
+const trapsFor = (sp) => [...new Set(traps.filter((t) => t.lure === sp).map((t) => t.name))].join(', ');
+$('timing').innerHTML = PESTS.map((sp) => { const p = pheno[sp]; return `<div class="trow ${p.state}"><div><div class="who"><i class="dot c-${sp}"></i>${LABEL[sp]}</div><div class="sub">${trapsFor(sp)}</div></div><div>${Kit.dd(sp)}</div><div><div class="head">${p.headline}</div><div class="det">${p.detail}</div></div></div>`; }).join('');
+$('legend').innerHTML = [...PESTS, 'other_moth'].map((sp) => `<span><i class="dot c-${sp}"></i>${sp === 'other_moth' ? 'Other' : sp}</span>`).join('');
+Kit.stack($('chart'), { height: 150, labels: 'weeks' });
+$('traps').innerHTML = traps.map((t) => {
+  const st = t.state === 'offline' ? `<span class="pill neg">Offline, ${ago(t.lastMin)}</span>` : `<span class="pill ok">Online, ${ago(t.lastMin)}</span>`;
+  const c = (sp) => { const n = t.week[sp] || 0; return `<td class="n hide ${n ? '' : 'z'}">${n}</td>`; };
+  const n = t.week[t.lure] || 0;
+  return `<tr><td><a href="#">${t.name}</a><span class="s">${t.id} · ${t.lure} lure · ${t.block}</span></td><td class="n" style="text-align:left">${st}</td>${c('CM')}${c('OFM')}${c('OBLR')}<td class="n hide">${t.linerDays > LINER_MAX_DAYS ? `<span class="pill warn">${t.linerDays} d</span>` : t.linerDays + ' d'}</td><td class="n hide">${t.battery.toFixed(2)} V</td><td class="m2" style="display:none"></td></tr>`;
+}).join('');
+// phone: the hidden fields return as a second line
+if (matchMedia('(max-width:640px)').matches) document.querySelectorAll('.trap-table tbody tr').forEach((tr, i) => { const t = traps[i]; const m = tr.querySelector('.m2'); m.style.display = ''; m.textContent = `${t.week[t.lure] || 0} ${t.lure} this week · liner ${t.linerDays} d · ${t.battery.toFixed(2)} V`; });
+const off = traps.filter((t) => t.state === 'offline'), old = traps.filter((t) => t.linerDays > LINER_MAX_DAYS);
+$('look').innerHTML = off.map((t) => `<li><i class="mk neg"></i><div class="t"><b>${t.name} ${t.id}</b> hasn't sent a photo for ${ago(t.lastMin).replace(' ago', '')}<span>Battery read ${t.battery.toFixed(2)} V. Check it and the Wi-Fi.</span></div><a href="#">Open</a></li>`).join('')
+  + old.map((t) => `<li><i class="mk warn"></i><div class="t"><b>${t.name} ${t.id}</b> liner is ${t.linerDays} days old<span>Old glue catches less. Change it at the next visit.</span></div><a href="#">New liner</a></li>`).join('');
+$('crops').innerHTML = review.map((r) => Kit.moth(r.guess, r.seed, 52)).join('');
+$('hub').innerHTML = `<div><b>${hub.name}</b><span>${hub.cameras} cameras · ${hub.link}</span></div><span class="pill ok">Checked in ${ago(hub.seenMin)}</span>`;
+$('events').innerHTML = events.slice(0, 4).map((e) => `<li><div class="t">${e.what} · ${e.trap}<span>${e.at} · ${e.note}</span></div></li>`).join('');
+</script>
+</body>
+</html>

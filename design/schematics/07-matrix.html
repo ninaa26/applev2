@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Trap Matrix · Orchard Sentinel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="kit.css">
+<style>
+/* Direction 7, Trap matrix (taste-skill app style data-terminal, icon rail).
+   The move: every selection is one 1px accent line exactly as wide as its label; numbers stay white or
+   grey and carry their sign in text. Every figure in IBM Plex Mono as the style's decision, so counts
+   stack in columns; text in Public Sans. Face: the accent line in apple-leaf green; the signature is the
+   trap-by-day matrix: six traps, seven days, every photo day a cell, gaps where a camera went quiet.
+   For the scout or consultant who watches many traps. Grid: rail 52 + canvas, 8/4 split, 12px gaps. */
+:root{
+  color-scheme:dark;
+  --ground:#141517; --surface:#1b1c1f; --nested:#232428; --rule:#2b2d31;
+  --ink:#f2f2f3; --muted:#9a9ca3; --dim:#6c6e75; --grid:#2b2d31; --track:#2f3135;
+  --accent:#7cc48f; --cm:#ef8790; --ofm:#eeb15e; --oblr:#78b8de; --other:#5d6066; --negative:#f2837a;
+  --liner:#e6e4da; --liner-grid:#b8b5a6; --crop-radius:2px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font:13.5px/1.45 "Public Sans",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.num,td.n,.v{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums}
+.app{display:grid;grid-template-columns:52px 1fr;min-height:100vh}
+.rail{border-right:1px solid var(--rule);display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 0}
+.rail a{width:40px;height:40px;display:flex;align-items:center;justify-content:center;color:var(--dim);position:relative}
+.rail a:hover{color:var(--ink)}
+.rail a.on{color:var(--ink)}
+.rail a.on::after{content:"";position:absolute;left:-6px;top:10px;bottom:10px;width:1px;background:var(--accent)}
+.rail .logo{margin-bottom:12px}
+.body{min-width:0}
+.top{height:48px;border-bottom:1px solid var(--rule);display:flex;align-items:center;gap:20px;padding:0 20px}
+.top b{font-weight:600}
+.top .crumb{color:var(--muted)}
+.tabs{display:flex;gap:18px;margin-left:12px}
+.tabs a{color:var(--muted);text-decoration:none;padding:13px 0;position:relative}
+.tabs a.on{color:var(--ink)}
+.tabs a.on::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;background:var(--accent)}
+.top .stamp{margin-left:auto;color:var(--muted);font-size:12.5px}
+.btn{display:inline-flex;align-items:center;justify-content:center;height:30px;padding:0 12px;border-radius:4px;border:1px solid var(--rule);background:var(--nested);color:var(--ink);font:500 13px "Public Sans",sans-serif;text-decoration:none;cursor:pointer;transition:transform 120ms cubic-bezier(.23,1,.32,1),border-color 120ms ease}
+.btn:active{transform:scale(.97)}
+.btn.pri{background:var(--ink);color:#111;border-color:var(--ink)}
+.btn:hover{border-color:#44474d}
+main{padding:16px 20px 40px;display:grid;grid-template-columns:2fr 1fr;gap:12px;align-items:start}
+.card{background:var(--surface);border-radius:6px;min-width:0}
+.ch{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--rule)}
+.ch h2{font-size:13.5px;font-weight:600;margin:0}
+.ch span{color:var(--muted);font-size:12px}
+.kp{display:grid;grid-template-columns:repeat(5,1fr);grid-column:1/-1}
+.kp div{padding:12px 14px}
+.kp div+div{border-left:1px solid var(--rule)}
+.kp .l{color:var(--muted);font-size:12px;display:flex;gap:6px;align-items:center}
+.kp .v{font-size:22px;margin-top:2px}
+.kp .c{color:var(--muted);font-size:12px}
+.kp .v.due{color:var(--cm)}
+table{width:100%;border-collapse:collapse}
+th{font-weight:500;color:var(--muted);font-size:12px;text-align:right;padding:8px 10px;border-bottom:1px solid var(--rule)}
+th:first-child{text-align:left}
+td{padding:0 10px;height:38px;border-bottom:1px solid var(--rule)}
+tr:last-child td{border-bottom:0}
+td:first-child{padding-left:14px} th:first-child{padding-left:14px}
+td.n{text-align:right}
+td.cell{text-align:center;font-family:"IBM Plex Mono",monospace;width:52px;position:relative}
+td.cell span{display:inline-flex;align-items:center;justify-content:center;width:36px;height:26px;border-radius:3px}
+td.cell .gap{color:var(--negative)}
+td.z{color:var(--dim)}
+.who{white-space:nowrap}
+.who small{display:block;color:var(--muted);font-size:11.5px}
+tbody tr:hover td{background:#202125}
+.timing td{height:auto;padding:10px 14px}
+.timing .k-dd{min-width:160px}
+.log{list-style:none;margin:0;padding:0;font-size:12.5px}
+.log li{display:grid;grid-template-columns:96px 34px 1fr;gap:8px;padding:8px 14px;border-bottom:1px solid var(--rule)}
+.log li:last-child{border-bottom:0}
+.log .t{color:var(--muted);font-family:"IBM Plex Mono",monospace}
+.log .bad{color:var(--negative)}
+.q{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;padding:12px 14px}
+.q .k-crop{width:100%;height:auto}
+.chart{padding:10px 14px 12px}
+@media (max-width:1100px){main{grid-template-columns:1fr}.kp{grid-template-columns:repeat(3,1fr)}.kp div:nth-child(4){border-left:0}.kp div:nth-child(n+4){border-top:1px solid var(--rule)}}
+@media (max-width:700px){
+  .app{grid-template-columns:1fr;padding-bottom:58px}
+  .rail{position:fixed;bottom:0;left:0;right:0;flex-direction:row;justify-content:space-around;height:56px;padding:0;background:var(--ground);border-right:0;border-top:1px solid var(--rule);z-index:3}
+  .rail .logo{display:none}
+  .rail a{width:48px;height:48px}
+  .rail a.on::after{left:12px;right:12px;top:auto;bottom:-3px;width:auto;height:1px}
+  .top{padding:0 16px;gap:10px}.tabs,.top .crumb,.top .stamp{display:none}.top .btn.pri{margin-left:auto;height:36px}
+  main{padding:12px 16px}
+  .kp{grid-template-columns:1fr 1fr}.kp div{border-left:0!important;border-top:1px solid var(--rule)}.kp div:first-child{grid-column:1/-1;border-top:0}
+  .scroll{overflow-x:auto}
+  .q{grid-template-columns:repeat(3,1fr)}
+  .timing .det{display:none}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="rail" aria-label="Main">
+    <svg class="logo" width="26" height="26" viewBox="0 0 26 26" aria-label="Orchard Sentinel"><rect x="1" y="1" width="24" height="24" rx="4" fill="none" stroke="#7cc48f" stroke-width="1.4"/><path d="M7 17 13 7l6 10" stroke="#f2f2f3" stroke-width="1.6" fill="none" stroke-linejoin="round"/></svg>
+    <a class="on" href="#" aria-label="Orchard" title="Orchard"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 2h6v6H2zM10 2h6v6h-6zM2 10h6v6H2zM10 10h6v6h-6z" fill="none" stroke="currentColor" stroke-width="1.3"/></svg></a>
+    <a href="#" aria-label="Confirm, 6 waiting" title="Confirm, 6 waiting"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="m3 9.5 4 4 8-9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></a>
+    <a href="#" aria-label="Traps" title="Traps"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 15 9 3l7 12z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></a>
+    <a href="#" aria-label="Hub and cameras" title="Hub and cameras"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 10a8 8 0 0 1 12 0M5.5 12.5a4.5 4.5 0 0 1 7 0" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></a>
+  </nav>
+  <div class="body">
+    <header class="top"><h1 style="font-size:14px;font-weight:600;margin:0">Lansing Ridge</h1><span class="crumb">6 traps · 1 hub</span><nav class="tabs" aria-label="Range"><a class="on" href="#">7 days</a><a href="#">30 days</a><a href="#">Season</a></nav><span class="stamp num" id="stamp"></span><a class="btn pri" href="#">Confirm 6</a></header>
+    <main>
+      <div class="card kp" id="kp"></div>
+      <section class="card" aria-labelledby="m-h">
+        <div class="ch"><h2 id="m-h">New moths per trap per day</h2><span>Lure species only · ! = no photo that day</span></div>
+        <div class="scroll"><table><thead><tr id="mh"></tr></thead><tbody id="mb"></tbody></table></div>
+      </section>
+      <section class="card" aria-labelledby="g-h">
+        <div class="ch"><h2 id="g-h">Photo log</h2><span>newest first</span></div>
+        <ul class="log" id="log"></ul>
+      </section>
+      <section class="card" aria-labelledby="d-h">
+        <div class="ch"><h2 id="d-h">Degree days since biofix</h2><span>NEWA BE, Ithaca station</span></div>
+        <table class="timing"><tbody id="dd"></tbody></table>
+      </section>
+      <section class="card" aria-labelledby="r-h">
+        <div class="ch"><h2 id="r-h">Waiting to be confirmed</h2><a class="btn" href="#">Open</a></div>
+        <div class="q" id="q"></div>
+        <div class="chart" id="chart"></div>
+      </section>
+    </main>
+  </div>
+</div>
+<script src="data.js"></script><script src="kit.js"></script>
+<script>
+const { traps, pheno, week, reporting, review, pending, events, LABEL, PESTS, day, dayLabel, DAYS, ago } = OS;
+const $ = (id) => document.getElementById(id);
+$('stamp').textContent = 'Jun 15 06:14 · updated 1 min ago';
+$('kp').innerHTML = PESTS.map((sp) => `<div><div class="l"><i class="dot c-${sp}"></i>${sp} this week</div><div class="v${pheno[sp].state === 'soon' ? ' due' : ''}">${week[sp]}</div><div class="c">${pheno[sp].headline}</div></div>`).join('')
+  + `<div><div class="l">To confirm</div><div class="v">${pending}</div><div class="c">from T1, T2, T4</div></div><div><div class="l">Reporting</div><div class="v">${reporting}/${traps.length}</div><div class="c">T5 quiet ${ago(traps[4].lastMin).replace(' ago', '')}</div></div>`;
+const days = [...Array(7)].map((_, i) => day(DAYS - 7 + i));
+$('mh').innerHTML = '<th>Trap</th>' + days.map((d) => `<th style="text-align:center">${d.toLocaleDateString('en-US', { weekday: 'short' })} ${d.getDate()}</th>`).join('') + '<th>Week</th>';
+const maxv = 3;
+$('mb').innerHTML = traps.map((t) => { const row = Kit.trap7[t.id], tot = row.reduce((s, v) => s + (v || 0), 0);
+  return `<tr><td class="who">${t.id} ${t.name}<small>${t.lure} lure</small></td>${row.map((v) => v == null ? '<td class="cell"><span class="gap" title="No photo">!</span></td>' : `<td class="cell"><span style="background:color-mix(in srgb, var(--${t.lure.toLowerCase()}) ${v ? 18 + 60 * v / maxv : 0}%, transparent);color:${v ? 'var(--ink)' : 'var(--dim)'}">${v}</span></td>`).join('')}<td class="n">${tot}</td></tr>`; }).join('');
+$('log').innerHTML = events.map((e) => `<li><span class="t">${e.at.replace('Jun ', '06-').replace(', ', ' ')}</span><span>${e.trap}</span><span class="${e.what === 'Camera went quiet' ? 'bad' : ''}">${e.what} · ${e.note}</span></li>`).join('');
+$('dd').innerHTML = PESTS.map((sp) => `<tr><td class="who">${sp}<small>biofix ${dayLabel(pheno[sp].biofix)}</small></td><td style="width:60%">${Kit.dd(sp, { compact: true })}</td></tr>`).join('');
+$('q').innerHTML = review.map((r) => Kit.moth(r.guess, r.seed, 60)).join('');
+Kit.stack($('chart'), { height: 90 });
+</script>
+</body>
+</html>

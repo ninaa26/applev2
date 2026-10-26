@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Night Network · Orchard Sentinel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="kit.css">
+<style>
+/* Direction 6, Night network (taste-skill app style true-black-flat, shell ruled T-frame).
+   The move: elevation by lightness alone (ground, card one step up, nested panel one more), no borders
+   on cards; the active nav item only brightens; the primary is an inverted pill. Colour only on data.
+   Face: a warm near-black for a fieldhouse at 5 a.m.; the signature is the network: the hub in the barn,
+   each camera's link to it, the photo it last sent and its battery, as the lead block.
+   Grid: sidebar 210 + top bar 60 ruled 1px; canvas 2 columns 3fr/2fr with 16px gaps. */
+:root{
+  color-scheme:dark;
+  --ground:#0e0d0c; --surface:#191816; --nested:#252320; --rule:#2a2826;
+  --ink:#f1f1ee; --muted:#a29d94; --dim:#77726a; --grid:#2a2826; --track:#33302c;
+  --cm:#f08a8f; --ofm:#f0b45a; --oblr:#77b9e0; --other:#6f6b64; --ok:#7fcf95; --negative:#f2837a;
+  --liner:#e9e6da; --liner-grid:#bdb9a8;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font:14px/1.5 Inter,system-ui,sans-serif;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+.app{display:grid;grid-template-columns:210px 1fr;grid-template-rows:60px 1fr;min-height:100vh}
+.brand{display:flex;align-items:center;gap:9px;padding:0 18px;font-weight:600;border-right:1px solid var(--rule);border-bottom:1px solid var(--rule)}
+.top{display:flex;align-items:center;gap:14px;padding:0 24px;border-bottom:1px solid var(--rule)}
+.top .t{font-weight:600}
+.top .live{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:13px}
+.top .live i{width:7px;height:7px;border-radius:50%;background:var(--ok)}
+.btn{display:inline-flex;align-items:center;justify-content:center;height:36px;padding:0 16px;border-radius:999px;border:0;font:500 14px Inter,sans-serif;cursor:pointer;text-decoration:none;transition:transform 140ms cubic-bezier(.23,1,.32,1),opacity 150ms ease}
+.btn:active{transform:scale(.97)}
+.btn.inv{background:#fff;color:#000;margin-left:auto}.btn.inv:hover{opacity:.9}
+.btn.q{background:var(--nested);color:var(--ink)}
+.side{border-right:1px solid var(--rule);padding:14px 10px;display:flex;flex-direction:column;gap:2px}
+.side a{display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:8px;color:#bbb6ad;text-decoration:none;transition:color 120ms ease}
+.side a:hover{color:#fff}
+.side a.on{color:#fff;font-weight:500}
+.side a .n{margin-left:auto;font-size:12px;color:var(--muted)}
+main{padding:24px;display:grid;grid-template-columns:3fr 2fr;gap:16px;align-content:start;min-width:0}
+.card{background:var(--surface);border-radius:20px;padding:18px 20px;min-width:0}
+.card h2{font-size:15px;font-weight:600;margin:0;display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.card h2 span{font-size:12.5px;font-weight:400;color:var(--muted)}
+.full{grid-column:1/-1}
+.net{margin-top:8px}
+.net svg{display:block;width:100%;height:auto}
+.net text{font-family:Inter,sans-serif}
+.cams{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+.cam{background:var(--nested);border-radius:14px;padding:12px 14px}
+.cam b{font-weight:500;display:block}
+.cam .s{color:var(--muted);font-size:12.5px}
+.cam .s.off{color:var(--negative)}
+.batt{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12px;color:var(--muted)}
+.batt span{flex:1;height:4px;background:var(--track);border-radius:2px;overflow:hidden}
+.batt span i{display:block;height:100%;background:#d8d4cc}
+.batt.low span i{background:var(--negative)}
+.pest{padding:14px 0;border-top:1px solid var(--rule)}
+.pest:first-of-type{border-top:0}
+.pest .r{display:flex;justify-content:space-between;align-items:baseline}
+.pest .nm{display:flex;align-items:center;gap:8px;font-weight:500}
+.pest .v{font-size:24px;font-weight:500}
+.pest .hl{color:var(--muted);margin:2px 0 8px;font-size:13px}
+.pest.soon .hl{color:var(--cm)}
+.chart{margin-top:10px}
+.legend{display:flex;gap:12px;font-size:12px;color:var(--muted)}
+.legend span{display:flex;gap:5px;align-items:center}
+.q{display:flex;gap:8px;margin:12px 0;flex-wrap:wrap}
+.q .k-crop{width:64px;height:64px}
+.menu{display:none}
+@media (max-width:1100px){main{grid-template-columns:1fr}.cams{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:760px){
+  .app{grid-template-columns:1fr;grid-template-rows:56px auto 1fr}
+  .brand{border-right:0;grid-column:1}
+  .menu{display:inline-flex;margin-left:auto;width:44px;height:44px;align-items:center;justify-content:center;background:none;border:0;color:var(--ink)}
+  .side{display:none}
+  .top{padding:10px 16px;flex-wrap:wrap}
+  .top .btn.inv{width:100%;height:44px}
+  main{padding:16px}
+  .cams{grid-template-columns:1fr 1fr}
+  .net{display:none}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="brand"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><circle cx="11" cy="11" r="3" fill="#f3f1ec"/><path d="M4.6 8a7 7 0 0 1 12.8 0M6.6 14.6a5 5 0 0 0 8.8 0" stroke="#f3f1ec" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>Orchard Sentinel<button class="menu" aria-label="Menu"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M3 6h14M3 10h14M3 14h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button></div>
+  <header class="top"><h1 class="t" style="font-size:16px;margin:0">Lansing Ridge</h1><span class="live" id="live"></span><a class="btn inv" href="#">Confirm 6 insects</a></header>
+  <nav class="side" aria-label="Main"><a class="on" href="#">Orchard</a><a href="#">Confirm<span class="n">6</span></a><a href="#">Traps</a><a href="#">Hub and cameras</a><a href="#">Season</a><a href="#" style="margin-top:auto">Settings</a></nav>
+  <main>
+    <section class="card" aria-labelledby="n-h">
+      <h2 id="n-h">Cameras and hub <span id="nsub"></span></h2>
+      <div class="net" id="net"></div>
+      <div class="cams" id="cams"></div>
+    </section>
+    <section class="card" aria-labelledby="p-h">
+      <h2 id="p-h">This week <span>Jun 9–15</span></h2>
+      <div id="pests"></div>
+      <h2 style="margin-top:14px">Waiting for a person <span>6 crops</span></h2>
+      <div class="q" id="q"></div>
+      <a class="btn q" href="#">Open the queue</a>
+    </section>
+    <section class="card full" aria-labelledby="c-h"><h2 id="c-h">New catches per day, last 30 days <span class="legend" id="legend"></span></h2><div class="chart" id="chart"></div></section>
+  </main>
+</div>
+<script src="data.js"></script><script src="kit.js"></script>
+<script>
+const { traps, pheno, week, reporting, review, hub, LABEL, PESTS, weekday, ago } = OS;
+const $ = (id) => document.getElementById(id);
+$('live').innerHTML = `<i></i>${weekday}, 06:14 · hub checked in ${ago(hub.seenMin)}`;
+$('nsub').textContent = `${reporting} of ${traps.length} sending`;
+// network: hub at the barn, cameras placed as on the orchard plan, a line for each link
+const W = 640, H = 300, hx = W * 0.86, hy = H * 0.72;
+let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Fieldhouse hub and its ${traps.length} cameras; ${traps.length - reporting} offline">`;
+for (const t of traps) { const x = t.x * W * 0.92 + 20, y = t.y * H, off = t.state === 'offline';
+  s += `<path d="M${x} ${y} Q ${(x + hx) / 2} ${Math.min(y, hy) - 30} ${hx} ${hy}" fill="none" stroke="${off ? 'var(--negative)' : '#4a4640'}" stroke-width="1.5" ${off ? 'stroke-dasharray="4 5"' : ''}/>`; }
+for (const t of traps) { const x = t.x * W * 0.92 + 20, y = t.y * H, off = t.state === 'offline';
+  s += `<circle cx="${x}" cy="${y}" r="16" fill="${off ? '#0e0d0c' : 'var(--nested)'}" stroke="${off ? 'var(--negative)' : 'var(--' + t.lure.toLowerCase() + ')'}" stroke-width="2"/><text x="${x}" y="${y + 4}" text-anchor="middle" font-size="11" font-weight="600" fill="${off ? 'var(--negative)' : '#f3f1ec'}">${t.id}</text><text x="${x}" y="${y + 32}" text-anchor="middle" font-size="11" fill="${off ? 'var(--negative)' : '#a29d94'}">${off ? 'quiet ' + ago(t.lastMin).replace(' ago', '') : ago(t.lastMin)}</text>`; }
+s += `<rect x="${hx - 34}" y="${hy - 20}" width="68" height="40" rx="10" fill="#f3f1ec"/><text x="${hx}" y="${hy + 4}" text-anchor="middle" font-size="12" font-weight="600" fill="#0e0d0c">Hub</text><text x="${hx}" y="${hy + 38}" text-anchor="middle" font-size="11" fill="#a29d94">Barn · cellular</text></svg>`;
+$('net').innerHTML = s;
+$('cams').innerHTML = traps.map((t) => { const off = t.state === 'offline', pct = Math.max(0, Math.min(1, (t.battery - 3.3) / 0.9));
+  return `<div class="cam"><b>${t.name} ${t.id}</b><span class="s${off ? ' off' : ''}">${off ? 'No photo for ' + ago(t.lastMin).replace(' ago', '') : 'Photo ' + ago(t.lastMin)}</span><div class="batt${t.battery < 3.5 ? ' low' : ''}"><span><i style="width:${pct * 100}%"></i></span>${t.battery.toFixed(2)} V</div></div>`; }).join('');
+$('pests').innerHTML = PESTS.map((sp) => { const p = pheno[sp]; return `<div class="pest ${p.state}"><div class="r"><span class="nm"><i class="dot c-${sp}"></i>${LABEL[sp]}</span><span class="v">${week[sp]}</span></div><p class="hl">${p.headline}</p>${Kit.dd(sp, { compact: true })}</div>`; }).join('');
+$('q').innerHTML = review.map((r) => Kit.moth(r.guess, r.seed, 64)).join('');
+$('legend').innerHTML = [...PESTS, 'other_moth'].map((sp) => `<span><i class="dot c-${sp}"></i>${sp === 'other_moth' ? 'Other' : sp}</span>`).join('');
+Kit.stack($('chart'), { height: 130, labels: 'weeks' });
+</script>
+</body>
+</html>

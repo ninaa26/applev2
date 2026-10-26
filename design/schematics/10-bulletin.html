@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Weekly Bulletin · Orchard Sentinel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="kit.css">
+<style>
+/* Direction 10, Weekly bulletin (taste-skill page direction borrowed-category, with the app style
+   "report": a generated report with no app around it). The orchard's week dressed as the printed pest
+   bulletin growers already read from extension: a masthead, a lead story for the pest that is due,
+   columns for the others, a table of traps. It prints on one Letter page and reads on a phone.
+   Column: 980px, 12 columns, 28px gutters; lead 8 + sidebar 4; three pest columns 4/4/4. */
+:root{
+  --paper:#fafafa; --ink:#181816; --muted:#5d5d57; --rule:#1818161f; --heavy:#181816;
+  --grid:#e6e6e0; --track:#e4e4dd;
+  --cm:#a3283a; --ofm:#a65a0e; --oblr:#285f7c; --other:#9a9b94; --negative:#b3261e;
+}
+*{box-sizing:border-box}
+body{margin:0;background:#ecece6;color:var(--ink);font:16px/1.55 "Source Sans 3",system-ui,sans-serif;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+.tools{max-width:980px;margin:0 auto;padding:14px 16px;display:flex;gap:8px;justify-content:flex-end;align-items:center}
+.tools span{margin-right:auto;color:var(--muted);font-size:14px}
+.btn{display:inline-flex;align-items:center;justify-content:center;height:38px;padding:0 16px;border:1px solid var(--heavy);background:transparent;color:var(--ink);font:600 14px "Source Sans 3",sans-serif;text-decoration:none;cursor:pointer;transition:transform 140ms cubic-bezier(.23,1,.32,1),background-color 150ms ease}
+.btn:active{transform:scale(.97)}
+.btn.fill{background:var(--ink);color:#fff}
+.btn:hover{background:#e2e2db}.btn.fill:hover{background:#33332f}
+.sheet{max-width:980px;margin:0 auto 48px;background:var(--paper);padding:36px 48px 48px}
+.mast{display:grid;grid-template-columns:1fr auto;align-items:end;border-bottom:3px solid var(--heavy);padding-bottom:10px}
+.mast .t{font:700 44px/1 "Source Serif 4",Georgia,serif;letter-spacing:-.01em}
+.mast .m{text-align:right;color:var(--muted);font-size:14px}
+.mast .m b{color:var(--ink);display:block;font-size:16px}
+.strap{display:flex;justify-content:space-between;gap:16px;border-bottom:1px solid var(--heavy);padding:6px 0;font-size:14px;color:var(--muted)}
+.g{display:grid;grid-template-columns:repeat(12,1fr);gap:28px;margin-top:24px}
+.lead{grid-column:span 8}
+.side{grid-column:span 4;border-left:1px solid var(--rule);padding-left:24px}
+.kick{font-size:14px;font-weight:600;color:var(--cm)}
+h1{font:700 40px/1.08 "Source Serif 4",Georgia,serif;margin:4px 0 12px;letter-spacing:-.01em}
+.lead p{font:400 18px/1.55 "Source Serif 4",Georgia,serif;margin:0 0 14px}
+.lead .k-dd{margin:18px 0 6px}
+h2{font:700 22px/1.2 "Source Serif 4",Georgia,serif;margin:0 0 8px}
+h3{font:600 15px "Source Sans 3",sans-serif;margin:0 0 6px}
+.side ul{list-style:none;margin:0 0 20px;padding:0}
+.side li{padding:9px 0;border-top:1px solid var(--rule);font-size:15px}
+.side li span{display:block;color:var(--muted);font-size:13.5px}
+.side .q{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:8px 0}
+.side .q .k-crop{width:100%;height:auto}
+.cols{border-top:1px solid var(--heavy);padding-top:18px}
+.col{grid-column:span 4}
+.col+.col{border-left:1px solid var(--rule);padding-left:24px}
+.col .n{font:600 40px/1 "Source Serif 4",serif}
+.col .n small{font:400 14px "Source Sans 3",sans-serif;color:var(--muted);margin-left:6px}
+.col p{font:400 16px/1.5 "Source Serif 4",serif;margin:8px 0 12px}
+.wide{grid-column:1/-1}
+table{width:100%;border-collapse:collapse;font-size:15px}
+th{font-weight:600;text-align:left;font-size:13.5px;color:var(--muted);border-bottom:1px solid var(--heavy);padding:6px 8px}
+td{padding:8px;border-bottom:1px solid var(--rule)}
+.n{text-align:right}
+.z{color:#a5a59e}
+.chart{margin-top:8px}
+.note{font-size:13px;color:var(--muted);margin-top:22px;border-top:1px solid var(--rule);padding-top:10px}
+@media (max-width:760px){
+  .sheet{padding:20px 16px 32px}
+  .mast .t{font-size:30px}
+  .mast{grid-template-columns:1fr}.mast .m{text-align:left;margin-top:6px}
+  .strap{flex-direction:column;gap:2px}
+  .g{grid-template-columns:1fr;gap:20px}
+  .lead,.side,.col{grid-column:1/-1}
+  .side,.col+.col{border-left:0;padding-left:0;border-top:1px solid var(--rule);padding-top:16px}
+  h1{font-size:30px}
+  .lead p{font-size:17px}
+  .tools .btn{flex:1;height:44px}.tools span{display:none}
+  .x{display:none}
+}
+@media print{body{background:#fff}.tools{display:none}.sheet{margin:0;padding:0;max-width:none}}
+</style>
+</head>
+<body>
+<div class="tools"><span>Orchard Sentinel · Lansing Ridge</span><a class="btn" href="#">Email to the crew</a><a class="btn fill" href="#" onclick="print();return false">Print</a></div>
+<article class="sheet">
+  <header class="mast"><div class="t">The Lansing Ridge Trap Report</div><div class="m"><b>Week 24</b>June 9–15, 2027</div></header>
+  <div class="strap"><span id="strap1"></span><span>Counts confirmed by a person · NEWA degree days, Ithaca station</span></div>
+  <div class="g">
+    <div class="lead">
+      <div class="kick">Codling moth · due</div>
+      <h1>First codling moth spray comes due Wednesday</h1>
+      <p id="lead1"></p>
+      <div id="cmdd"></div>
+      <p id="lead2"></p>
+    </div>
+    <aside class="side">
+      <h2>On the list</h2>
+      <ul id="look"></ul>
+      <h3>Still to confirm</h3>
+      <div class="q" id="q"></div>
+      <a class="btn" href="#" style="width:100%">Confirm 6 insects</a>
+    </aside>
+  </div>
+  <div class="g cols" id="cols"></div>
+  <div class="g">
+    <section class="wide">
+      <h2>Trap by trap</h2>
+      <table><thead><tr><th>Trap</th><th>Lure</th><th class="n">This week</th><th class="n x">To confirm</th><th class="n x">Liner age</th><th>Last photo</th></tr></thead><tbody id="tb"></tbody></table>
+    </section>
+    <section class="wide"><h2>Thirty days, whole orchard</h2><div class="chart" id="chart"></div></section>
+  </div>
+  <p class="note">Biofix is the first sustained catch: two or more moths a week, two weeks running. Degree days follow the NEWA Quick Guide for apple insect pests. Spray timings are guidance; check the label and your consultant.</p>
+</article>
+<script src="data.js"></script><script src="kit.js"></script>
+<script>
+const { traps, pheno, week, reporting, review, LABEL, PESTS, ago, LINER_MAX_DAYS, dayLabel } = OS;
+const $ = (id) => document.getElementById(id);
+const cm = pheno.CM;
+$('strap1').textContent = `${reporting} of ${traps.length} traps reporting · ${week.CM + week.OFM + week.OBLR} pest moths this week`;
+$('lead1').textContent = `Codling moth traps caught ${week.CM} moths this week, nine of them at North Gala. The orchard sits at ${cm.dd} degree days since the ${dayLabel(cm.biofix)} biofix, gaining about ${cm.rate} a day; the first spray for the overwintering generation is timed at 250, which this pace reaches on Wednesday.`;
+$('cmdd').innerHTML = Kit.dd('CM');
+$('lead2').textContent = 'Plan the second spray 10 to 14 days after the first. Road Block has no codling moth count this week: its camera has been quiet since Sunday.';
+$('look').innerHTML = `<li>Road Block T5 camera is quiet<span>No photo for ${ago(traps[4].lastMin).replace(' ago', '')}; battery ${traps[4].battery.toFixed(2)} V</span></li><li>Honeycrisp Hill T3 liner, ${traps[2].linerDays} days<span>Change it at the next visit</span></li><li>Hub checked in a minute ago<span>Fieldhouse, 6 cameras</span></li>`;
+$('q').innerHTML = review.map((r) => Kit.moth(r.guess, r.seed, 80)).join('');
+$('cols').innerHTML = PESTS.filter((sp) => sp !== 'CM').concat('OTHER').map((sp) => sp === 'OTHER'
+  ? `<section class="col"><h2>Other moths</h2><div class="n">${week.other_moth}<small>this week</small></div><p>Moths that aren't one of the three lure species. Kept for the record; not counted toward any biofix.</p></section>`
+  : `<section class="col"><h2>${LABEL[sp]}</h2><div class="n">${week[sp]}<small>this week</small></div><p>${pheno[sp].headline}. ${pheno[sp].detail}</p>${Kit.dd(sp, { compact: true })}</section>`).join('');
+
+$('tb').innerHTML = traps.map((t) => { const off = t.state === 'offline', n = t.week[t.lure] || 0;
+  return `<tr><td>${t.name} ${t.id}</td><td>${t.lure}</td><td class="n ${n || off ? '' : 'z'}">${off ? '—' : n}</td><td class="n x ${t.pending ? '' : 'z'}">${t.pending}</td><td class="n x">${t.linerDays} d${t.linerDays > LINER_MAX_DAYS ? ', change it' : ''}</td><td style="${off ? 'color:var(--negative)' : ''}">${ago(t.lastMin)}</td></tr>`; }).join('');
+Kit.stack($('chart'), { height: 130, labels: 'weeks' });
+</script>
+</body>
+</html>

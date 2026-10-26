@@ -18,4 +18,5 @@ camera_bench/
 
 # model weights (downloaded ones go to ml/models/detector/pretrained/; train_v2 writes ml/models/classifier/cnn/)
 *.pt
+.taste-skill/
 constraints.txt.new

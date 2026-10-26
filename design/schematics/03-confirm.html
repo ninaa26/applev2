@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Confirm First · Orchard Sentinel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="kit.css">
+<style>
+/* Direction 3, Confirm first (taste-skill app style accent-ladder).
+   The move: leaf green at full strength only on small marks (the primary, the active nav icon, the
+   confidence bars); its pale tints carry every area. Face: the ladder built from an apple leaf, and the
+   product's own objects in the lead block: the insects on the glue, as crops, waiting for a yes.
+   Canvas: sidebar 230 on the ground; content max 1180, 3 equal columns, 20px gutters. */
+:root{
+  --ground:#f7faf7; --surface:#fff; --border:#e3ebe4; --rule:#edf2ee; --control:#cfdcd2;
+  --ink:#122016; --muted:#56655a; --grid:#ebf0ec; --track:#e4ece6;
+  --leaf:#2f7a4a; --leaf-50:#f0f7f2; --leaf-100:#dcefe2; --leaf-200:#bfe0ca; --leaf-ink:#123d22;
+  --cm:#b3243a; --ofm:#bf6a10; --oblr:#2d6c8c; --other:#a9b3ab; --negative:#b3261e;
+  --crop-radius:10px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font:14.5px/1.5 "DM Sans",system-ui,sans-serif;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+.app{display:grid;grid-template-columns:230px 1fr;min-height:100vh}
+.side{padding:18px 12px;display:flex;flex-direction:column;gap:2px;position:sticky;top:0;height:100vh}
+.brand{display:flex;gap:10px;align-items:center;font-weight:700;padding:0 10px 20px;font-size:15px}
+.side a{display:flex;align-items:center;gap:10px;height:36px;padding:0 10px;border-radius:9px;text-decoration:none;color:var(--muted);font-weight:500;transition:background-color 120ms ease}
+.side a:hover{background:var(--leaf-50);color:var(--ink)}
+.side a.on{background:var(--leaf-100);color:var(--leaf-ink)}
+.side a.on svg{color:var(--leaf)}
+.side .n{margin-left:auto;font-size:12px;font-weight:600;background:var(--leaf-200);color:var(--leaf-ink);border-radius:10px;padding:0 7px;line-height:20px}
+.side .season{margin-top:auto;background:var(--leaf-50);border-radius:12px;padding:14px;font-size:13px;color:var(--leaf-ink)}
+.side .season b{display:block;font-size:13.5px}
+.bar{height:6px;background:var(--leaf-100);border-radius:3px;margin:10px 0 6px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--leaf)}
+main{padding:28px 32px 56px;max-width:1240px;min-width:0}
+.head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:22px}
+h1{font-size:24px;font-weight:700;margin:0;letter-spacing:-.01em}
+.head p{margin:2px 0 0;color:var(--muted)}
+.btn{display:inline-flex;align-items:center;justify-content:center;height:36px;padding:0 14px;border-radius:9px;border:0;font:600 14px "DM Sans",sans-serif;cursor:pointer;text-decoration:none;transition:transform 140ms cubic-bezier(.23,1,.32,1),background-color 150ms ease}
+.btn:active{transform:scale(.97)}
+.btn.primary{background:var(--leaf);color:#fff} .btn.primary:hover{background:#266a3e}
+.btn.soft{background:var(--leaf-50);color:var(--leaf-ink)} .btn.soft:hover{background:var(--leaf-100)}
+.btn.line{background:var(--surface);border:1px solid var(--control);color:var(--ink)} .btn.line:hover{background:#f6f9f6}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:14px}
+.ch{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:16px 20px 4px}
+.ch h2{font-size:16px;font-weight:700;margin:0}
+.ch .sub{color:var(--muted);font-size:13px}
+.queue{display:grid;grid-template-columns:repeat(3,1fr);gap:0}
+.q{display:grid;grid-template-columns:96px 1fr;gap:14px;padding:16px 20px;border-top:1px solid var(--rule)}
+.q:nth-child(-n+3){border-top:0}
+.q:not(:nth-child(3n+1)){border-left:1px solid var(--rule)}
+.q .k-crop{width:96px;height:96px}
+.q .g{font-weight:600;display:flex;align-items:center;gap:6px}
+.q .m{color:var(--muted);font-size:12.5px}
+.conf{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);margin:6px 0 10px}
+.conf .t{flex:1;height:5px;background:var(--leaf-100);border-radius:3px;overflow:hidden;max-width:90px}
+.conf .t i{display:block;height:100%;background:var(--leaf)}
+.q .acts{display:flex;gap:6px;flex-wrap:wrap}
+.q .acts .btn{height:32px;font-size:13px;padding:0 10px}
+.queue-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 20px;background:var(--leaf-50);border-radius:0 0 14px 14px;color:var(--leaf-ink);font-size:13.5px}
+.row3{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:20px}
+.pest{padding:16px 20px 18px}
+.pest .nm{display:flex;align-items:center;gap:8px;font-weight:600}
+.pest .big{display:flex;align-items:baseline;gap:8px;margin:8px 0 2px}
+.pest .big b{font-size:28px;font-weight:600;letter-spacing:-.01em}
+.pest .big span{color:var(--muted);font-size:13px}
+.tag{display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:11px;font-size:12px;font-weight:600}
+.tag.soon{background:#fbe6e8;color:#7d1a29} .tag.later{background:var(--leaf-50);color:var(--leaf-ink)}
+.pest .hl{margin:10px 0 12px;font-weight:600}
+.row2{display:grid;grid-template-columns:2fr 1fr;gap:20px;margin-top:20px;align-items:start}
+.chart{padding:8px 20px 16px}
+.legend{display:flex;gap:12px;color:var(--muted);font-size:12.5px}
+.legend span{display:flex;align-items:center;gap:5px}
+.health{list-style:none;margin:0;padding:6px 0 8px}
+.health li{display:flex;gap:10px;padding:10px 20px;align-items:flex-start}
+.health li+li{border-top:1px solid var(--rule)}
+.health .mk{width:8px;height:8px;border-radius:50%;margin-top:7px;flex:none;background:#3f9a5c}
+.health .mk.neg{background:var(--negative)} .health .mk.warn{background:#c47a12}
+.health span{display:block;color:var(--muted);font-size:12.5px}
+.topbar{display:none}
+@media (max-width:1100px){.queue{grid-template-columns:repeat(2,1fr)}.q:nth-child(-n+3){border-top:1px solid var(--rule)}.q:nth-child(-n+2){border-top:0}.q{border-left:0!important}.q:nth-child(2n){border-left:1px solid var(--rule)!important}.row3{grid-template-columns:1fr}.row2{grid-template-columns:1fr}}
+@media (max-width:800px){
+  .app{grid-template-columns:1fr}
+  .side{display:none}
+  .topbar{display:flex;align-items:center;justify-content:space-between;height:52px;padding:0 16px;background:var(--ground);position:sticky;top:0;z-index:2}
+  main{padding:8px 16px 40px}
+  .head{flex-direction:column;align-items:stretch}
+  .head .btn{height:44px}
+  .queue{grid-template-columns:1fr}
+  .q{border-left:0!important;border-top:1px solid var(--rule)!important}.q:first-child{border-top:0!important}
+  .q .acts .btn{height:44px;flex:1}
+}
+</style>
+</head>
+<body>
+<div class="topbar"><b style="font-size:15px">Orchard Sentinel</b><button class="btn line" style="height:40px" aria-label="Menu">Menu</button></div>
+<div class="app">
+  <aside class="side" aria-label="Main">
+    <div class="brand"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21C6 21 3.5 15 4.5 10.5 5.5 6 9 5.5 12 7.5 15 5.5 18.5 6 19.5 10.5 20.5 15 18 21 12 21Z" fill="#2f7a4a"/><path d="M12 7.5c.4-2.6 2-4.2 4.5-4.8" stroke="#2f7a4a" stroke-width="1.8" fill="none" stroke-linecap="round"/></svg>Orchard Sentinel</div>
+    <a href="#"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 7 8 2.5 13.5 7v6.5h-11z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>Orchard</a>
+    <a class="on" href="#"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="m3 8.5 3 3 7-7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>To confirm<span class="n">6</span></a>
+    <a href="#"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 13 8 3l6 10z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>Traps</a>
+    <a href="#"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 9a7 7 0 0 1 10 0M5 11a4 4 0 0 1 6 0" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>Hub and cameras</a>
+    <div class="season"><b>Season 2027</b>Week 24 of monitoring<div class="bar"><i style="width:48%"></i></div>Traps out Apr 26 · liners due Jun 22</div>
+  </aside>
+  <main>
+    <div class="head">
+      <div><h1>6 insects to confirm</h1><p id="line"></p></div>
+      <a class="btn primary" href="#">Confirm the 3 the model is surest of</a>
+    </div>
+    <section class="card" aria-labelledby="q-h">
+      <div class="ch"><h2 id="q-h">Waiting since this morning's photos</h2><span class="sub">Not counted until a person says yes</span></div>
+      <div class="queue" id="queue"></div>
+      <div class="queue-foot"><span>One in ten sure labels is also shown here as a spot check. Spot-check score this season: 41 of 43 right.</span><a class="btn soft" href="#">Open full queue</a></div>
+    </section>
+    <div class="row3" id="pests"></div>
+    <div class="row2">
+      <section class="card" aria-labelledby="c-h"><div class="ch"><h2 id="c-h">Confirmed catches per day</h2><span class="legend" id="legend"></span></div><div class="chart" id="chart"></div></section>
+      <section class="card" aria-labelledby="h-h"><div class="ch"><h2 id="h-h">Traps</h2><span class="sub" id="rep"></span></div><ul class="health" id="health"></ul></section>
+    </div>
+  </main>
+</div>
+<script src="data.js"></script><script src="kit.js"></script>
+<script>
+const { traps, pheno, week, reporting, review, LABEL, PESTS, weekday, ago, LINER_MAX_DAYS } = OS;
+const $ = (id) => document.getElementById(id);
+$('line').textContent = `${weekday} · confirming them finishes this week's counts for North Gala and Honeycrisp Hill`;
+const short = { CM: 'CM', OFM: 'OFM', OBLR: 'OBLR', other_moth: 'other moth' };
+$('queue').innerHTML = review.map((r) => { const t = traps.find((x) => x.id === r.trap);
+  return `<div class="q">${Kit.moth(r.guess, r.seed, 96)}<div><div class="g"><i class="dot c-${r.guess}"></i>${LABEL[r.guess]}?</div><div class="m">${t.name} ${t.id} · ${r.at}</div><div class="conf"><span class="t"><i style="width:${r.conf * 100}%"></i></span>${Math.round(r.conf * 100)}% sure</div><div class="acts"><a class="btn soft" href="#">Yes, ${short[r.guess]}</a><a class="btn line" href="#">Something else</a></div></div></div>`; }).join('');
+$('pests').innerHTML = PESTS.map((sp) => { const p = pheno[sp];
+  return `<section class="card pest"><div class="nm"><i class="dot c-${sp}"></i>${LABEL[sp]}</div><div class="big"><b>${week[sp]}</b><span>caught Jun 9–15</span></div><span class="tag ${p.state}">${p.state === 'soon' ? 'Due soon' : 'Coming up'}</span><p class="hl">${p.headline}</p>${Kit.dd(sp, { compact: true })}</section>`; }).join('');
+$('legend').innerHTML = [...PESTS, 'other_moth'].map((sp) => `<span><i class="dot c-${sp}"></i>${sp === 'other_moth' ? 'Other' : sp}</span>`).join('');
+Kit.stack($('chart'), { height: 150, labels: 'weeks' });
+$('rep').textContent = `${reporting} of ${traps.length} reporting`;
+$('health').innerHTML = traps.map((t) => { const off = t.state === 'offline', old = t.linerDays > LINER_MAX_DAYS;
+  return `<li><i class="mk ${off ? 'neg' : old ? 'warn' : ''}"></i><div>${t.name} ${t.id}<span>${off ? `Offline for ${ago(t.lastMin).replace(' ago', '')}, battery ${t.battery.toFixed(2)} V` : old ? `Liner ${t.linerDays} days old, change it` : `Photo ${ago(t.lastMin)} · liner ${t.linerDays} d`}</span></div></li>`; }).join('');
+</script>
+</body>
+</html>

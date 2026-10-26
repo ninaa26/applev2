@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pest Tiles · Orchard Sentinel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="kit.css">
+<style>
+/* Direction 5, Pest tiles (taste-skill app style pastel-consumer).
+   The move: pale same-hue tiles under one large radius, each pest's tile tinted from its own colour with
+   the dark of that hue as ink; quiet polarity. Face: Manrope's figures carry the count, 36px at 600.
+   Built for the truck cab: thumb-sized, one tile per pest, the decision on the tile.
+   Shell: icon rail 64px; canvas 3 equal tiles, 16px gap, then 2fr/1fr. */
+:root{
+  --ground:#f3f5f4; --surface:#fff; --rule:#e9eceb; --control:#d6dbd9;
+  --ink:#191d1b; --muted:#5f6764; --grid:#e8ecea; --track:rgba(0,0,0,.08);
+  --cm:#b4283c; --ofm:#b9620c; --oblr:#2a6d8f; --other:#a8b0ac; --negative:#b3261e;
+  --cm-bg:#fbe9eb; --cm-ink:#5e1220; --ofm-bg:#fcefdf; --ofm-ink:#5a3006; --oblr-bg:#e3f0f7; --oblr-ink:#123a4f;
+  --r:20px; --crop-radius:14px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font:15px/1.5 Manrope,system-ui,sans-serif;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+.app{display:grid;grid-template-columns:72px 1fr;min-height:100vh}
+.rail{display:flex;flex-direction:column;align-items:center;gap:6px;padding:16px 0;position:sticky;top:0;height:100vh}
+.rail .logo{margin-bottom:14px}
+.rail a{width:44px;height:44px;border-radius:14px;display:flex;align-items:center;justify-content:center;color:var(--muted);transition:background-color 120ms ease,color 120ms ease;position:relative}
+.rail a:hover{background:#e7ebe9;color:var(--ink)}
+.rail a.on{background:var(--surface);color:var(--ink)}
+.rail a .b{position:absolute;top:6px;right:6px;width:8px;height:8px;border-radius:50%;background:var(--cm)}
+main{padding:28px 28px 56px;min-width:0}
+.head{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:20px}
+h1{font-size:24px;font-weight:700;margin:0;letter-spacing:-.01em}
+.head p{margin:0;color:var(--muted)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:44px;padding:0 18px;border-radius:14px;border:0;font:600 14.5px Manrope,sans-serif;cursor:pointer;text-decoration:none;transition:transform 140ms cubic-bezier(.23,1,.32,1),background-color 150ms ease}
+.btn:active{transform:scale(.97)}
+.btn.primary{background:var(--ink);color:#fff}.btn.primary:hover{background:#30352f}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.tile{border-radius:var(--r);padding:20px 22px 22px;display:flex;flex-direction:column;min-width:0;transition:transform 160ms cubic-bezier(.23,1,.32,1)}
+.tile:active{transform:scale(.99)}
+.tile .nm{font-weight:600;display:flex;justify-content:space-between;align-items:center}
+.tile .nm small{font-weight:500;opacity:.8}
+.tile .v{font-size:38px;font-weight:600;letter-spacing:-.02em;line-height:1.1;margin-top:10px}
+.tile .v small{font-size:14px;font-weight:500;margin-left:6px;opacity:.8}
+.tile .when{margin-top:14px;padding:12px 14px;border-radius:14px;background:rgba(255,255,255,.65)}
+.tile .when b{display:block;font-size:16px}
+.tile .when span{font-size:13px;opacity:.85}
+.tile .k-dd{margin-top:14px}
+.tile .k-dd .k-ddlab,.tile .k-dd .k-ddlab b{color:inherit}
+.t-CM{background:var(--cm-bg);color:var(--cm-ink)}.t-OFM{background:var(--ofm-bg);color:var(--ofm-ink)}.t-OBLR{background:var(--oblr-bg);color:var(--oblr-ink)}
+.t-CM .k-tick.on,.t-CM .k-tick.next{background:var(--cm-ink)}.t-OFM .k-tick.on,.t-OFM .k-tick.next{background:var(--ofm-ink)}.t-OBLR .k-tick.on,.t-OBLR .k-tick.next{background:var(--oblr-ink)}
+.row{display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-top:16px;align-items:start}
+.card{background:var(--surface);border-radius:var(--r);padding:18px 20px;min-width:0}
+.card h2{font-size:16px;font-weight:700;margin:0 0 6px;display:flex;justify-content:space-between;align-items:baseline}
+.card h2 span{font-size:13px;font-weight:500;color:var(--muted)}
+.trap{display:grid;grid-template-columns:40px 1fr auto auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--rule)}
+.trap:first-of-type{border-top:0}
+.trap .ic{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
+.trap .s{display:block;color:var(--muted);font-size:13px}
+.trap .n{font-size:20px;font-weight:600;min-width:2ch;text-align:right}
+.trap .warn{font-size:12.5px;font-weight:600;padding:3px 9px;border-radius:9px;background:#fdecea;color:#7f1d1a;white-space:nowrap}
+.trap .warn.amber{background:#fcf0dc;color:#6e3d05}
+.q{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0 14px}
+.q .k-crop{width:100%;height:auto}
+.chart{margin-top:8px}
+@media (max-width:1000px){.tiles{grid-template-columns:1fr}.row{grid-template-columns:1fr}}
+@media (max-width:700px){
+  .app{grid-template-columns:1fr;padding-bottom:72px}
+  .rail{position:fixed;top:auto;bottom:0;left:0;right:0;height:64px;flex-direction:row;justify-content:space-around;background:var(--surface);padding:0 8px;z-index:5;border-top:1px solid var(--rule)}
+  .rail .logo{display:none}
+  main{padding:18px 16px 24px}
+  .head{flex-direction:column;align-items:stretch}
+  .trap{grid-template-columns:40px 1fr auto}
+  .trap .warn{grid-column:2/-1;justify-self:start}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="rail" aria-label="Main">
+    <svg class="logo" width="34" height="34" viewBox="0 0 34 34" aria-label="Orchard Sentinel"><rect width="34" height="34" rx="11" fill="#191d1b"/><path d="M17 26c-5 0-7-5-6-8.6S15 13 17 14.6c2-1.6 5-1.2 6 2.8S22 26 17 26Z" fill="#fbe9eb"/><path d="M17 14.6c.3-2.2 1.5-3.4 3.4-3.9" stroke="#fbe9eb" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>
+    <a class="on" href="#" aria-label="Orchard" title="Orchard"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M3 9 10 3l7 6v8H3z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></a>
+    <a href="#" aria-label="Confirm 6 insects" title="Confirm 6 insects"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="m4 10.5 4 4 8-9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><i class="b"></i></a>
+    <a href="#" aria-label="Traps" title="Traps"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M3 16 10 4l7 12z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></a>
+    <a href="#" aria-label="Hub and cameras" title="Hub and cameras"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M4 11a8.5 8.5 0 0 1 12 0M6.5 13.5a5 5 0 0 1 7 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="10" cy="16" r="1.2" fill="currentColor"/></svg></a>
+  </nav>
+  <main>
+    <div class="head"><div><h1>Lansing Ridge</h1><p id="line"></p></div><a class="btn primary" href="#">Confirm 6 insects</a></div>
+    <div class="tiles" id="tiles"></div>
+    <div class="row">
+      <section class="card" aria-labelledby="t-h"><h2 id="t-h">Traps <span id="rep"></span></h2><div id="traps"></div></section>
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <section class="card" aria-labelledby="q-h"><h2 id="q-h">To confirm <span>6 from today</span></h2><div class="q" id="q"></div><a class="btn primary" style="width:100%" href="#">Start confirming</a></section>
+        <section class="card" aria-labelledby="c-h"><h2 id="c-h">Last 30 days</h2><div class="chart" id="chart"></div></section>
+      </div>
+    </div>
+  </main>
+</div>
+<script src="data.js"></script><script src="kit.js"></script>
+<script>
+const { traps, pheno, week, reporting, review, LABEL, PESTS, weekday, ago, LINER_MAX_DAYS } = OS;
+const $ = (id) => document.getElementById(id);
+$('line').textContent = `${weekday} · ${reporting} of ${traps.length} traps reporting`;
+$('tiles').innerHTML = PESTS.map((sp) => { const p = pheno[sp]; const n = traps.filter((t) => t.lure === sp).length;
+  return `<a class="tile t-${sp}" href="#" style="text-decoration:none"><div class="nm">${LABEL[sp]}<small>${n} trap${n > 1 ? 's' : ''}</small></div><div class="v">${week[sp]}<small>caught this week</small></div><div class="when"><b>${p.headline}</b><span>${p.detail.split('.')[0]}.</span></div>${Kit.dd(sp, { compact: true })}</a>`; }).join('');
+$('rep').textContent = `${reporting} of ${traps.length} reporting`;
+$('traps').innerHTML = traps.map((t) => { const off = t.state === 'offline', old = t.linerDays > LINER_MAX_DAYS, n = t.week[t.lure] || 0;
+  return `<div class="trap"><span class="ic" style="background:var(--${t.lure.toLowerCase()}-bg);color:var(--${t.lure.toLowerCase()}-ink)">${t.id}</span><div>${t.name}<span class="s">${t.lure} lure · photo ${ago(t.lastMin)}</span></div>${off ? `<span class="warn">Offline ${ago(t.lastMin).replace(' ago', '')}</span>` : old ? `<span class="warn amber">Liner ${t.linerDays} d old</span>` : '<span></span>'}<span class="n">${off ? '—' : n}</span></div>`; }).join('');
+$('q').innerHTML = review.map((r) => Kit.moth(r.guess, r.seed, 90)).join('');
+Kit.stack($('chart'), { height: 110 });
+</script>
+</body>
+</html>
