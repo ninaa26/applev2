@@ -33,6 +33,7 @@ button.primary:hover { background:var(--mauve); }
 button.small { font-size:11px; padding:2px 6px; margin-top:4px; }
 .row { display:flex; gap:4px; flex-wrap:wrap; } .row > button { flex:1; }
 .mute { color:var(--mute); font-size:12px; }
+.photo-meta { display:block; text-align:center; }  /* the photo's name, scale and notes under its buttons */
 .line { display:flex; align-items:center; gap:6px; font-size:12px; margin:4px 0; } .line input[type=range] { flex:1; accent-color:var(--green); }
 input[type=checkbox] { accent-color:var(--green); }
 select, textarea, input[type=text] { font:inherit; font-size:12px; background:var(--field); color:var(--ink); border:1px solid var(--hair-strong); border-radius:8px; padding:4px; }

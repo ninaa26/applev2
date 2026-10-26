@@ -106,7 +106,7 @@ function renderActions() {
       <div class="row"><button id="accept" class="primary">Accept</button><button id="sendBack">Send back</button></div>`);
     $("accept").onclick = () => reviewTask(true); $("sendBack").onclick = () => reviewTask(false);
   }
-  el.insertAdjacentHTML("beforeend", `<span class="mute">${esc(photo.name)} · ${photo.px_per_mm ? photo.px_per_mm.toFixed(1) + " px/mm" : "no scale"}${photo.why ? " · " + esc(photo.why) : ""}${photo.other_shots.length ? ` · ${photo.other_shots.length} other shot(s) of this card` : ""}</span>`);
+  el.insertAdjacentHTML("beforeend", `<span class="mute photo-meta">${esc(photo.name)} · ${photo.px_per_mm ? photo.px_per_mm.toFixed(1) + " px/mm" : "no scale"}${photo.why ? " · " + esc(photo.why) : ""}${photo.other_shots.length ? ` · ${photo.other_shots.length} other shot(s) of this card` : ""}</span>`);
 }
 let warnUnchecked = false;  // Done was pressed with dashed boxes left: they're outlined in red until answered
 function hideFinishAsk() { warnUnchecked = false; $("finishAsk").hidden = true; draw(); }
