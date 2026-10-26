@@ -252,17 +252,37 @@ function colorOf(b) {
   if (l === "skip") return "#ffffff55";
   return l === "moth" ? "#f97316" : "#2563eb";
 }
-function renderKey() {
+function confirmSel() {  // Enter, or the ⏎ row: the guess is right, on to the next
+  if (sel < 0) { setStatus("select a box first"); return; }
+  const b = boxes[sel];
+  if (!b.label || b.label === "skip") { setStatus("give it a label first"); return; }
+  if (unchecked(b)) { record(); b.confirm = true; touch(b); changed(); }
+  jump(1);
+}
+function deleteSel() {  // Delete, or the ⌫ row
+  if (sel < 0) { setStatus("select a box first"); return; }
+  record();
+  const b = boxes[sel];
+  if (b.source === "manual" && b.id === null) boxes.splice(sel, 1); else { b.label = "skip"; touch(b); }
+  sel = -1; changed();
+}
+function renderKey() {  // the key doubles as buttons: a row does what its key does to the selected box
   const counts = {}; boxes.forEach(b => counts[b.label] = (counts[b.label] || 0) + 1);
   const keys = Object.entries(KEYS[pass]).sort((a, b) => (a[0] === "0") - (b[0] === "0") || a[0] - b[0]);
-  $("key").innerHTML = keys.map(([k, l]) =>
-    `<kbd>${k}</kbd><span><span class="sw" style="background:${colorOf({label:l})}"></span> ${pass === 1 ? NAMES[l] : (k === "0" ? "moth, unsure" : l)}</span><span class="n">${counts[l] || 0}</span>`).join("")
-    + `<kbd>⏎</kbd><span>the guess is right, next</span><span class="n">${boxes.filter(unchecked).length} left</span>`
-    + `<kbd>⌫</kbd><span>delete (not on the card)</span><span class="n">${counts.skip || 0}</span>`
-    + `<kbd>B</kbd><span>draw (click an insect, or drag)</span><span></span>`
-    + `<kbd>Tab</kbd><span>next to check · [ ] photos</span><span></span>`
-    + `<kbd>, .</kbd><span>previous / next box you were on</span><span></span>`
-    + `<kbd>?</kbd><span>guide · right-click: comment</span><span></span>`;
+  const cur = sel >= 0 && boxes[sel] ? boxes[sel].label : null;
+  const row = (k, text, n, act, on = false) =>
+    `<button class="krow${on ? " on" : ""}" data-act="${esc(act)}" ${sel < 0 ? "disabled" : ""}><kbd>${k}</kbd><span>${text}</span><span class="n">${n}</span></button>`;
+  const info = (k, text) => `<div class="krow info"><kbd>${k}</kbd><span>${text}</span><span></span></div>`;
+  $("key").innerHTML = keys.map(([k, l]) => row(k, `<span class="sw" style="background:${colorOf({label:l})}"></span> ${pass === 1 ? NAMES[l] : (k === "0" ? "moth, unsure" : l)}`,
+      counts[l] || 0, "label:" + l, cur === l)).join("")
+    + row("⏎", "the guess is right, next", `${boxes.filter(unchecked).length} left`, "confirm")
+    + row("⌫", "delete (not on the card)", counts.skip || 0, "delete")
+    + info("B", "draw (click an insect, or drag)") + info("Tab", "next to check · [ ] photos")
+    + info(", .", "previous / next box you were on") + info("?", "guide · right-click: comment");
+  document.querySelectorAll("#key button.krow").forEach(x => x.onclick = () => {
+    const a = x.dataset.act;
+    if (a === "confirm") confirmSel(); else if (a === "delete") deleteSel(); else if (sel >= 0) setLabel(a.slice(6));
+  });
 }
 
 // ---------- canvas
@@ -368,7 +388,7 @@ function prevBox() { if (!walk(-1)) setStatus("this is the first box you looked 
 function nextBox() { if (!walk(1)) jump(1); }
 $("prevBox").onclick = prevBox; $("nextBox").onclick = nextBox;
 function showSel() {
-  remember();
+  remember(); renderKey();
   $("prevBox").disabled = trailPos <= 0;
   zc.fillStyle = "#eee"; zc.fillRect(0, 0, 256, 256);
   document.querySelectorAll("#attrs button").forEach(x => x.classList.remove("on"));
@@ -556,18 +576,8 @@ window.addEventListener("keydown", e => {
   if (k === "l") { toggleLock(); return; }
   const l = KEYS[pass][e.key];
   if (l) { setLabel(l); return; }
-  if (e.key === "Enter") {
-    const b = boxes[sel];
-    if (!b.label || b.label === "skip") { setStatus("give it a label first"); return; }
-    if (unchecked(b)) { record(); b.confirm = true; touch(b); changed(); }
-    jump(1); return;
-  }
-  if (e.key === "Delete" || e.key === "Backspace") {
-    e.preventDefault(); record();
-    const b = boxes[sel];
-    if (b.source === "manual" && b.id === null) boxes.splice(sel, 1); else { b.label = "skip"; touch(b); }
-    sel = -1; changed();
-  }
+  if (e.key === "Enter") { confirmSel(); return; }
+  if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); deleteSel(); }
 });
 window.addEventListener("resize", () => { if (img.complete) { fit(); draw(); } });
 

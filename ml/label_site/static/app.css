@@ -49,7 +49,13 @@ canvas { display:block; }
 .nav { margin-top:6px; } .nav button { font-size:13px; padding:7px 8px; }
 #info { color:var(--mute); margin-top:6px; min-height:3em; font-size:12px; }
 .attrs button.on { background:var(--accent); border-color:var(--accent); color:#fff; }
-.key { display:grid; grid-template-columns:28px 1fr auto; gap:3px 8px; align-items:center; font-size:12px; }
+.key { display:flex; flex-direction:column; gap:2px; font-size:12px; }
+.krow { display:grid; grid-template-columns:28px 1fr auto; gap:8px; align-items:center; text-align:left; width:100%;
+        font-size:12px; padding:4px 6px; border:1px solid transparent; border-radius:6px; background:none; color:var(--ink); }
+button.krow { cursor:pointer; } button.krow:hover:not(:disabled) { background:var(--hover); border-color:var(--line); }
+button.krow:disabled { opacity:1; cursor:default; } button.krow:disabled .n { opacity:.7; }
+button.krow.on { background:var(--accent); border-color:var(--accent); color:#fff; } button.krow.on .n { color:#fff; }
+.krow.info { color:var(--mute); padding:2px 6px; }
 .key kbd { font:11px ui-monospace, monospace; border:1px solid var(--line); border-radius:4px; text-align:center; padding:1px 0; }
 .sw { width:11px; height:11px; border-radius:3px; display:inline-block; vertical-align:-1px; }
 .key .n { color:var(--mute); font-variant-numeric:tabular-nums; }
