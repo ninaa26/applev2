@@ -27,9 +27,9 @@ function renderPeople() {
       `<td>${pct(p.gold_took_wrong, p.gold_model_wrong)}${p.gold_model_wrong ? ` (${p.gold_took_wrong}/${p.gold_model_wrong})` : ""}</td>` +
       `<td>${pct(p.gold_species_right, p.gold_species_named)}${p.gold_species_named ? ` (${p.gold_species_right}/${p.gold_species_named})` : ""}</td><td>${p.gold_extra ?? 0}</td>` +
       `<td class="acts">${d.admins.includes(p.user) ? "" : p.paused
-        ? `<button data-resume="${esc(p.user)}" title="They can label again, with the photos they had">Resume</button>` +
+        ? `<button data-resume="${esc(p.user)}" title="New photos can come to them again">Resume</button>` +
           (p.open ? `<button data-release="${esc(p.user)}" title="Give their open photos to whoever has least left">Hand out their photos</button>` : "")
-        : `<button data-pause="${esc(p.user)}" title="They can't open or get photos until resumed; their photos wait for them">Pause</button>`}</td></tr>`).join("");
+        : `<button data-pause="${esc(p.user)}" title="No new photos for them; they keep and can finish the ones they have">Pause</button>`}</td></tr>`).join("");
   document.querySelectorAll("[data-pause]").forEach(b => b.onclick = () => post("/api/admin/pause", {user: b.dataset.pause, on: true}));
   document.querySelectorAll("[data-release]").forEach(b => b.onclick = () => {  // asks once more: it moves their work
     if (b.dataset.armed) post("/api/admin/pause", {user: b.dataset.release, on: true, release: true});
