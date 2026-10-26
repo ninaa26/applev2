@@ -254,6 +254,7 @@ def reference_examples(site: Path, out: Path, rng, per_label: int = 6) -> dict[s
     guide shows our own liners: a few boxes of each label, from as many different photos as possible. Written to
     reference.json and ref_*.jpg, apart from examples.json, so a deploy from the Mac doesn't overwrite them."""
     from PIL import Image
+
     from .db import Store
     store = Store(site)
     refs = store.q("SELECT photo, copy FROM tasks WHERE kind='gold_truth' AND status='accepted' ORDER BY photo")
