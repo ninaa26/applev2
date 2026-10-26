@@ -713,7 +713,6 @@ addEventListener("resize", () => setPanels(...panels));
 setPanels(...panels);
 
 // ---------- account card and settings menu (top of the left panel)
-const COG = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" stroke="currentColor" stroke-width="1" stroke-linejoin="round" d="M10.05 4.65 L10.36 2.14 L13.64 2.14 L13.95 4.65 L15.82 5.43 L17.81 3.86 L20.14 6.19 L18.57 8.18 L19.35 10.05 L21.86 10.36 L21.86 13.64 L19.35 13.95 L18.57 15.82 L20.14 17.81 L17.81 20.14 L15.82 18.57 L13.95 19.35 L13.64 21.86 L10.36 21.86 L10.05 19.35 L8.18 18.57 L6.19 20.14 L3.86 17.81 L5.43 15.82 L4.65 13.95 L2.14 13.64 L2.14 10.36 L4.65 10.05 L5.43 8.18 L3.86 6.19 L6.19 3.86 L8.18 5.43Z M15.4 12a3.4 3.4 0 1 0-6.8 0 3.4 3.4 0 0 0 6.8 0Z"/></svg>`;
 const MENU_ICON = {
   dashboard: `<svg viewBox="0 0 20 20"><path fill="currentColor" d="M3 3h6v8H3zM11 3h6v5h-6zM11 10h6v7h-6zM3 13h6v4H3z"/></svg>`,
   guide: `<svg viewBox="0 0 20 20"><path fill="currentColor" d="M10 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16Zm.9 12.6H9.1v-1.8h1.8Zm1.6-5.4c-.3.5-.8.9-1.2 1.2-.4.3-.5.5-.5 1v.4H9.1V11c0-.8.3-1.3.9-1.8.5-.4 1-.7 1-1.3 0-.6-.4-1-1-1s-1.1.4-1.2 1.1L7 7.6C7.3 6.2 8.4 5.3 10 5.3c1.7 0 2.9 1 2.9 2.5 0 .5-.1 1-.4 1.4Z"/></svg>`,
@@ -729,10 +728,11 @@ function renderAccount() {
   const tones = ["#EE4A7F", "#2F5BB0", "#1E9A8A", "#7A5AE0", "#D46FA6", "#FF6A13", "#8DAA1E"];
   const tone = tones[[...me.user].reduce((a, c) => a + c.charCodeAt(0), 0) % tones.length];
   const item = (id, icon, text, extra = "") => `<button class="mitem${extra}" id="${id}" role="menuitem">${MENU_ICON[icon]}<span>${text}</span></button>`;
-  $("me").innerHTML = `<div class="account" style="--tone:${tone}">
-      <button id="cog" class="cog" aria-label="Settings" aria-haspopup="menu" aria-expanded="false" title="Settings">${COG}</button>
-      <div class="who">${MOTH_MARK}<b title="${esc(me.user)}">${esc(me.user)}</b>${MOTH_MARK}</div>
-    </div>
+  // The whole card is the settings button.
+  $("me").innerHTML = `<button id="cog" class="account" style="--tone:${tone}" aria-haspopup="menu" aria-expanded="false"
+      title="Settings" aria-label="${esc(me.user)}: settings">
+      <span class="who">${MOTH_MARK}<b>${esc(me.user)}</b>${MOTH_MARK}</span>
+    </button>
     <div class="menu" id="cogMenu" role="menu" hidden>
       <div class="mrole">Signed in as <b>${me.admin ? "Admin" : "Labeller"}</b></div>
       <div class="msep"></div>
