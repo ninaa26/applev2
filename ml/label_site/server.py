@@ -275,8 +275,9 @@ def handler(store: Store, auth: Auth, secure: bool, species_experts: list[str]):
             path, qs = url.path, parse_qs(url.query)
             if path == "/login":
                 return self.send((STATIC / "login.html").read_text().replace("__MSG__", "").encode(), "text/html; charset=utf-8")
-            if path in ("/static/login.css",):
-                return self.send((STATIC / "login.css").read_bytes(), "text/css")
+            if path in ("/static/login.css", "/static/login.js"):  # the login page's own files, before logging in
+                name = path[8:]
+                return self.send((STATIC / name).read_bytes(), "text/css" if name.endswith(".css") else "text/javascript")
             user = self.user()
             if not user:
                 if path in ("/", "/dashboard"):
