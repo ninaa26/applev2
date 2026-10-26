@@ -730,13 +730,17 @@ async function toggleGuide() {
   // the species cards' drawings, in each label's colour, the same as the label buttons
   g.querySelectorAll("[data-icon]:empty").forEach(x => {
     x.style.color = colorOf({label: x.dataset.icon}); x.innerHTML = iconFor(x.dataset.icon, x.hasAttribute("data-unsure")); });
-  if (!g.hidden && !$("examples").dataset.done) {
-    $("examples").dataset.done = 1;
-    try {
-      const ex = await (await fetch("/guide/examples.json")).json().catch(() => ({}));
-      $("examples").innerHTML = Object.entries(ex).flatMap(([label, files]) => files.map(f =>
-        `<figure><img src="/guide/${encodeURIComponent(f)}" alt="${esc(label)} example"><figcaption>${esc(label)}</figcaption></figure>`)).join("");
-    } catch (e) {}
+  if (!g.hidden && !g.dataset.photos) {  // the real photos, once: our references (pass 1) and the species examples
+    g.dataset.photos = 1;
+    const list = async f => { try { const r = await fetch("/guide/" + f); return r.ok ? await r.json() : {}; } catch (e) { return {}; } };
+    const [species, refs] = await Promise.all([list("examples.json"), list("reference.json")]);
+    const files = {...species, ...Object.fromEntries(Object.entries(refs).map(([k, v]) => ["ref:" + k, v]))};
+    g.querySelectorAll("[data-ex]").forEach(x => {
+      const fs = files[x.dataset.ex] || [];
+      x.innerHTML = fs.map(f => `<img src="/guide/${encodeURIComponent(f)}" alt="${esc(x.dataset.ex.replace("ref:", ""))} on a liner" loading="lazy">`).join("")
+        || `<span class="nophoto">No photos yet.</span>`;
+      x.querySelectorAll("img").forEach(i => i.onclick = () => i.classList.toggle("big"));
+    });
   }
 }
 $("help").onclick = toggleGuide; $("guideClose").onclick = toggleGuide;

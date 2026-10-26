@@ -301,8 +301,9 @@ def handler(store: Store, auth: Auth, secure: bool, species_experts: list[str]):
             if path.startswith("/guide/"):
                 guide = (store.site / "guide").resolve()
                 f = (guide / Path(unquote(path[7:])).name).resolve()
-                if f.parent == guide and f.is_file() and f.suffix.lower() in (".jpg", ".png"):
-                    return self.send(f.read_bytes(), "image/jpeg" if f.suffix.lower() == ".jpg" else "image/png")
+                types = {".jpg": "image/jpeg", ".png": "image/png", ".json": "application/json"}  # the photos and their lists
+                if f.parent == guide and f.is_file() and f.suffix.lower() in types:
+                    return self.send(f.read_bytes(), types[f.suffix.lower()])
             if path == "/api/me":
                 return self.json({"user": user, "admin": admin, "species": user in species_experts,
                                   "csrf": auth.csrf(self.cookie() or ""), "panels": store.setting("panels")})
