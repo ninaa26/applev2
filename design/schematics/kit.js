@@ -47,27 +47,71 @@
 
   // A moth on the glue, top-down, as the camera sees it. Small seeded variation so no two crops match.
   const rnd = (seed) => { let x = Math.sin(seed * 9301 + 49297) * 233280; return x - Math.floor(x); };
+  // Each species is drawn with the marks that tell it apart, its colours mixed with the page's label colour
+  // (--cm, --ofm, --oblr, --other) so a crop reads as the same species as its dot and its bars.
+  //   CM: grey, fine wavy cross-lines, the copper eyespot at the wing tip.
+  //   OFM: smaller and narrow, dark grey-brown, a row of short pale dashes along the leading edge.
+  //   OBLR: broad "bell" shoulders, tan, dark basal patch, the oblique band and a spot near the tip.
+  //   other_moth: plain and broad, one small dark spot mid-wing.
+  const mix = (sp, pct, base) => `color-mix(in srgb, ${col(sp)} ${pct}%, ${base})`;
   const MOTH = {
-    CM:   { wing: '#77736b', patch: '#8b5a2b', hind: '#a8a39a', len: 30, spread: 0.42 },
-    OFM:  { wing: '#58534c', patch: '#3f3a34', hind: '#8f8a82', len: 24, spread: 0.36 },
-    OBLR: { wing: '#a07b47', patch: '#6c4f2a', hind: '#c8b48e', len: 30, spread: 0.5 },
-    other_moth: { wing: '#b8a888', patch: '#9a8a6c', hind: '#d8ccb0', len: 26, spread: 0.6 },
+    CM:   { len: 30, spread: 0.42, shoulder: 0.14, wing: [15, '#7f7c76'], hind: [10, '#b9b5ad'], mark: [55, '#b07a3a'], line: [30, '#4c4842'] },
+    OFM:  { len: 23, spread: 0.32, shoulder: 0.1,  wing: [30, '#5b564f'], hind: [16, '#9b968e'], mark: [40, '#f1ead8'], line: [35, '#2f2b26'] },
+    OBLR: { len: 30, spread: 0.52, shoulder: 0.26, wing: [20, '#b8915a'], hind: [12, '#d9c6a2'], mark: [55, '#6a4723'], line: [40, '#5a3d1e'] },
+    other_moth: { len: 26, spread: 0.62, shoulder: 0.18, wing: [30, '#bcae90'], hind: [20, '#ddd3bd'], mark: [40, '#6f6455'], line: [30, '#8c7f68'] },
   };
+  let clipN = 0;
   function mothShape(sp, seed, cx, cy, scale = 1) {
-    const m = MOTH[sp] || MOTH.other_moth, r = rnd(seed), rot = Math.round(r * 360), L = m.len * scale * (0.9 + rnd(seed + 1) * 0.2), a = m.spread;
-    const wing = (side) => {
-      const s = side;
-      // forewing: a long triangle from the shoulder, outer edge nearly straight, tip squared off
-      const tipX = s * L * (0.2 + a * 0.5), tipY = L * 0.5, inX = s * L * (0.05 + a * 0.12), inY = L * 0.6;
-      return `<path d="M${s * L * 0.03} ${-L * 0.3} L ${s * L * 0.12} ${-L * 0.28} L ${tipX} ${tipY} L ${inX} ${inY} L ${s * L * 0.02} ${L * 0.3} Z" fill="${m.wing}" stroke="${m.patch}" stroke-width="${L * 0.015}" stroke-linejoin="round"/>`
-        + `<path d="M${tipX * 0.72} ${tipY * 0.68} L ${tipX} ${tipY} L ${inX + (tipX - inX) * 0.35} ${inY - (inY - tipY) * 0.35} Z" fill="${m.patch}"/>`;
-    };
-    const hind = (s) => `<ellipse cx="${s * L * 0.16}" cy="${L * 0.16}" rx="${L * 0.2}" ry="${L * 0.3}" fill="${m.hind}" opacity=".7" transform="rotate(${s * 20} ${s * L * 0.16} ${L * 0.16})"/>`;
-    return `<g transform="translate(${cx} ${cy}) rotate(${rot})">${hind(-1)}${hind(1)}${wing(-1)}${wing(1)}<ellipse cx="0" cy="${L * 0.05}" rx="${L * 0.07}" ry="${L * 0.38}" fill="#3b352d"/><path d="M${-L * 0.03} ${-L * 0.32} q ${-L * 0.1} ${-L * 0.2} ${-L * 0.22} ${-L * 0.24} M${L * 0.03} ${-L * 0.32} q ${L * 0.1} ${-L * 0.2} ${L * 0.22} ${-L * 0.24}" stroke="#3b352d" stroke-width="${Math.max(0.6, L * 0.02)}" fill="none"/></g>`;
+    const m = MOTH[sp] || MOTH.other_moth, k = MOTH[sp] ? sp : 'other_moth', r = rnd(seed), rot = Math.round(r * 360);
+    const L = m.len * scale * (0.9 + rnd(seed + 1) * 0.2), a = m.spread, f = (v) => +v.toFixed(2);
+    const paint = (spec) => mix(k, spec[0], spec[1]);
+    // Right forewing, head up: shoulder S, apex A (wing tip), tornus T, root R along the body. The left is its mirror.
+    const S = [L * 0.04, -L * 0.3], A = [L * (0.2 + a * 0.5), L * 0.48], T = [L * (0.08 + a * 0.2), L * 0.62], R = [L * 0.03, L * 0.3];
+    const lerp = (p, q, t) => [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t];
+    const costa = (t) => { const p = lerp(S, A, t), bow = Math.sin(Math.PI * t) * L * m.shoulder * (1 - t * 0.6); return [p[0] + bow, p[1] - bow * 0.3]; };
+    const body = (t) => [0, -L * 0.3 + L * 0.95 * t];
+    const pt = (p) => `${f(p[0])} ${f(p[1])}`;
+    const c1 = costa(0.35), c2 = costa(0.75);
+    const outline = `M${pt(S)} C ${pt(c1)} ${pt(c2)} ${pt(A)} Q ${pt(lerp(A, T, 0.5).map((v, i) => v + (i ? L * 0.02 : L * 0.03)))} ${pt(T)} Q ${pt([R[0] + L * 0.02, L * 0.5])} ${pt(R)} Z`;
+    const id = `km${++clipN}`, line = paint(m.line), mark = paint(m.mark), sw = f(Math.max(0.4, L * 0.018));
+    const band = (t1, t2, u1, u2) => `M${pt(lerp(costa(t1), costa(t1), 0).map((v, i) => v + (i ? -L * 0.05 : L * 0.08)))} L ${pt(costa(t2).map((v, i) => v + (i ? -L * 0.05 : L * 0.08)))} L ${pt(body(u2))} L ${pt(body(u1))} Z`;
+    let marks = '';
+    if (k === 'CM') {
+      for (let t = 0.08; t < 0.66; t += 0.075) {
+        const p = costa(t), q = body(t + 0.12), mid = lerp(p, q, 0.5);
+        marks += `<path d="M${pt(p)} Q ${pt([mid[0] + L * 0.025, mid[1] - L * 0.03])} ${pt(q)}" style="stroke:${line}" stroke-width="${sw}" fill="none" opacity=".55"/>`;
+      }
+      const o = lerp(lerp(A, T, 0.35), S, 0.16), ang = f(Math.atan2(A[1] - S[1], A[0] - S[0]) * 180 / Math.PI);
+      marks += `<ellipse cx="${f(o[0])}" cy="${f(o[1])}" rx="${f(L * 0.13)}" ry="${f(L * 0.085)}" transform="rotate(${ang} ${f(o[0])} ${f(o[1])})" style="fill:${mark};stroke:${line}" stroke-width="${sw}"/>`
+        + `<path d="M${f(o[0] - L * 0.05)} ${f(o[1] - L * 0.01)} l ${f(L * 0.07)} ${f(L * 0.05)} M${f(o[0] - L * 0.02)} ${f(o[1] - L * 0.04)} l ${f(L * 0.07)} ${f(L * 0.05)}" stroke="#e6c27a" stroke-width="${sw}" opacity=".9"/>`;
+    } else if (k === 'OFM') {
+      for (let t = 0.32; t < 0.95; t += 0.11) {
+        const p = costa(t), q = lerp(p, body(t + 0.1), 0.28);
+        marks += `<path d="M${pt(p)} L ${pt(q)}" style="stroke:${mark}" stroke-width="${f(sw * 1.3)}" stroke-linecap="round" opacity=".9"/>`;
+      }
+      const w1 = costa(0.55), w2 = body(0.72);
+      marks += `<path d="M${pt(w1)} Q ${pt(lerp(w1, w2, 0.5).map((v, i) => v + (i ? L * 0.04 : -L * 0.02)))} ${pt(w2)}" style="stroke:${mark}" stroke-width="${sw}" fill="none" opacity=".35"/>`
+        + `<circle cx="${f(lerp(A, S, 0.12)[0] - L * 0.02)}" cy="${f(lerp(A, S, 0.12)[1])}" r="${f(L * 0.03)}" style="fill:${line}"/>`;
+    } else if (k === 'OBLR') {
+      marks += `<path d="${band(0, 0.16, 0, 0.2)}" style="fill:${mark}" opacity=".75"/>`
+        + `<path d="${band(0.36, 0.52, 0.62, 0.8)}" style="fill:${mark}"/>`
+        + `<path d="M${pt(costa(0.74))} L ${pt(costa(0.88))} L ${pt(lerp(costa(0.8), body(0.7), 0.3))} Z" style="fill:${mark}"/>`;
+    } else {
+      const d = lerp(costa(0.5), body(0.55), 0.45);
+      marks += `<circle cx="${f(d[0])}" cy="${f(d[1])}" r="${f(L * 0.035)}" style="fill:${mark}" opacity=".7"/>`;
+    }
+    const fore = `<path d="${outline}" style="fill:${paint(m.wing)};stroke:${line}" stroke-width="${sw}" stroke-linejoin="round"/><g clip-path="url(#${id})">${marks}</g>`;
+    const hindW = `<ellipse cx="${f(L * (0.12 + a * 0.12))}" cy="${f(L * 0.18)}" rx="${f(L * (0.16 + a * 0.08))}" ry="${f(L * 0.3)}" style="fill:${paint(m.hind)}" opacity=".75" transform="rotate(20 ${f(L * 0.14)} ${f(L * 0.18)})"/>`;
+    const dark = mix(k, 15, '#2e2a25'), aw = f(Math.max(0.6, L * 0.022)), ant = k === 'OBLR' ? 0.18 : 0.26;
+    return `<g transform="translate(${f(cx)} ${f(cy)}) rotate(${rot})"><defs><clipPath id="${id}"><path d="${outline}"/></clipPath></defs>`
+      + `${hindW}<g transform="scale(-1 1)">${hindW}</g>${fore}<g transform="scale(-1 1)">${fore}</g>`
+      + `<ellipse cx="0" cy="${f(L * 0.12)}" rx="${f(L * 0.06)}" ry="${f(L * 0.3)}" style="fill:${dark}"/>`
+      + `<ellipse cx="0" cy="${f(-L * 0.2)}" rx="${f(L * 0.08)}" ry="${f(L * 0.12)}" style="fill:${dark}"/><circle cx="0" cy="${f(-L * 0.34)}" r="${f(L * 0.055)}" style="fill:${dark}"/>`
+      + `<path d="M${f(-L * 0.03)} ${f(-L * 0.37)} q ${f(-L * 0.08)} ${f(-L * ant * 0.8)} ${f(-L * ant)} ${f(-L * ant)} M${f(L * 0.03)} ${f(-L * 0.37)} q ${f(L * 0.08)} ${f(-L * ant * 0.8)} ${f(L * ant)} ${f(-L * ant)}" style="stroke:${dark}" stroke-width="${aw}" fill="none" stroke-linecap="round"/></g>`;
   }
   function moth(sp, seed, size = 72) {
     const off = rnd(seed + 5) * 20;
-    return `<svg class="k-crop" viewBox="0 0 72 72" width="${size}" height="${size}" role="img" aria-label="${window.OS.LABEL[sp] || 'Insect'} on the liner, photo crop"><rect width="72" height="72" fill="var(--liner, #f4f2e8)"/><path d="M${off} 0V72M${off + 48} 0V72M0 ${off + 6}H72M0 ${off + 54}H72" stroke="var(--liner-grid, #c9c6b6)" stroke-width="1"/>${mothShape(sp, seed, 36, 38, 1.35)}</svg>`;
+    return `<svg class="k-crop" viewBox="0 0 72 72" width="${size}" height="${size}" role="img" aria-label="${window.OS.LABEL[sp] || 'Insect'} on the liner, photo crop"><rect width="72" height="72" fill="var(--liner, #f4f2e8)"/><path d="M${off} 0V72M${off + 48} 0V72M0 ${off + 6}H72M0 ${off + 54}H72" stroke="var(--liner-grid, #c9c6b6)" stroke-width="1"/>${mothShape(sp, seed, 36, 37, 1.2)}</svg>`;
   }
 
   // The whole liner in one trap: 7 × 7.75 in sticky area on a 1-in grid, every insect boxed by species.
