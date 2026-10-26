@@ -46,6 +46,7 @@ canvas { display:block; }
 #issueMenu { position:absolute; background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:10px;
              width:240px; display:flex; flex-direction:column; gap:6px; box-shadow:0 6px 24px #0005; }
 #zoom { width:100%; aspect-ratio:1; background:#eee; border-radius:6px; }
+.nav { margin-top:6px; } .nav button { font-size:13px; padding:7px 8px; }
 #info { color:var(--mute); margin-top:6px; min-height:3em; font-size:12px; }
 .attrs button.on { background:var(--accent); border-color:var(--accent); color:#fff; }
 .key { display:grid; grid-template-columns:28px 1fr auto; gap:3px 8px; align-items:center; font-size:12px; }

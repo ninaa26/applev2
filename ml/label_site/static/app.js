@@ -80,7 +80,7 @@ async function openTask(id) {
   const d = await (await api(`/api/photo?task=${id}`)).json();
   task = d.task; photo = d.photo; boxes = d.boxes; version = d.version; issues = d.issues; tags = d.tags;
   warnUnchecked = false; $("finishAsk").hidden = true;
-  sel = -1; undoStack = []; redoStack = [];
+  sel = -1; undoStack = []; redoStack = []; trail = []; trailPos = -1;
   img = new Image(); img.onload = () => { fit(); draw(); }; img.src = "/img/" + encodeURIComponent(photo.name);
   if (task.kind === "species") setPass(2);
   document.querySelectorAll("[data-tag]").forEach(c => c.checked = tags.includes(c.dataset.tag));
@@ -261,6 +261,7 @@ function renderKey() {
     + `<kbd>⌫</kbd><span>delete (not on the card)</span><span class="n">${counts.skip || 0}</span>`
     + `<kbd>B</kbd><span>draw (click an insect, or drag)</span><span></span>`
     + `<kbd>Tab</kbd><span>next to check · [ ] photos</span><span></span>`
+    + `<kbd>, .</kbd><span>previous / next box you were on</span><span></span>`
     + `<kbd>?</kbd><span>guide · right-click: comment</span><span></span>`;
 }
 
@@ -342,7 +343,33 @@ function draw() {
     ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.setLineDash([4, 4]); ctx.strokeRect(a[0], a[1], b[0]-a[0], b[1]-a[1]); ctx.setLineDash([]);
   }
 }
+// The boxes visited on this photo, in order, for ◀ Previous / Next ▶. Kept by box id (or position, for a box not
+// saved yet), since a save replaces the box objects.
+let trail = [], trailPos = -1, walking = false;
+const keyOf = b => b.id != null ? "id" + b.id : `${Math.round(b.x1)},${Math.round(b.y1)}`;
+const indexOf = k => boxes.findIndex(b => keyOf(b) === k);
+function remember() {
+  if (walking || sel < 0 || !boxes[sel]) return;
+  const k = keyOf(boxes[sel]);
+  if (trail[trailPos] === k) return;
+  trail = trail.slice(0, trailPos + 1); trail.push(k); trailPos = trail.length - 1;
+  if (trail.length > 500) { trail.shift(); trailPos--; }
+}
+function walk(step) {
+  for (let p = trailPos + step; p >= 0 && p < trail.length; p += step) {
+    const i = indexOf(trail[p]);
+    if (i < 0) continue;  // deleted since
+    trailPos = p; walking = true; sel = i; zoomTo(boxes[i]); draw(); showSel(); walking = false;
+    return true;
+  }
+  return false;
+}
+function prevBox() { if (!walk(-1)) setStatus("this is the first box you looked at on this photo"); }
+function nextBox() { if (!walk(1)) jump(1); }
+$("prevBox").onclick = prevBox; $("nextBox").onclick = nextBox;
 function showSel() {
+  remember();
+  $("prevBox").disabled = trailPos <= 0;
   zc.fillStyle = "#eee"; zc.fillRect(0, 0, 256, 256);
   document.querySelectorAll("#attrs button").forEach(x => x.classList.remove("on"));
   if (sel < 0 || !boxes[sel]) { $("info").textContent = "Nothing selected"; $("lock").textContent = "🔒 Lock box (L)"; return; }
@@ -522,6 +549,8 @@ window.addEventListener("keydown", e => {
   const arrows = {ArrowLeft:[1,0], ArrowRight:[-1,0], ArrowUp:[0,1], ArrowDown:[0,-1]}[e.key];
   if (arrows) { e.preventDefault(); const d = e.shiftKey ? 400 : 120; view.x += arrows[0]*d; view.y += arrows[1]*d; draw(); return; }
   if (e.key === "Tab") { e.preventDefault(); jump(e.shiftKey ? -1 : 1); return; }
+  if (e.key === ",") { prevBox(); return; }
+  if (e.key === ".") { nextBox(); return; }
   if (sel < 0) return;
   if (ATTR_KEYS[k]) { toggleAttr(ATTR_KEYS[k]); return; }
   if (k === "l") { toggleLock(); return; }
