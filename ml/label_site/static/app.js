@@ -35,20 +35,29 @@ async function loadQueue() {
   queue = await (await api("/api/queue")).json();
   renderQueue();
 }
+const STATUS = {returned:"sent back", done:"in review", accepted:"accepted ✓"};
 function renderQueue() {
   const items = tab === "mine" ? queue.tasks : queue.review;
-  const open = queue.tasks.filter(t => t.status === "open" || t.status === "returned").length;
+  const isOpen = t => t.status === "open" || t.status === "returned";
+  const open = queue.tasks.filter(isOpen).length;
   $("queueInfo").textContent = tab === "mine" ? `${open} to do · ${queue.tasks.length - open} finished` : `${items.length} waiting for review`;
-  $("queue").innerHTML = items.map(t => {
+  const row = t => {
     const short = t.photo.replace(/\.RAW-01\.COVER/, "").replace(/__/, " · ");
-    const badge = tab === "review" ? `<span class="badge">${esc(t.user)}</span>`
-      : (t.kind !== "label" ? `<span class="badge">${esc(t.kind)}</span>` : "")
-        + (t.status === "returned" ? `<span class="badge">sent back</span>` : t.status === "done" ? `<span class="badge">in review</span>`
-           : t.status === "accepted" ? `<span class="badge">accepted ✓</span>` : "");
+    // the status and kind go on their own line, so a long photo name can't hide them
+    const tags = tab === "review" ? [t.user] : [t.kind !== "label" ? t.kind : "", STATUS[t.status] || ""].filter(Boolean);
     const count = tab === "mine" ? `${t.n - t.unchecked}/${t.n}` : "";
-    const sub = tab === "mine" && (t.issues || t.note) ? `<span class="sub">${t.issues ? t.issues + " comment(s)" : ""} ${esc(t.note || "")}</span>` : "";
-    return `<div class="item ${task && t.id === task.id ? "on" : ""}" data-id="${t.id}"><span class="name">${esc(short)}${badge}</span><span class="count">${count}</span>${sub}</div>`;
-  }).join("") || `<p class="mute">Nothing here.</p>`;
+    const notes = tab === "mine" && (t.issues || t.note) ? `${t.issues ? t.issues + " comment(s)" : ""} ${esc(t.note || "")}` : "";
+    const sub = tags.length || notes ? `<span class="sub">${tags.map(x => `<span class="badge">${esc(x)}</span>`).join("")} ${notes}</span>` : "";
+    return `<div class="item ${task && t.id === task.id ? "on" : ""}" data-id="${t.id}" title="${esc(t.photo)}"><span class="name">${esc(short)}</span><span class="count">${count}</span>${sub}</div>`;
+  };
+  if (tab === "mine") {
+    const todo = items.filter(isOpen), done = items.filter(t => !isOpen(t));
+    $("queue").innerHTML = (todo.length ? `<h2>To do (${todo.length})</h2>` + todo.map(row).join("") : "")
+      + (done.length ? `<h2>Finished (${done.length})</h2>` + done.map(row).join("") : "")
+      || `<p class="mute">Nothing here.</p>`;
+  } else {
+    $("queue").innerHTML = items.map(row).join("") || `<p class="mute">Nothing here.</p>`;
+  }
   document.querySelectorAll(".item").forEach(el => el.onclick = () => openTask(Number(el.dataset.id)));
 }
 document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
