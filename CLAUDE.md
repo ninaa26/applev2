@@ -27,7 +27,7 @@ deploying) is in CONTRIBUTING.md, imported here:
 - Run checks with `make check` (or one part, such as `make test-server`) from the repo root, or the
   per-folder commands it runs. Server tests take about a minute.
 - The labeller, model playground and dashboard are preview servers in `.claude/launch.json`
-  (`field-labeler`, `ofm-labeler`, `model-playground`, `server-dashboard`).
+  (`field-labeler`, `ofm-labeler`, `model-playground`, `server-dashboard`, `label-site` for the team labelling site in `ml/label_site/`).
 - `.claude/rules/ml.md` loads when files under `ml/` are in play.
 - CI also runs CodeQL on the Python and the workflows, and Dependabot opens weekly PRs for the locked
   versions and monthly ones for the Actions.

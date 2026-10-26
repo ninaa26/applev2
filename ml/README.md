@@ -355,6 +355,51 @@ through the server's detector on IMX219 photos (15 px/mm, shrunk to 12): 4 false
 (`capture_bugs_light2_2026-10-06/calibrated_1.jpg`). Two photos, not a score; the false boxes on a blank liner are
 what `--blank` is for.
 
+## Team labelling site (every gridded liner photo, checked and pre-labelled)
+
+All the real-liner photos with a printed grid (our Cornell cards and the web sets, listed in `label_sets.py`)
+go on one website the team labels together, hosted on a Pi behind Tailscale Funnel, so anyone with a login can
+reach it from any network. Three steps on the Mac, then the Pi:
+
+```bash
+.venv/bin/python check_liner_photos.py     # every set -> data/review/labelling_site/photo_checks.csv (+ a contact sheet per set)
+.venv/bin/python prelabel_liners.py        # YOLO11 boxes + v1 classifier labels, all unchecked -> labels.csv, inbox/
+.venv/bin/python -m label_site users nina sunny patti jacqui claire anna emily albert --admin nina
+.venv/bin/python -m label_site init && .venv/bin/python -m label_site guide
+.venv/bin/python -m label_site assign --labellers sunny patti jacqui claire anna emily albert --experts nina --species patti
+label_site/deploy.sh pi@100.81.208.95      # code, photos, logins, a user service and a nightly backup on the Pi
+label_site/deploy.sh pi@100.81.208.95 --fetch   # later: site.db and an export (labels.csv, COCO, YOLO) back here
+```
+
+`check_liner_photos.py` decides keep / flag / exclude per photo, by itself (`photo_checks.py` says why each check
+matters): no readable grid (no scale, so no trap-sized training insects), the whole shot out of focus or blown out,
+a copy instead of the original (our own phone photos only), and the same image saved twice. Tiny, blurred or worn
+*insects* are never a reason: every insect gets a box. Shots of the same card are grouped (ORB features + a
+homography), so they share a split, and new Cornell cards are held out by a fixed hash (`--write-held-out`). Tags
+people set on the site ("unusable", "not a gridded liner", "wrong scale") overrule it on the next run. Oct 25 2026,
+first run on the Cornell cards: the grid scale agreed with the px/mm `crop_field_cards.py` measured around each
+insect on all 10 cards with a grid (9 within 3%) once the grid was read on its green ink, with each lattice patch
+needing a second patch to agree; before that it was off 0.5-10x on 5 cards and called two sharp close-ups blurred.
+
+`prelabel_liners.py` uses our own models: boxes from YOLO11 (`yolo11s-ppm12-cuda`, run as the server's
+YoloDetector but at the scale the check measured), labels from the v1 head on server-style crops shrunk to 15
+px/mm (pass-1 label in `label`, the species guess in `model_label`). Boxes an earlier pass or an uploader drew
+that YOLO missed are added too. Every row starts unchecked (`by` empty): the site shows it dashed until a person
+presses Enter (the guess is right) or a label key. YOLO trained on most Cornell cards and the OFM liners, so it
+looks best there.
+
+The site (`label_site/`, `python -m label_site serve`): each person gets their own queue, most-unsure photos
+first, and a "Done" button; an admin reviews (accept or send back) and pins comments on a spot. About 12 photos
+are hidden tests: an expert labels them first, each labeller gets 3 mixed in unknowingly, and the dashboard scores
+them (insects found, labels right, and how often they kept a wrong model label, i.e. pressed Enter without
+looking). 10% of photos go to two people; their copies are merged, agreement recorded, and disagreements go to a
+third. Box tags O overlapping, E cut off, W worn, U unsure; photo tags; brightness/contrast/colour sliders; filters
+(not checked, model under 0.8, missed by the detector, disputed); a slider that hides weak detector boxes from
+view only; click-to-box (GrabCut); lock and hide boxes; an in-app guide with example crops; an append-only change
+log (`revert --user X --since DATE` undoes one person's work); `carry` copies a finished photo's boxes to other
+shots of its card; COCO and YOLO export. Logins: salted PBKDF2 hashes, signed 14-day cookies, CSRF tokens, a
+15-minute lockout after 5 wrong passwords, and the server only listens on 127.0.0.1 with Funnel the way in.
+
 ## What insect-ML papers found, and what we do about it
 
 Every finding in the Oct 6 2026 literature notes, with what was changed, tested, left alone or could not be

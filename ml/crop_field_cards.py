@@ -54,7 +54,10 @@ from sentinel_server.pipeline.detect import find_grid, line_opening  # noqa: E40
 
 PAD = 0.35  # server crop padding (server/sentinel_server/pipeline/classify.py: crop)
 FIELDS = ["photo", "n", "label", "source", "crop", "cutout", "x1", "y1", "x2", "y2", "conf", "ppm", "length_mm",
-          "body_mm", "length_from"]
+          "body_mm", "length_from",
+          # from prelabel_liners.py: the detector's own class, the classifier's top class and confidence, the
+          # label an earlier pass or the uploader gave the box it overlaps, and who checked the row on the site
+          "detector_label", "model_label", "model_conf", "old_label", "by"]
 
 
 def server_crop(img: Image.Image, box) -> Image.Image:

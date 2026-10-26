@@ -36,6 +36,15 @@
         "cd server && SENTINEL_DATA_DIR=data/dev SENTINEL_CLASSIFIER=none exec .venv/bin/sentinel-server serve --host 127.0.0.1 --port 8010"
       ],
       "port": 8010
+    },
+    {
+      "name": "label-site",
+      "runtimeExecutable": "/bin/sh",
+      "runtimeArgs": [
+        "-c",
+        "cd ml && exec .venv/bin/python -m label_site --data \"${LABEL_SITE_DATA:-data}\" serve --port 8775"
+      ],
+      "port": 8775
     }
   ]
 }

@@ -43,6 +43,12 @@ data/
     cleaning_suspects/          clean_dataset.py: web photos that may be junk or mislabelled (suspects.csv and a
                                 contact sheet per check and label). Nothing is left out until a person copies
                                 rows into training/classifier/exclude.csv
+    labelling_site/             the team labelling site, every gridded liner set in label_sets.py:
+                                photo_checks.csv + photo_checks_<set>.jpg (check_liner_photos.py: keep / flag /
+                                exclude per photo), inbox/ (links named <set>__<file>, excluded photos left out),
+                                labels.csv (prelabel_liners.py: the server's baseline detector's boxes, the
+                                deployed classifier's labels, `by` = who checked each on the site), crops/,
+                                cutouts/, backups/, auth/ (users.json, secret, passwords.txt; never in git)
 
   bundle/                     make_bundle.py: a copy to train on another machine (RUN_ON_CUDA.md)
   logs/                       old run logs and shell scripts
