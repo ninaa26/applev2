@@ -39,20 +39,24 @@ select, textarea, input[type=text] { font:inherit; font-size:12px; background:va
 /* the site's name: Space Grotesk bold, the closest free match to the geometric grotesk the team picked */
 .brand { font:700 min(26px, 10.6cqw)/1.05 "Space Grotesk", -apple-system, system-ui, sans-serif; letter-spacing:.06em; color:var(--ink);
          margin:2px 0 8px; white-space:nowrap; }
-/* account card: settings cog, avatar, name and role; the cog opens a menu */
+/* account card: the name between two moths, in Naru Mono (static/NaruMono.woff2 when it is there; DM Mono until
+   then), and a bare settings cog whose menu says the role */
+@font-face { font-family:"Naru Mono"; font-weight:400 700; font-display:swap;
+             src:local("Naru Mono"), local("NaruMono-Regular"), url("/static/NaruMono.woff2") format("woff2"); }
 #me { position:relative; margin-bottom:12px; }
-.account { display:flex; align-items:center; gap:10px; padding:8px 10px 8px 8px; border-radius:14px; background:var(--field);
+.account { display:flex; align-items:center; gap:6px; padding:8px 6px 8px 10px; border-radius:14px; background:var(--field);
            border:1px solid var(--hair); }
-.cog { width:32px; height:32px; padding:0; display:grid; place-items:center; border-radius:10px; border:1px solid var(--hair);
-       background:var(--panel); color:var(--mute); flex:none; }
-.cog svg { width:18px; height:18px; transition:transform .35s ease; }
-.cog:hover, .cog.open { color:var(--ink); background:var(--hover); }
+.who { flex:1; min-width:0; display:flex; align-items:center; justify-content:center; gap:5px; color:var(--tone); }
+.who b { font:500 22px/1.1 "Naru Mono", "DM Mono", ui-monospace, monospace; letter-spacing:.01em; color:var(--tone);
+         overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+.mmark { width:20px; height:20px; flex:none; fill:currentColor; }
+.who .mmark:first-child { transform:rotate(-24deg); } .who .mmark:last-child { transform:rotate(24deg); }
+.cog { width:30px; height:30px; padding:0; display:grid; place-items:center; border:0; background:none; color:var(--mute); flex:none;
+       border-radius:8px; cursor:pointer; }
+.cog svg { width:19px; height:19px; transition:transform .35s ease; }
+.cog:hover, .cog.open { color:var(--ink); background:none; }  /* no box, even over the site's button hover */
 .cog:hover svg, .cog.open svg { transform:rotate(60deg); }
-.avatar { width:32px; height:32px; border-radius:50%; display:grid; place-items:center; flex:none; color:#fff;
-          font:700 14px/1 "Space Grotesk", -apple-system, system-ui, sans-serif; box-shadow:inset 0 0 0 2px rgba(255,255,255,.25); }
-.who { display:flex; flex-direction:column; min-width:0; line-height:1.2; }
-.who b { font-size:14px; font-weight:600; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.who span { font-size:11.5px; color:var(--mute); }
+.mrole { padding:6px 10px 4px; font-size:12px; color:var(--mute); } .mrole b { color:var(--ink); font-weight:600; }
 .menu { position:absolute; z-index:30; top:calc(100% + 6px); left:0; right:0; padding:6px; border-radius:14px; background:var(--field);
         border:1px solid var(--hair); box-shadow:0 14px 34px -12px rgba(0,0,0,.35); display:flex; flex-direction:column; gap:1px; }
 .mitem { display:flex; align-items:center; gap:10px; width:100%; text-align:left; padding:8px 10px; border:0; border-radius:9px;

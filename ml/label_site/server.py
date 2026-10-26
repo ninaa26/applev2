@@ -200,7 +200,7 @@ def handler(store: Store, auth: Auth, secure: bool, species_experts: list[str]):
             self.send_header("X-Frame-Options", "DENY")
             self.send_header("Referrer-Policy", "no-referrer")
             self.send_header("Content-Security-Policy", "default-src 'self'; img-src 'self' blob: data:; "
-                             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; "
+                             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; "
                              "script-src 'self'; frame-ancestors 'none'; form-action 'self'")  # Lora from Google Fonts
             if secure:
                 self.send_header("Strict-Transport-Security", "max-age=31536000")
@@ -290,7 +290,7 @@ def handler(store: Store, auth: Auth, secure: bool, species_experts: list[str]):
                 return self.send((STATIC / "dashboard.html").read_bytes(), "text/html; charset=utf-8")
             if path.startswith("/static/"):
                 name = Path(unquote(path[8:])).name
-                types = {".js": "text/javascript", ".css": "text/css", ".html": "text/html; charset=utf-8"}
+                types = {".js": "text/javascript", ".css": "text/css", ".html": "text/html; charset=utf-8", ".woff2": "font/woff2"}
                 f = STATIC / name
                 if f.is_file() and f.suffix in types:
                     return self.send(f.read_bytes(), types[f.suffix])

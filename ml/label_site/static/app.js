@@ -686,6 +686,14 @@ function setPanels(l, r) {
   $("gripL").style.left = l + "px"; $("gripR").style.left = (innerWidth - r) + "px";
   if (ownPanels) try { localStorage.setItem("panels", JSON.stringify([l, r])); } catch (e) {}
   if (img.complete && img.width) { fit(); draw(); }
+  fitName();
+}
+// The name is as big as the panel allows (22 px at most, 13 px at least), never cut short when there is room.
+function fitName() {
+  const b = document.querySelector(".who b");
+  if (!b) return;
+  b.style.fontSize = "";
+  for (let px = 22; px > 13 && b.scrollWidth > b.clientWidth; px--) b.style.fontSize = px - 1 + "px";
 }
 let panels = [PANEL.l, PANEL.r], ownPanels = false;  // ownPanels: this browser was resized by hand
 try { const p = JSON.parse(localStorage.getItem("panels")); if (p) { panels = p; ownPanels = true; } } catch (e) {}
@@ -713,17 +721,21 @@ const MENU_ICON = {
   share: `<svg viewBox="0 0 20 20"><path fill="currentColor" d="M10 2 5.5 6.5l1.4 1.4L9 5.8V13h2V5.8l2.1 2.1 1.4-1.4ZM4 12v4h12v-4h2v6H2v-6z"/></svg>`,
   logout: `<svg viewBox="0 0 20 20"><path fill="currentColor" d="M4 3h7v2H6v10h5v2H4zm9.6 3.4L17.2 10l-3.6 3.6-1.4-1.4 1.2-1.2H8V9h5.4l-1.2-1.2Z"/></svg>`,
 };
+// A small resting moth, a triangle of swept-back wings, for either side of the name.
+const MOTH_MARK = `<svg class="mmark" viewBox="0 0 24 24" aria-hidden="true"><path d="M11.6 5.5C9.4 8.6 5.6 14 2.5 18.6c3 1 6.3.4 9.1-1.1Z"/>
+  <path d="M12.4 5.5c2.2 3.1 6 8.5 9.1 13.1-3 1-6.3.4-9.1-1.1Z"/><path d="M12 4.2c1 0 1.4.9 1.4 2v10.6c0 1-.6 1.8-1.4 1.8s-1.4-.8-1.4-1.8V6.2c0-1.1.4-2 1.4-2Z" style="fill:color-mix(in srgb, currentColor 55%, #000)"/>
+  <path d="M11.4 4.4C10.8 3 9.8 2.1 8.4 1.7M12.6 4.4c.6-1.4 1.6-2.3 3-2.7" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg>`;
 function renderAccount() {
-  const initial = (me.user || "?").slice(0, 1).toUpperCase();
   const tones = ["#EE4A7F", "#2F5BB0", "#1E9A8A", "#7A5AE0", "#D46FA6", "#FF6A13", "#8DAA1E"];
   const tone = tones[[...me.user].reduce((a, c) => a + c.charCodeAt(0), 0) % tones.length];
   const item = (id, icon, text, extra = "") => `<button class="mitem${extra}" id="${id}" role="menuitem">${MENU_ICON[icon]}<span>${text}</span></button>`;
-  $("me").innerHTML = `<div class="account">
+  $("me").innerHTML = `<div class="account" style="--tone:${tone}">
+      <div class="who">${MOTH_MARK}<b title="${esc(me.user)}">${esc(me.user)}</b>${MOTH_MARK}</div>
       <button id="cog" class="cog" aria-label="Settings" aria-haspopup="menu" aria-expanded="false" title="Settings">${COG}</button>
-      <div class="avatar" style="background:${tone}" aria-hidden="true">${esc(initial)}</div>
-      <div class="who"><b>${esc(me.user)}</b><span>${me.admin ? "Admin" : "Labeller"}</span></div>
     </div>
     <div class="menu" id="cogMenu" role="menu" hidden>
+      <div class="mrole">Signed in as <b>${me.admin ? "Admin" : "Labeller"}</b></div>
+      <div class="msep"></div>
       ${me.admin ? item("mDash", "dashboard", "Dashboard") : ""}
       ${item("mGuide", "guide", "Labelling guide")}
       ${item("mWidths", "widths", "Reset panel widths")}
@@ -731,6 +743,8 @@ function renderAccount() {
       <div class="msep"></div>
       ${item("mLogout", "logout", "Log out", " danger")}
     </div>`;
+  fitName();
+  document.fonts.ready.then(fitName);  // again once the name's font has loaded
   const menu = $("cogMenu"), cog = $("cog");
   const show = on => { menu.hidden = !on; cog.setAttribute("aria-expanded", String(on)); cog.classList.toggle("open", on); };
   cog.onclick = e => { e.stopPropagation(); show(menu.hidden); };
