@@ -81,6 +81,7 @@ EVENT_LABELS = {
     "card_full": "Liner is getting full", "card_old": "Liner is old", "glare": "Glare on the liner",
     "trap_added": "Trap added", "trap_changed": "Trap changed", "trap_removed": "Trap taken out", "trap_restored": "Trap put back",
     "firmware_asked": "Camera update sent", "firmware_updated": "Camera updated",
+    "key_stopped": "Key stopped: its hub was removed, so the camera pairs again",
 }
 # The stylesheet's URL carries a hash of its contents, so a deploy never leaves a browser on a cached old copy.
 CSS_V = hashlib.sha256((HERE / "static" / "app.css").read_bytes()).hexdigest()[:12]
@@ -479,11 +480,13 @@ def create_app(start_worker: bool = False) -> FastAPI:
         return manage_page(request, db, new_key={"trap": db.get(Trap, trap_id.strip()), "key": key, "why": "added"})
 
     @app.post("/manage/waiting/{code}", response_class=HTMLResponse)
-    def manage_add_waiting(code: str, request: Request, trap_id: str = Form(...), name: str = Form(default=""),
-                           block: str = Form(default=""), lure: str = Form(default="CM"), db: Session = Depends(get_session)):
-        """Add a camera that powered on near a hub and is waiting: its key goes to the camera through the hub."""
+    def manage_add_waiting(code: str, request: Request, trap_id: str = Form(...), secret: str = Form(default=""),
+                           name: str = Form(default=""), block: str = Form(default=""), lure: str = Form(default="CM"),
+                           db: Session = Depends(get_session)):
+        """Add a camera that powered on near a hub and is waiting, with the secret on its sticker: its key goes to
+        the camera through the hub, sealed with that secret."""
         try:
-            trap = fleet.add_waiting_camera(db, code, trap_id.strip(), name.strip()[:120], block.strip()[:120], lure)
+            trap = fleet.add_waiting_camera(db, code, secret, trap_id.strip(), name.strip()[:120], block.strip()[:120], lure)
         except ValueError as e:
             return manage_page(request, db, error=str(e), status_code=422)
         return manage_page(request, db, new_key={"trap": trap, "key": None, "why": "paired"})

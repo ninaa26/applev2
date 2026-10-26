@@ -55,11 +55,11 @@ server_url = "{{ server_url }}"</pre>
 {% if waiting %}
 <div class="card" style="border-color:var(--leaf)">
   <h2>New cameras waiting</h2>
-  <p class="muted">These cameras were switched on near a hub and are asking to be added. Match the code with the sticker on the camera.</p>
+  <p class="muted">These cameras were switched on near a hub and are asking to be added. Match the code with the sticker on the camera, and type in the secret after it. To pair a camera that is already a trap again (its hub was removed, or it moved), give its trap id.</p>
   {% for w in waiting %}
   <form class="add" method="post" action="/manage/waiting/{{ w.code }}" style="margin-top:12px">
     <div><b class="mono">{{ w.code }}</b><br><span class="muted">near hub {{ w.hub_id }}{% if w.rssi is not none %}, signal {{ w.rssi }} dBm{% endif %}, first seen {{ w.first_seen_at|ago }}</span></div>
-    <label id="code-field">Pairing code <input name="pair_code" placeholder="On the hub's sticker" maxlength="16" autocomplete="off"></label>
+    <label>Secret <input name="secret" placeholder="On its sticker" required maxlength="24" autocomplete="off" spellcheck="false"></label>
     <label>Trap id <input name="trap_id" value="{{ suggest_id }}" required pattern="[A-Za-z0-9][A-Za-z0-9_\-]{0,31}" maxlength="32"></label>
     <label>Name <input name="name" placeholder="Row 4, east end" maxlength="120"></label>
     <label>Block <input name="block" placeholder="Honeycrisp block" maxlength="120"></label>
@@ -85,6 +85,7 @@ server_url = "{{ server_url }}"</pre>
       <select name="hub_id">
         {% for h in hubs %}<option value="{{ h.id }}">{{ h.name or h.id }}{% if h.name %} ({{ h.id }}){% endif %}</option>{% else %}<option value="">Add a hub first</option>{% endfor %}
       </select></label>
+    <label id="code-field">Pairing code <input name="pair_code" placeholder="On the hub's sticker" maxlength="16" autocomplete="off"></label>
     <label>Trap id <input name="trap_id" value="{{ suggest_id }}" required pattern="[A-Za-z0-9][A-Za-z0-9_\-]{0,31}" maxlength="32"></label>
     <label>Name <input name="name" placeholder="Row 4, east end" maxlength="120"></label>
     <label>Block <input name="block" placeholder="Honeycrisp block" maxlength="120"></label>
@@ -117,7 +118,7 @@ server_url = "{{ server_url }}"</pre>
         <form method="post" action="/manage/traps/{{ t.id }}/restore" style="display:inline"><button type="submit" class="small">Put back</button></form>
         {% else %}
         <form method="post" action="/manage/traps/{{ t.id }}/new-key" style="display:inline-block" onsubmit="return confirm('Give {{ t.id }} a new key? The old one stops working until the device has the new one.')"><button type="submit" class="small">New key</button></form>
-        <form method="post" action="/manage/traps/{{ t.id }}/remove" style="display:inline" onsubmit="return confirm('Remove {{ t.id }} from the orchard? Its photos and counts are kept; it can be put back later.')"><button type="submit" class="small danger">Remove</button></form>
+        <form method="post" action="/manage/traps/{{ t.id }}/remove" style="display:inline" onsubmit="return confirm('Remove {{ t.id }} from the orchard? Its photos and counts are kept; it can be put back later.{% if t.kind in ("hub", "pi") %} Its cameras\' keys stop too: each pairs again, and is added again here with its sticker.{% endif %}')"><button type="submit" class="small danger">Remove</button></form>
         {% endif %}
       </td>
     </tr>

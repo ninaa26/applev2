@@ -10,11 +10,11 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from . import phenology
-from .models import NOT_CATCHES, Capture, Card, Event, Track, Trap, WeatherDay, utcnow
+from .models import NOT_CATCHES, Capture, Card, Event, HubClaim, PendingCamera, Track, Trap, WeatherDay, utcnow
 from .pipeline.track import AUTO_THRESHOLD
 from .settings import get_settings
 
@@ -83,9 +83,21 @@ def create_trap(db: Session, trap_id: str, name: str = "", block: str = "", lure
     return key
 
 
-def retire_trap(db: Session, trap: Trap) -> None:
+def retire_trap(db: Session, trap: Trap) -> list[str]:
+    """Take a trap out of the orchard: its key stops working. A hub holds its cameras' keys, so removing one
+    (lost, stolen, replaced) also stops theirs, and drops its pairing state; those cameras pair again with
+    the hub they are near now. Returns the cameras whose keys were stopped."""
     trap.retired_at = utcnow()
     db.add(Event(trap_id=trap.id, kind="trap_removed", payload={"note": trap.name}))
+    stopped = []
+    if trap.kind in HUB_KINDS:
+        for cam in db.scalars(select(Trap).where(Trap.hub_id == trap.id, Trap.kind == "esp32", Trap.retired_at.is_(None))):
+            cam.api_key_hash = hash_key(new_api_key())  # a key no one has
+            db.add(Event(trap_id=cam.id, kind="key_stopped", payload={"note": f"hub {trap.id} removed"}))
+            stopped.append(cam.id)
+        db.execute(delete(PendingCamera).where(PendingCamera.hub_id == trap.id))
+        db.execute(delete(HubClaim).where(HubClaim.trap_id == trap.id))
+    return stopped
 
 
 def restore_trap(db: Session, trap: Trap) -> None:
