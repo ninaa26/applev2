@@ -12,6 +12,7 @@ Tables
   log      every change, append-only: who, when, which box, before -> after (JSON)
   merges   the agreement between the two people of each double-labelled photo
   people   who is paused: gets no new photos from assign, and their open photos were handed to others
+  settings site-wide choices an admin made on the site (the default side-panel widths)
 Writes go through Store, which holds one lock: the site is small (a few people), so simple beats clever.
 """
 
@@ -44,6 +45,7 @@ CREATE TABLE IF NOT EXISTS log (id INTEGER PRIMARY KEY, at REAL, user TEXT, phot
   action TEXT, before TEXT, after TEXT);
 CREATE TABLE IF NOT EXISTS merges (photo TEXT PRIMARY KEY, a TEXT, b TEXT, agreement REAL, disputes INTEGER, at REAL);
 CREATE TABLE IF NOT EXISTS people (user TEXT PRIMARY KEY, paused INTEGER DEFAULT 0, at REAL);
+CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
 """
 
 BOX_FIELDS = ["x1", "y1", "x2", "y2", "label", "source", "conf", "detector_label", "model_label", "model_conf",
@@ -229,6 +231,14 @@ class Store:
                 raise
             self.mark_overlaps(photo, copy)
             return self.boxes(photo, copy)
+
+    def setting(self, key: str):
+        got = self.q("SELECT value FROM settings WHERE key=?", key)
+        return json.loads(got[0]["value"]) if got else None
+
+    def set_setting(self, key: str, value) -> None:
+        with self.lock:
+            self.con.execute("INSERT OR REPLACE INTO settings VALUES (?,?)", (key, json.dumps(value)))
 
     def mark_overlaps(self, photo: str, copy: str) -> int:
         """Set or clear the `overlapping` tag on every box of a copy from the boxes themselves (scoring.overlapping).

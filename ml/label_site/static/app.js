@@ -603,21 +603,22 @@ function setPanels(l, r) {
   r = Math.max(PANEL.min, Math.min(r, PANEL.max, room - l));
   document.body.style.setProperty("--lw", l + "px"); document.body.style.setProperty("--rw", r + "px");
   $("gripL").style.left = l + "px"; $("gripR").style.left = (innerWidth - r) + "px";
-  try { localStorage.setItem("panels", JSON.stringify([l, r])); } catch (e) {}
+  if (ownPanels) try { localStorage.setItem("panels", JSON.stringify([l, r])); } catch (e) {}
   if (img.complete && img.width) { fit(); draw(); }
 }
-let panels = [PANEL.l, PANEL.r];
-try { panels = JSON.parse(localStorage.getItem("panels")) || panels; } catch (e) {}
+let panels = [PANEL.l, PANEL.r], ownPanels = false;  // ownPanels: this browser was resized by hand
+try { const p = JSON.parse(localStorage.getItem("panels")); if (p) { panels = p; ownPanels = true; } } catch (e) {}
 ["gripL", "gripR"].forEach(id => {
   const g = $(id), left = id === "gripL";
   g.addEventListener("mousedown", e => {
     e.preventDefault(); g.classList.add("dragging"); document.body.classList.add("resizing");
+    ownPanels = true;
     const move = ev => { panels = left ? [ev.clientX, panels[1]] : [panels[0], innerWidth - ev.clientX]; setPanels(...panels); };
     const up = () => { g.classList.remove("dragging"); document.body.classList.remove("resizing");
       removeEventListener("mousemove", move); removeEventListener("mouseup", up); };
     addEventListener("mousemove", move); addEventListener("mouseup", up);
   });
-  g.addEventListener("dblclick", () => { panels = left ? [PANEL.l, panels[1]] : [panels[0], PANEL.r]; setPanels(...panels); });
+  g.addEventListener("dblclick", () => { panels = left ? [PANEL.l, panels[1]] : [panels[0], PANEL.r]; setPanels(...panels); });  // PANEL = the site default
 });
 addEventListener("resize", () => setPanels(...panels));
 setPanels(...panels);
@@ -628,6 +629,13 @@ setPanels(...panels);
   $("me").innerHTML = `<span>Signed in as <b>${esc(me.user)}</b></span><span>${me.admin ? `<a href="/dashboard">Dashboard</a> · ` : ""}<button id="logout" class="small">Log out</button></span>`;
   $("logout").onclick = async () => { await api("/logout", {}); location.href = "/login"; };
   $("reviewTab").hidden = !me.admin;
+  if (me.panels) { [PANEL.l, PANEL.r] = me.panels; if (!ownPanels) { panels = [...me.panels]; setPanels(...panels); } }
+  $("panelDefault").hidden = !me.admin;
+  $("panelDefault").onclick = async () => {
+    const r = await api("/api/admin/panels", {left: Math.round(panels[0]), right: Math.round(panels[1])});
+    setStatus(r.ok ? (await r.json()).message : await r.text());
+    if (r.ok) [PANEL.l, PANEL.r] = panels;
+  };
   setPass(pass); setDraw(false); renderKey();
   await loadQueue();
   const first = queue.tasks.find(t => t.status === "returned") || queue.tasks.find(t => t.status === "open") || queue.tasks[0];

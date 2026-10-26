@@ -239,6 +239,12 @@ def handler(store: Store, auth: Auth, secure: bool, species_experts: list[str]):
                     if t["kind"] == "gold_truth" and not auth.is_admin(to):
                         return self.send(b"reference photos are labelled by admins only", "text/plain", 409)
                     return self.json({"message": workflow.reassign(store, t, to, user)})
+                if path == "/api/admin/panels":
+                    w = [int(body["left"]), int(body["right"])]
+                    if not all(170 <= x <= 640 for x in w):
+                        return self.send(b"widths must be 170-640 px", "text/plain", 400)
+                    store.set_setting("panels", w)
+                    return self.json({"message": f"default widths for everyone: left {w[0]} px, right {w[1]} px"})
                 if path == "/api/admin/pause":
                     if who not in auth.users:
                         return self.send(b"unknown person", "text/plain", 400)
@@ -292,7 +298,7 @@ def handler(store: Store, auth: Auth, secure: bool, species_experts: list[str]):
                     return self.send(f.read_bytes(), "image/jpeg" if f.suffix.lower() == ".jpg" else "image/png")
             if path == "/api/me":
                 return self.json({"user": user, "admin": admin, "species": user in species_experts,
-                                  "csrf": auth.csrf(self.cookie() or "")})
+                                  "csrf": auth.csrf(self.cookie() or ""), "panels": store.setting("panels")})
             if path == "/api/queue":
                 mine = store.q("SELECT t.*, (SELECT count(*) FROM boxes b WHERE b.photo=t.photo AND b.copy=t.copy AND b.label!='skip') AS n,"
                                " (SELECT count(*) FROM boxes b WHERE b.photo=t.photo AND b.copy=t.copy AND b.label!='skip' AND (b.by='' OR b.label='')) AS unchecked,"

@@ -207,6 +207,11 @@ class TestStoreAndWorkflow(unittest.TestCase):
         rows = s.save(p, "main", [{**x, "attrs": "overlapping" if i < 2 else ""} for i, x in enumerate(page)], "ann", None)
         self.assertFalse(any("overlapping" in r["attrs"] for r in rows))
 
+    def test_settings_round_trip(self):
+        self.assertIsNone(self.store.setting("panels"))
+        self.store.set_setting("panels", [300, 420])
+        self.assertEqual(Store(self.site).setting("panels"), [300, 420])  # kept in site.db
+
     def test_locked_box_cannot_move(self):
         s, p = self.store, "s1__p1.jpg"
         b = s.boxes(p, "main")[0]
