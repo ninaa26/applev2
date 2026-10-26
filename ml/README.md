@@ -357,7 +357,8 @@ what `--blank` is for.
 
 ## Team labelling site (every gridded liner photo, checked and pre-labelled)
 
-All the real-liner photos with a printed grid (our Cornell cards and the web sets, listed in `label_sets.py`)
+All the real-liner photos with a printed grid (our Cornell cards and the web sets, listed in `label_sets.py`;
+the matogen Insect Science liners were taken off on Oct 26 2026: ~300 boxes a photo, 82% of all boxes, and too blurry)
 go on one website the team labels together, hosted on a Pi behind Tailscale Funnel, so anyone with a login can
 reach it from any network. Three steps on the Mac, then the Pi:
 

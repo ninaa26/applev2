@@ -5,6 +5,8 @@ named <set>__<file name>, so names from different sets can't collide; photo_chec
 path. Left out on purpose: the liners without a grid (from_the_web/nongrid/, README there) and our own trap's
 photos, which are reviewed on the dashboard instead.
 
+Also left out: the matogen liners (see SETS) and anything listed only in the folder README.
+
 Each set may carry earlier labels: a person's pass 1 (labels.csv of a label_field_cards.py folder) or the
 uploader's boxes (Roboflow COCO). The site shows them as `old_label` on the box they overlap, and adds the ones
 our detector missed, because every insect on a liner needs a box.
@@ -45,8 +47,8 @@ SETS = [
              note="OFM trap-camera liners (Roboflow); pass 1 of 14 of 31 photos done"),
     LabelSet("cm-ervins", f"{WEB}/roboflow_full/codling-moth-ervins", "coco",
              note="Trécé CM cards (Roboflow), each card shot several times; only codling moths boxed"),
-    LabelSet("matogen", f"{WEB}/roboflow_recovered/moth-counting-matogen", "coco",
-             note="Insect Science delta liners, potato tuber moth, very dense; moth/other boxed"),
+    # Left out (Oct 26 2026): the matogen Insect Science liners (moth-counting-matogen, 87 photos). Hundreds of
+    # boxes per photo (~300 on average) and too blurry to label well by hand; they were taken off the site.
     LabelSet("grape-moth", f"{WEB}/roboflow_recovered/grape-moth-nsect", "coco",
              note="trap-camera delta liner, grape moth; moths boxed"),
 ]

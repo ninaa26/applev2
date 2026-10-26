@@ -8,6 +8,7 @@
     python -m label_site export                # labels.csv, photo_tags.csv, coco.json, yolo.zip back out
     python -m label_site carry                 # copy a finished photo's boxes to other shots of the same card
     python -m label_site revert --user sunny --since 2026-10-26     # undo one person's changes
+    python -m label_site remove-set matogen    # take a whole set off the site
 
 Everything lives in data/review/labelling_site/ (paths.LABEL_SITE): site.db, inbox/, crops/, auth/.
 How the work is shared out (hidden test photos, two-person photos, review) is in workflow.py.
@@ -184,6 +185,35 @@ def cmd_carry(a) -> None:
     print(f"carried labels to {carried} photos")
 
 
+def cmd_remove_set(a) -> None:
+    """Take a whole photo set off the site: its photos, boxes, tasks, comments and tags. site.db is backed up first,
+    and the command refuses if anyone has checked a box there, unless --force."""
+    store = Store(a.site)
+    names = [r["name"] for r in store.q("SELECT name FROM photos WHERE set_name=?", a.set)]
+    if not names:
+        raise SystemExit(f"no photos of set {a.set!r} on the site")
+    marks = ",".join("?" * len(names))
+    checked = store.q(f"SELECT count(*) AS n FROM boxes WHERE by != '' AND photo IN ({marks})", *names)[0]["n"]  # noqa: S608
+    if checked and not a.force:
+        raise SystemExit(f"{checked} boxes of {a.set} were checked by people; add --force to remove them anyway")
+    (a.site / "backups").mkdir(exist_ok=True)
+    import sqlite3
+
+    backup = a.site / "backups" / f"site-{time.strftime('%Y%m%d-%H%M%S')}-before-removing-{a.set}.db"
+    dst = sqlite3.connect(backup)
+    store.con.backup(dst)
+    dst.close()
+    gold = store.q(f"SELECT count(*) AS n FROM photos WHERE gold=1 AND name IN ({marks})", *names)[0]["n"]  # noqa: S608
+    with store.lock:
+        store.con.execute("BEGIN")
+        for table, col in (("boxes", "photo"), ("tasks", "photo"), ("issues", "photo"), ("tags", "photo"),
+                           ("merges", "photo"), ("photos", "name")):
+            store.con.execute(f"DELETE FROM {table} WHERE {col} IN ({marks})", names)  # noqa: S608
+        store.log("admin", "", "", None, f"remove-set:{a.set}", None, {"photos": len(names)})
+        store.con.execute("COMMIT")
+    print(f"removed {len(names)} photos of {a.set} ({gold} of them hidden test photos); backup {backup}")
+
+
 def cmd_guide(a) -> None:
     """Example crops for the in-app guide: a few of each class from the labelled real-liner crops."""
     import random
@@ -235,6 +265,9 @@ def main(argv=None) -> int:
     v.add_argument("--secure", action="store_true", help="behind https (Funnel): Secure cookies and HSTS")
     v.add_argument("--species", nargs="*", default=["patti"], help="who does pass 2 (species)")
     sub.add_parser("export", help="labels.csv, photo_tags.csv, coco.json, yolo.zip into exports/")
+    rs = sub.add_parser("remove-set", help="take a whole photo set off the site (site.db backed up first)")
+    rs.add_argument("set")
+    rs.add_argument("--force", action="store_true", help="even if people checked boxes there")
     sub.add_parser("carry", help="carry finished photos' boxes to other shots of the same card")
     r = sub.add_parser("revert", help="undo one person's changes since a date")
     r.add_argument("--user", required=True)
@@ -244,7 +277,7 @@ def main(argv=None) -> int:
     if a.cmd == "serve" and a.host not in ("127.0.0.1", "localhost", "::1"):
         print("warning: listening beyond this machine; on the Pi keep 127.0.0.1 and let Funnel be the way in")
     {"users": cmd_users, "init": cmd_init, "assign": cmd_assign, "serve": cmd_serve, "export": cmd_export,
-     "carry": cmd_carry, "revert": cmd_revert, "guide": cmd_guide}[a.cmd](a)
+     "carry": cmd_carry, "revert": cmd_revert, "guide": cmd_guide, "remove-set": cmd_remove_set}[a.cmd](a)
     return 0
 
 

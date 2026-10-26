@@ -325,7 +325,7 @@ def main(argv=None) -> int:
     old = []
     if out.exists():  # keep other sets' rows when only some sets are re-checked
         with open(out, newline="") as f:
-            old = [r for r in csv.DictReader(f) if r["set"] not in args.sets]
+            old = [r for r in csv.DictReader(f) if r["set"] not in args.sets and r["set"] in BY_NAME]  # sets dropped from label_sets go
     rows = list(old)
     for name in args.sets:
         s = BY_NAME[name]
