@@ -11,6 +11,7 @@ Tables
   tags     photo-level tags a person set (unusable, wrong scale, not a gridded liner)
   log      every change, append-only: who, when, which box, before -> after (JSON)
   merges   the agreement between the two people of each double-labelled photo
+  people   who is paused: gets no new photos from assign, and their open photos were handed to others
 Writes go through Store, which holds one lock: the site is small (a few people), so simple beats clever.
 """
 
@@ -42,6 +43,7 @@ CREATE TABLE IF NOT EXISTS tags (photo TEXT, user TEXT, tag TEXT, at REAL, PRIMA
 CREATE TABLE IF NOT EXISTS log (id INTEGER PRIMARY KEY, at REAL, user TEXT, photo TEXT, copy TEXT, box_id INTEGER,
   action TEXT, before TEXT, after TEXT);
 CREATE TABLE IF NOT EXISTS merges (photo TEXT PRIMARY KEY, a TEXT, b TEXT, agreement REAL, disputes INTEGER, at REAL);
+CREATE TABLE IF NOT EXISTS people (user TEXT PRIMARY KEY, paused INTEGER DEFAULT 0, at REAL);
 """
 
 BOX_FIELDS = ["x1", "y1", "x2", "y2", "label", "source", "conf", "detector_label", "model_label", "model_conf",
@@ -51,6 +53,11 @@ EDITABLE = ["x1", "y1", "x2", "y2", "label", "attrs", "locked"]
 TAGS = {"unusable", "wrong_scale", "not_gridded"}
 TASK_FIELDS = {"status", "done_at", "reviewer", "reviewed_at", "note", "priority"}
 COLUMNS = set(BOX_FIELDS) | {"checked_at", "csv_n"} | TASK_FIELDS
+
+
+def person_attrs(attrs: str | None) -> set[str]:
+    """The tags a person sets; `overlapping` is worked out from the boxes (Store.mark_overlaps), not compared."""
+    return set(filter(None, (attrs or "").split(","))) - {"overlapping"}
 
 
 def cols(keys) -> list[str]:
@@ -181,7 +188,8 @@ class Store:
                                 float(o[k]) != b[k] for k in ("x1", "y1", "x2", "y2")):
                             b = {**b, **{k: float(o[k]) for k in ("x1", "y1", "x2", "y2")}}  # locked: box can't move
                         moved = any(abs(float(o[k]) - b[k]) > 0.5 for k in ("x1", "y1", "x2", "y2"))
-                        changed = moved or b["label"] != o["label"] or b["attrs"] != o["attrs"] or int(b["locked"]) != o["locked"]
+                        changed = (moved or b["label"] != o["label"] or int(b["locked"]) != o["locked"]
+                                   or person_attrs(b["attrs"]) != person_attrs(o["attrs"]))
                         if not changed and not b.get("confirm"):
                             continue
                         upd = {k: b[k] for k in EDITABLE}
@@ -219,7 +227,29 @@ class Store:
             except Exception:
                 self.con.execute("ROLLBACK")
                 raise
+            self.mark_overlaps(photo, copy)
             return self.boxes(photo, copy)
+
+    def mark_overlaps(self, photo: str, copy: str) -> int:
+        """Set or clear the `overlapping` tag on every box of a copy from the boxes themselves (scoring.overlapping).
+        Not a person's change, so `by` stays as it was. Returns how many boxes changed."""
+        from .scoring import overlapping
+
+        with self.lock:
+            bs = [dict(b) for b in self.con.execute("SELECT id, x1, y1, x2, y2, label, attrs FROM boxes WHERE photo=? AND copy=?",
+                                                    (photo, copy))]
+            for b in bs:
+                for k in ("x1", "y1", "x2", "y2"):
+                    b[k] = float(b[k])
+            over = overlapping(bs)
+            changed = 0
+            for i, b in enumerate(bs):
+                tags = set(filter(None, (b["attrs"] or "").split(",")))
+                want = tags | {"overlapping"} if i in over else tags - {"overlapping"}
+                if want != tags:
+                    self.con.execute("UPDATE boxes SET attrs=? WHERE id=?", (",".join(sorted(want)), b["id"]))
+                    changed += 1
+            return changed
 
     def set_task(self, task_id: int, **fields) -> None:
         with self.lock:

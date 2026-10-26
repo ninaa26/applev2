@@ -25,7 +25,7 @@
   <div id="passBox"><h2>Pass</h2><div class="row modes"><button data-m="1">1 · moth / insect / debris</button><button data-m="2">2 · species</button></div></div>
   <h2>Selected</h2><canvas id="zoom" width="256" height="256"></canvas><div id="info">Nothing selected</div>
   <div class="row attrs" id="attrs">
-    <button data-a="overlapping" title="O">O overlapping</button><button data-a="cut_off" title="E">E cut off</button>
+    <button data-a="cut_off" title="E">E cut off</button>
     <button data-a="decayed" title="W">W worn</button><button data-a="unsure" title="U">U unsure</button>
   </div>
   <div class="row"><button id="lock" title="L">🔒 Lock box (L)</button></div>
@@ -68,7 +68,8 @@
   learns to miss them. Press <b>B</b> and drag to draw a box, or in draw mode just <b>click</b> an insect and the site
   draws the box for you. One box over two insects: shrink it to one and draw the other.</p>
   <h2>Tags on a box</h2>
-  <p><b>O</b> overlapping another insect · <b>E</b> cut off by the photo edge · <b>W</b> worn or decayed · <b>U</b> unsure
+  <p><b>O</b> (overlapping another insect) is added by itself whenever two boxes share part of their area. Yours to set:
+  <b>E</b> cut off by the photo edge · <b>W</b> worn or decayed · <b>U</b> unsure
   (you labelled it but aren't confident). Use <b>U</b> rather than guessing.</p>
   <h2>Pass 2: species (anyone, when you're sure)</h2>
   <p>Switch to pass 2 on the right. <b>Tab</b> jumps to the moths that have no species yet. CM, OFM, OBLR, the look-alikes

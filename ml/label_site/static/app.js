@@ -7,7 +7,7 @@ const KEYS = {
 };
 const NAMES = {moth:"moth", other_insect:"other insect", debris:"debris"};
 const SPECIES = ["CM","OFM","OBLR","lookalike_RBLR","lookalike_LAW","other_tortricid","other_moth"];
-const ATTR_KEYS = {o:"overlapping", e:"cut_off", w:"decayed", u:"unsure"};
+const ATTR_KEYS = {e:"cut_off", w:"decayed", u:"unsure"};  // O (overlapping) is set by the server from the boxes
 const DETECTOR_SOURCES = new Set(["yolo","baseline","flatbug"]);
 const $ = id => document.getElementById(id);
 const esc = t => String(t ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));

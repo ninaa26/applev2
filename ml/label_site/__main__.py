@@ -68,7 +68,9 @@ def cmd_users(a) -> None:
 def cmd_init(a) -> None:
     con = connect(a.site / "site.db")
     p, b = import_site(con, a.site)
-    print(f"added {p} photos, {b} boxes to {a.site / 'site.db'}")
+    store = Store(a.site)
+    marked = sum(store.mark_overlaps(r["photo"], r["copy"]) for r in store.q("SELECT DISTINCT photo, copy FROM boxes"))
+    print(f"added {p} photos, {b} boxes to {a.site / 'site.db'}; overlap tags updated on {marked} boxes")
 
 
 def cmd_assign(a) -> None:

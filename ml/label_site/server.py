@@ -226,6 +226,32 @@ def handler(store: Store, auth: Auth, secure: bool, species_experts: list[str]):
                 raise ValueError("too big")
             return self.rfile.read(n)
 
+        def admin_post(self, path: str, body: dict, user: str):
+            """Assignment changes from the dashboard: move one photo, pause or resume a person, hand out their photos."""
+            who = str(body.get("user", "")).lower()
+            labellers = sorted(u for u in auth.users if not auth.is_admin(u))
+            try:
+                if path == "/api/admin/reassign":
+                    t = store.task(int(body["task"]))
+                    to = str(body.get("to", "")).lower()
+                    if not t or to not in auth.users:
+                        return self.send(b"unknown task or person", "text/plain", 400)
+                    if t["kind"] == "gold_truth" and not auth.is_admin(to):
+                        return self.send(b"reference photos are labelled by admins only", "text/plain", 409)
+                    return self.json({"message": workflow.reassign(store, t, to, user)})
+                if path == "/api/admin/pause":
+                    if who not in auth.users:
+                        return self.send(b"unknown person", "text/plain", 400)
+                    if body.get("on") and body.get("release"):
+                        got = workflow.release(store, who, labellers, user)
+                        return self.json({"message": f"{who} paused: {got['moved']} photos handed out, "
+                                                     f"{got['dropped_tests']} hidden tests dropped, {got['kept_started']} started ones kept"})
+                    workflow.set_paused(store, who, bool(body.get("on")))
+                    return self.json({"message": f"{who} {'paused' if body.get('on') else 'resumed'}"})
+            except (ValueError, KeyError, TypeError) as e:
+                return self.send(str(e).encode(), "text/plain", 409)
+            return self.send(b"not found", "text/plain", 404)
+
         def my_task(self, user: str, task_id) -> dict | None:
             """A task the user may open: their own, or any for an admin (to review)."""
             try:
@@ -304,7 +330,9 @@ def handler(store: Store, auth: Auth, secure: bool, species_experts: list[str]):
                         return self.send(b"not your photo", "text/plain", 403)
                     return self.send((store.site / "inbox" / name).read_bytes(), "image/jpeg")
             if path == "/api/dashboard" and admin:
-                return self.json(workflow.dashboard(store))
+                d = workflow.dashboard(store, sorted(auth.users))
+                d["admins"] = sorted(u for u in auth.users if auth.is_admin(u))
+                return self.json(d)
             if path == "/api/export/coco.json" and admin:
                 return self.send(json.dumps(coco_export(store)).encode(), "application/json",
                                  headers={"Content-Disposition": "attachment; filename=labels-coco.json"})
@@ -343,6 +371,10 @@ def handler(store: Store, auth: Auth, secure: bool, species_experts: list[str]):
                 body = json.loads(raw or b"{}")
             except ValueError:
                 return self.send(b"bad request", "text/plain", 400)
+            if path.startswith("/api/admin/"):
+                if not auth.is_admin(user):
+                    return self.send(b"admins only", "text/plain", 403)
+                return self.admin_post(path, body, user)
             t = self.my_task(user, body.get("task"))
             if not t:
                 return self.send(b"not your task", "text/plain", 403)

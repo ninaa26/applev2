@@ -56,6 +56,12 @@ class TestScoring(unittest.TestCase):
         self.assertEqual(merged[0]["by"], "ann+bob")
         self.assertFalse(merged[0].get("disputed"))
 
+    def test_overlapping(self):
+        bs = [box(0, 0, 10, 10), box(5, 5, 15, 15), box(10, 0, 20, 10), box(2, 2, 4, 4, "skip"), box(50, 50, 60, 60)]
+        # 0 and 1 share 25% of a box; 0 and 2 only touch at an edge; 3 is deleted; 4 is alone
+        self.assertEqual(scoring.overlapping(bs), {0, 1, 2})  # 1 and 2 overlap too (x 10-15, y 5-10: 25%)
+        self.assertEqual(scoring.overlapping([box(0, 0, 100, 100), box(99, 99, 110, 110)]), set())  # 1% of the small one
+
     def test_seconds_per_box_skips_breaks(self):
         self.assertEqual(scoring.seconds_per_box([0, 2, 4, 1000, 1003]), 2)
         self.assertIsNone(scoring.seconds_per_box([5]))
@@ -188,6 +194,19 @@ class TestStoreAndWorkflow(unittest.TestCase):
         with self.assertRaises(Conflict):
             s.save(p, "main", page, "bob", v)  # stale version
 
+    def test_save_tags_overlaps_by_itself(self):
+        s, p = self.store, "s0__p2.jpg"
+        bs = s.boxes(p, "main")
+        page = [{"id": b["id"], "x1": float(b["x1"]), "y1": float(b["y1"]), "x2": float(b["x2"]), "y2": float(b["y2"]),
+                 "label": b["label"], "attrs": "", "locked": 0} for b in bs]
+        page[1].update(x1=4.0, x2=12.0)  # now overlaps box 0 (0-8)
+        rows = s.save(p, "main", page, "ann", None)
+        self.assertEqual([("overlapping" in r["attrs"]) for r in rows], [True, True, False, False])
+        self.assertEqual(rows[0]["by"], "")  # the tag isn't a person's check
+        page[1].update(x1=10.0, x2=18.0)  # moved apart again
+        rows = s.save(p, "main", [{**x, "attrs": "overlapping" if i < 2 else ""} for i, x in enumerate(page)], "ann", None)
+        self.assertFalse(any("overlapping" in r["attrs"] for r in rows))
+
     def test_locked_box_cannot_move(self):
         s, p = self.store, "s1__p1.jpg"
         b = s.boxes(p, "main")[0]
@@ -230,6 +249,47 @@ class TestStoreAndWorkflow(unittest.TestCase):
         disputed = [b for b in s.boxes(p, "main") if "disputed" in b["attrs"]]
         self.assertEqual(len(disputed), 1)
         self.assertEqual(disputed[0]["by"], "")
+
+    def test_reassign_release_and_pause(self):
+        s = self.store
+        workflow.assign(s, ["ann", "bob", "cat"], ["nina"], gold=2, gold_each=1, double=0.2)
+        main = s.q("SELECT * FROM tasks WHERE kind='label' AND user='ann' LIMIT 1")[0]
+        self.assertEqual(workflow.reassign(s, main, "bob", "nina"), "moved to bob")
+        ref = s.q("SELECT * FROM tasks WHERE kind='gold_truth' LIMIT 1")[0]
+        tested = s.q("SELECT user FROM tasks WHERE photo=? AND kind='gold_check'", ref["photo"])
+        if tested:
+            with self.assertRaises(ValueError):  # would show them the answers
+                workflow.reassign(s, ref, tested[0]["user"], "nina")
+        self.assertEqual(s.task(main["id"])["user"], "bob")
+        # a started private copy can't move
+        dbl = s.q("SELECT * FROM tasks WHERE kind='double' ORDER BY id LIMIT 1")[0]
+        b0 = s.boxes(dbl["photo"], dbl["copy"])[0]
+        s.save(dbl["photo"], dbl["copy"], [{"id": b0["id"], "x1": float(b0["x1"]), "y1": float(b0["y1"]), "x2": float(b0["x2"]),
+               "y2": float(b0["y2"]), "label": "debris", "attrs": "", "locked": 0}], dbl["user"], None)
+        third = next(u for u in ("ann", "bob", "cat") if not s.q("SELECT 1 FROM tasks WHERE photo=? AND user=?", dbl["photo"], u))
+        with self.assertRaises(ValueError):
+            workflow.reassign(s, s.task(dbl["id"]), third, "nina")
+        # pause cat: their open photos go to ann and bob, their hidden tests are dropped, nothing new comes
+        cat_before = s.q("SELECT * FROM tasks WHERE user='cat' AND status='open'")
+        got = workflow.release(s, "cat", ["ann", "bob", "cat"], "nina")
+        tests = sum(t["kind"] == "gold_check" for t in cat_before)
+        self.assertEqual(got["dropped_tests"], tests)
+        self.assertEqual(got["moved"] + got["kept_started"] + tests, len(cat_before))
+        left = s.q("SELECT * FROM tasks WHERE user='cat' AND status='open'")
+        self.assertTrue(all(workflow.started(s, t) for t in left))
+        self.assertIn("cat", workflow.paused(s))
+        csv_rows = [{"photo": "s0__new.jpg", "n": 1, "label": "moth", "source": "yolo", "x1": 0, "y1": 0, "x2": 5, "y2": 5,
+                     "conf": "0.6", "model_label": "OFM", "model_conf": "0.9", "by": ""}]
+        with open(self.site / "labels.csv", "a", newline="") as f:
+            csv.DictWriter(f, fieldnames=list(csv_rows[0])).writerows(csv_rows)
+        with open(self.site / "photo_checks.csv", "a", newline="") as f:
+            csv.DictWriter(f, fieldnames=["photo", "set", "file", "source", "card", "decision", "why", "px_per_mm", "held_out"]).writerow(
+                {"photo": "s0__new.jpg", "set": "s0", "file": "new.jpg", "source": "x/new.jpg", "card": "new", "decision": "keep",
+                 "why": "", "px_per_mm": "12", "held_out": ""})
+        import_site(s.con, self.site)
+        workflow.assign(s, ["ann", "bob", "cat"], ["nina"], gold=2, gold_each=1, double=0)
+        self.assertNotEqual(s.q("SELECT user FROM tasks WHERE photo='s0__new.jpg'")[0]["user"], "cat")
+        self.assertIn("cat", [p["user"] for p in workflow.dashboard(s, ["ann", "bob", "cat"])["people"]])
 
     def test_gold_scores_on_dashboard_and_review(self):
         s = self.store

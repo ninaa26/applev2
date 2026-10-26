@@ -95,6 +95,25 @@ def merge_two(a: list[dict], b: list[dict], who: tuple[str, str]) -> tuple[list[
     return merged, disputes, (agreed / total if total else 1.0)
 
 
+def overlapping(boxes: list[dict], share: float = 0.10) -> set[int]:
+    """Indices of the boxes that overlap another one: they share at least `share` of the smaller box's area (so
+    two boxes that only touch at an edge don't count). Deleted boxes are left out."""
+    idx = [i for i, b in enumerate(boxes) if b.get("label") != "skip"]
+    out: set[int] = set()
+    for k, i in enumerate(idx):
+        a = boxes[i]
+        for j in idx[k + 1:]:
+            b = boxes[j]
+            ix = min(a["x2"], b["x2"]) - max(a["x1"], b["x1"])
+            iy = min(a["y2"], b["y2"]) - max(a["y1"], b["y1"])
+            if ix <= 0 or iy <= 0:
+                continue
+            small = min((a["x2"] - a["x1"]) * (a["y2"] - a["y1"]), (b["x2"] - b["x1"]) * (b["y2"] - b["y1"]))
+            if small > 0 and ix * iy >= share * small:
+                out.update((i, j))
+    return out
+
+
 def seconds_per_box(times: list[float], gap: float = 300) -> float | None:
     """Median seconds between one person's consecutive box changes, ignoring breaks longer than `gap`."""
     t = sorted(times)
