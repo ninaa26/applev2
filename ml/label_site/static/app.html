@@ -38,7 +38,7 @@
     <option value="all">all</option><option value="unchecked">not checked yet</option>
     <option value="unsure">model under 0.8 first</option><option value="missed">missed by the detector</option>
     <option value="disputed">disputed</option></select></label>
-  <label class="line">Hide detector boxes under <input id="thr" type="range" min="0" max="0.9" step="0.05" value="0"> <span id="thrv">0</span></label>
+  <label class="line slider">Hide detector boxes under <input id="thr" type="range" min="0" max="0.9" step="0.05" value="0"> <span id="thrv">0</span></label>
   <label class="line"><input type="checkbox" id="hideAll"> Hide all boxes (H)</label>
   <div class="row"><button id="lock" title="L">🔒 Lock box (L)</button></div>
   <label class="line"><input type="checkbox" id="lockChecked" checked> Checked boxes can't be dragged</label>
@@ -53,9 +53,9 @@
   <label class="line"><input type="checkbox" data-tag="not_gridded"> Not a gridded liner</label>
   <div id="issues"></div>
   <h2>Image</h2>
-  <label class="line">Brightness <input id="bri" type="range" min="50" max="200" value="100"></label>
-  <label class="line">Contrast <input id="con" type="range" min="50" max="250" value="100"></label>
-  <label class="line">Colour <input id="sat" type="range" min="0" max="250" value="100"></label>
+  <label class="line slider">Brightness <input id="bri" type="range" min="50" max="200" value="100"></label>
+  <label class="line slider">Contrast <input id="con" type="range" min="50" max="250" value="100"></label>
+  <label class="line slider">Colour <input id="sat" type="range" min="0" max="250" value="100"></label>
   <button id="resetImg" class="small">reset</button>
   <h2>Keys</h2><div class="key" id="key"></div>
 

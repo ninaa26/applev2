@@ -167,3 +167,23 @@ button.krow.on { background:var(--pink); border-color:transparent; color:#fff; f
 .lcard:disabled { opacity:1; cursor:default; }
 .lcard.on { border:2px solid var(--c); padding:7px 3px 5px; background:color-mix(in srgb, var(--c) 16%, var(--field)); font-weight:500; }
 [hidden] { display:none !important; }
+
+/* the right panel, spaced out: room under each heading, between rows of buttons and between settings */
+aside.right h2 { margin:24px 0 10px; }
+aside.right > .row + .wide, aside.right > .row + .row { margin-top:8px; }
+aside.right .row { gap:6px; }
+aside.right #zoom { margin-bottom:8px; }
+aside.right #info { margin-top:10px; line-height:1.45; }
+aside.right #taskActions { margin-top:14px; gap:10px; }
+aside.right .photo-meta { line-height:1.45; margin-top:2px; }
+aside.right .line { margin:9px 0; gap:8px; }
+aside.right .line select { padding:5px 6px; }
+aside.right > .row:has(#lock) { margin:10px 0; }
+aside.right .slider { display:grid; grid-template-columns:76px 1fr; gap:10px; }
+aside.right .slider:has(#thrv) { grid-template-columns:auto 1fr 24px; }
+aside.right #resetImg { margin-top:10px; }
+aside.right .lcards { gap:7px; }
+aside.right .lcards.many { gap:6px; }
+aside.right #attrs { margin-top:10px; }
+aside.right #issues:not(:empty) { margin-top:10px; }
+aside.right .key { gap:6px; }
