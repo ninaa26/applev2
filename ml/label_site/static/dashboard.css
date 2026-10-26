@@ -1,8 +1,8 @@
 /* The poster's colours (see app.css). */
 :root { --pink:#EE4A7F; --sky:#8FC9D9; --orange:#FF9E1B; --red:#D40000; --mauve:#D46FA6; --denim:#4A7DB0; --outline:#1A1A1A;
-        --bg:#8FC9D9; --panel:#FFF4F7; --ink:#1A1A1A; --mute:#5B5560; --field:#FFFFFF; --hover:#FFE0EA;
+        --bg:#8FC9D9; --panel:#ECE8E4; --ink:#1A1A1A; --mute:#5B5560; --field:#FFFFFF; --hover:#FFE0EA;
         --sans:-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif; --serif:"Lora", Georgia, serif; }
-@media (prefers-color-scheme: dark) { :root { --bg:#16273A; --panel:#1E3148; --ink:#FFF4F7; --mute:#C9BCCB; --field:#162536; --hover:#2A4260; } }
+@media (prefers-color-scheme: dark) { :root { --bg:#16273A; --panel:#192643; --ink:#FFF4F7; --mute:#C9BCCB; --field:#162536; --hover:#2A4260; } }
 body { margin:0; padding:22px max(16px, calc(50vw - 580px)); background:var(--bg); color:var(--ink); font:14px/1.45 var(--sans); }
 header { display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:8px; }
 h1 { font-family:var(--serif); font-weight:700; font-size:30px; margin:0; color:var(--outline); }

@@ -2,14 +2,15 @@
    Red is kept for trouble (not saved, unchecked boxes at Done). Fonts: San Francisco for the interface, Lora for titles. */
 :root {
   --pink:#EE4A7F; --sky:#8FC9D9; --orange:#FF9E1B; --red:#D40000; --mauve:#D46FA6; --denim:#4A7DB0; --outline:#1A1A1A;
-  --bg:#8FC9D9; --panel:#FFF4F7; --ink:#1A1A1A; --mute:#5B5560; --hover:#FFE0EA;
+  --green:#57764D; --green-ink:#57764D;  /* sage accent: saved, finished, accepted, complete */
+  --bg:#8FC9D9; --panel:#ECE8E4; --ink:#1A1A1A; --mute:#5B5560; --hover:#E0DAD3;
   --stage:#111111; --field:#FFFFFF;
   --hair:rgba(26,26,26,.16); --hair-strong:rgba(26,26,26,.32);  /* thin lines; the heavy outline is only for shadowed boxes */
   --sans:-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro", "Helvetica Neue", system-ui, sans-serif;
   --serif:"Lora", Georgia, "Times New Roman", serif;
 }
 @media (prefers-color-scheme: dark) {
-  :root { --bg:#16273A; --panel:#1E3148; --ink:#FFF4F7; --mute:#C9BCCB; --hover:#2A4260; --stage:#111111; --field:#162536;
+  :root { --bg:#16273A; --panel:#192643; --ink:#FFF4F7; --mute:#C9BCCB; --hover:#22335A; --stage:#111111; --field:#13203A; --green-ink:#8DB57F;
           --hair:rgba(255,244,247,.12); --hair-strong:rgba(255,244,247,.26); }
 }
 * { box-sizing:border-box; }
@@ -32,8 +33,8 @@ button.primary:hover { background:var(--mauve); }
 button.small { font-size:11px; padding:2px 6px; margin-top:4px; }
 .row { display:flex; gap:4px; flex-wrap:wrap; } .row > button { flex:1; }
 .mute { color:var(--mute); font-size:12px; }
-.line { display:flex; align-items:center; gap:6px; font-size:12px; margin:4px 0; } .line input[type=range] { flex:1; accent-color:var(--pink); }
-input[type=checkbox] { accent-color:var(--pink); }
+.line { display:flex; align-items:center; gap:6px; font-size:12px; margin:4px 0; } .line input[type=range] { flex:1; accent-color:var(--green); }
+input[type=checkbox] { accent-color:var(--green); }
 select, textarea, input[type=text] { font:inherit; font-size:12px; background:var(--field); color:var(--ink); border:1px solid var(--hair-strong); border-radius:8px; padding:4px; }
 #me { display:flex; justify-content:space-between; align-items:center; gap:6px; font-size:12px; color:var(--mute); margin-bottom:8px; }
 #me b { color:var(--ink); }
@@ -44,13 +45,15 @@ select, textarea, input[type=text] { font:inherit; font-size:12px; background:va
 .item:hover { background:var(--hover); } .item.on { background:var(--denim); color:#fff; border-color:transparent; }
 .item .name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:500; }
 .item .count { font-variant-numeric:tabular-nums; opacity:.8; font-weight:600; }
+.item .count.full { color:var(--green-ink); opacity:1; } .item.on .count.full { color:#fff; }
+.badge.ok { color:var(--green-ink); }
 .item .sub { grid-column:1 / -1; opacity:.85; font-size:11px; }
 .badge { display:inline-block; font-size:10px; padding:0 6px; border-radius:8px; border:1px solid currentColor; margin-right:4px; font-weight:600; }
 main { position:relative; overflow:hidden; background:var(--stage); }
 canvas { display:block; }
 #status { position:absolute; left:12px; bottom:12px; color:#fff; background:#1A1A1Acc; padding:4px 8px; border-radius:8px; font-size:12px; }
 #status.save-saving { background:var(--orange); color:var(--outline); font-weight:700; font-size:13px; padding:6px 12px; border:1px solid var(--hair-strong); }
-#status.save-saved { background:var(--denim); font-weight:700; font-size:13px; padding:6px 12px; border:1px solid var(--hair-strong); transition:opacity .6s; }
+#status.save-saved { background:var(--green); font-weight:700; font-size:13px; padding:6px 12px; border:1px solid var(--hair-strong); transition:opacity .6s; }
 #status.save-saved.faded { opacity:.6; }
 #status.save-error { background:var(--red); font-size:14px; padding:10px 14px; display:flex; flex-direction:column; gap:4px; max-width:360px;
                      border:2px solid #fff; box-shadow:0 0 0 4px #D4000080, 0 8px 24px #0007; animation:pulse 1.2s ease-in-out infinite; z-index:6; }
@@ -89,7 +92,7 @@ button.krow.on { background:var(--pink); border-color:transparent; color:#fff; f
 #guide .sheet { background:var(--panel); color:var(--ink); width:min(720px, 100vw - 32px); max-height:90vh; overflow:auto;
                 border-radius:14px; padding:20px 24px; position:relative; border:3px solid var(--outline); box-shadow:6px 6px 0 var(--outline); }
 #guide h1 { font-family:var(--serif); font-weight:700; font-size:26px; color:var(--pink); margin:0 0 8px; }
-#guide h2 { font-size:17px; margin-top:20px; color:var(--denim); }
+#guide h2 { font-size:17px; margin-top:20px; color:var(--green-ink); }
 #guide .close { position:absolute; right:12px; top:12px; }
 #examples { display:grid; grid-template-columns:repeat(auto-fill, minmax(120px, 1fr)); gap:8px; margin-top:8px; }
 #examples figure { margin:0; font-size:11px; color:var(--mute); text-align:center; font-weight:600; }

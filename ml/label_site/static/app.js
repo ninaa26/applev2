@@ -45,10 +45,11 @@ function renderQueue() {
     const short = t.photo.replace(/\.RAW-01\.COVER/, "").replace(/__/, " · ");
     // the status and kind go on their own line, so a long photo name can't hide them
     const tags = tab === "review" ? [t.user] : [t.kind !== "label" ? t.kind : "", STATUS[t.status] || ""].filter(Boolean);
+    const okTag = x => x === STATUS.accepted || x === STATUS.done;  // finished: shown in the green accent
     const count = tab === "mine" ? `${t.n - t.unchecked}/${t.n}` : "";
     const notes = tab === "mine" && (t.issues || t.note) ? `${t.issues ? t.issues + " comment(s)" : ""} ${esc(t.note || "")}` : "";
-    const sub = tags.length || notes ? `<span class="sub">${tags.map(x => `<span class="badge">${esc(x)}</span>`).join("")} ${notes}</span>` : "";
-    return `<div class="item ${task && t.id === task.id ? "on" : ""}" data-id="${t.id}" title="${esc(t.photo)}"><span class="name">${esc(short)}</span><span class="count">${count}</span>${sub}</div>`;
+    const sub = tags.length || notes ? `<span class="sub">${tags.map(x => `<span class="badge${okTag(x) ? " ok" : ""}">${esc(x)}</span>`).join("")} ${notes}</span>` : "";
+    return `<div class="item ${task && t.id === task.id ? "on" : ""}" data-id="${t.id}" title="${esc(t.photo)}"><span class="name">${esc(short)}</span><span class="count${tab === "mine" && t.n && !t.unchecked ? " full" : ""}">${count}</span>${sub}</div>`;
   };
   if (tab === "mine") {
     const todo = items.filter(isOpen), done = items.filter(t => !isOpen(t));
