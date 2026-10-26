@@ -64,8 +64,19 @@ document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
   tab = b.dataset.tab; document.querySelectorAll(".tabs button").forEach(x => x.classList.toggle("on", x === b)); renderQueue(); });
 
 // ---------- one photo
+// Waits for any save in flight and tries once more; false if the photo still has unsaved changes. Nothing may
+// leave a photo (finish it, open another) while that's false, or the unsaved changes would be thrown away.
+async function ensureSaved() {
+  for (let i = 0; saving && i < 100; i++) await new Promise(r => setTimeout(r, 100));
+  if (dirty) { clearTimeout(saveTimer); await flush(); }
+  for (let i = 0; saving && i < 100; i++) await new Promise(r => setTimeout(r, 100));
+  return !dirty;
+}
+function blockedUnsaved(what) {
+  setSave("error", `Can't ${what} until this photo's changes are saved. Press Retry now; if it keeps failing, tell nina.`);
+}
 async function openTask(id) {
-  if (dirty) await flush();
+  if (task && !(await ensureSaved())) { blockedUnsaved("open another photo"); return; }
   const d = await (await api(`/api/photo?task=${id}`)).json();
   task = d.task; photo = d.photo; boxes = d.boxes; version = d.version; issues = d.issues; tags = d.tags;
   warnUnchecked = false; $("finishAsk").hidden = true;
@@ -99,7 +110,7 @@ function renderActions() {
 let warnUnchecked = false;  // Done was pressed with dashed boxes left: they're outlined in red until answered
 function hideFinishAsk() { warnUnchecked = false; $("finishAsk").hidden = true; draw(); }
 async function finish(e, sure = false) {
-  if (dirty) await flush();
+  if (!(await ensureSaved())) { $("finishAsk").hidden = true; blockedUnsaved("finish"); return; }
   const left = boxes.filter(unchecked).length;
   if (left && !sure) {
     warnUnchecked = true; fit(); draw();
@@ -116,6 +127,7 @@ $("finishYes").onclick = () => finish(null, true);
 $("finishShow").onclick = () => { $("finishAsk").hidden = true; sel = -1; jump(1); };  // red outlines stay while they work
 $("finishCancel").onclick = hideFinishAsk;
 async function reviewTask(accept) {
+  if (!(await ensureSaved())) { blockedUnsaved(accept ? "accept" : "send back"); return; }
   const note = $("note") ? $("note").value : "";
   if (!accept && !note && !issues.some(i => !i.resolved_at)) { setStatus("say what to fix: a note or a pinned comment"); return; }
   await api("/api/review", {task: task.id, accept, note});
