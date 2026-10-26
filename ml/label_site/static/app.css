@@ -265,7 +265,7 @@ body:not(.left-off) #leftToggle .fill { opacity:.9; } body.left-off #leftToggle 
   aside.right .line { min-height:32px; }
 }
 
-/* a paused labeller sees this instead of their photos */
-.paused-note { margin-top:14px; padding:14px; border-radius:12px; border:1px solid var(--hair); background:var(--field); font-size:13px;
+/* a paused labeller sees this above their photos */
+.paused-note { margin:14px 0 4px; padding:14px; border-radius:12px; border:1px solid var(--hair); background:var(--field); font-size:13px;
                line-height:1.5; color:var(--mute); }
 .paused-note b { display:block; font-size:15px; color:var(--orange); margin-bottom:4px; }

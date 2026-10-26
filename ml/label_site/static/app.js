@@ -40,11 +40,6 @@ function renderQueue() {
   const items = tab === "mine" ? queue.tasks : queue.review;
   const isOpen = t => t.status === "open" || t.status === "returned";
   const open = queue.tasks.filter(isOpen).length;
-  if (queue.paused) {  // an admin has paused this person: nothing to open until they resume them
-    $("queueInfo").textContent = "";
-    $("queue").innerHTML = `<div class="paused-note"><b>Paused</b>An admin has paused your labelling for now. Your photos are kept for you and come back when you're resumed.</div>`;
-    return;
-  }
   $("queueInfo").textContent = tab === "mine" ? `${open} to do · ${queue.tasks.length - open} finished` : `${items.length} waiting for review`;
   const row = t => {
     const short = t.photo.replace(/\.RAW-01\.COVER/, "").replace(/__/, " · ");
@@ -61,6 +56,8 @@ function renderQueue() {
     $("queue").innerHTML = (todo.length ? `<h2>To do (${todo.length})</h2>` + todo.map(row).join("") : "")
       + (done.length ? `<h2>Finished (${done.length})</h2>` + done.map(row).join("") : "")
       || `<p class="mute">Nothing here.</p>`;
+    // paused by an admin: they keep their photos, but no new ones come
+    if (queue.paused) $("queue").insertAdjacentHTML("afterbegin", `<div class="paused-note"><b>No new photos for now</b>An admin has paused new photos for you. Finish the ones here; more come when you're resumed.</div>`);
   } else {
     $("queue").innerHTML = items.map(row).join("") || `<p class="mute">Nothing here.</p>`;
   }
