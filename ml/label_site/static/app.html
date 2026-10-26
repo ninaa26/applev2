@@ -80,36 +80,185 @@
   </div>
 </aside>
 <div id="guide" hidden><div class="sheet">
-  <button id="guideClose" class="close">✕</button>
+  <button id="guideClose" class="close" aria-label="Close the guide">✕</button>
   <h1>How to label</h1>
-  <p><b>Dashed boxes</b> are the models' guesses that nobody has checked. Every box counts as done only when a person
-  has looked at it: press <b>Enter</b> if the guess is right (it moves on to the next one), or press the right number.</p>
-  <h2>Pass 1: what is it?</h2>
+  <p class="lead">Every photo here is a sticky liner from a moth trap. Your boxes and labels teach the trap's camera to find
+  and name the moths on its own, so a grower knows when to spray. Careful beats fast: one wrong label teaches the model
+  something wrong, and a moth you skip teaches it to miss moths.</p>
+  <nav class="toc" aria-label="Contents">
+    <a href="#g-start">Your first photo</a><a href="#g-screen">The screen</a><a href="#g-pass1">Pass 1: what is it?</a>
+    <a href="#g-boxes">Boxes</a><a href="#g-tags">Tags</a><a href="#g-pass2">Pass 2: species</a><a href="#g-species">The species</a>
+    <a href="#g-photo">Problem photos</a><a href="#g-review">Comments and review</a><a href="#g-scores">Test photos</a>
+    <a href="#g-keys">Keys and phone</a><a href="#g-mistakes">Common mistakes</a><a href="#g-examples">Examples</a>
+  </nav>
+
+  <h2 id="g-start">Your first photo, step by step</h2>
+  <ol>
+    <li>Pick a photo under <b>To do</b> in the list on the left (on a phone: <b>☰</b>).</li>
+    <li>The models have already guessed. Their boxes are <b>dashed</b>: nobody has checked them yet. Your job is to check
+      every one, and to add any insect they missed.</li>
+    <li>Press <b>Tab</b> (or <b>▶</b>) to jump to the next box to check. The photo zooms to it and the box is outlined.</li>
+    <li>Look at it. If the guess is right, press <b>Enter</b> (or <b>✓ Right</b>). If it's wrong, press the right number
+      (or tap the right card). Either way you move on, and the box turns solid: checked.</li>
+    <li>If a box is on nothing, or off the liner, press <b>Delete</b>.</li>
+    <li>Scan the whole liner once more for insects with no box, and draw one round each (<a href="#g-boxes">Boxes</a>).</li>
+    <li>When the counter says every box is checked, press <b>Done with this photo</b>. A reviewer looks at it next.</li>
+  </ol>
+  <p class="tip">Work is saved as you go (the green <b>Saved</b> at the bottom of the photo). If it ever turns red, don't
+  close the tab: it keeps trying, and tells you when it has saved.</p>
+
+  <h2 id="g-screen">The screen</h2>
   <ul>
-    <li><b>1 moth</b>: any moth, even worn, flattened or half under another insect.</li>
-    <li><b>2 other insect</b>: flies, wasps, beetles, lacewings, spiders… anything alive-ish that isn't a moth.</li>
-    <li><b>3 debris</b>: on the card but not an insect: loose legs, wing bits, scales, leaf pieces, glue blobs. Keep
-      these, don't delete them: the trap sees them too.</li>
-    <li><b>Delete</b>: only for boxes on nothing at all, or off the card.</li>
+    <li><b>Left:</b> your photos. The numbers are boxes checked / boxes on the photo. <b>\</b> or the button at the top
+      left of the photo hides the list to give the photo more room.</li>
+    <li><b>Middle:</b> the photo. Scroll or pinch to zoom, drag to move around, <b>F</b> to fit the whole liner again.</li>
+    <li><b>Right:</b> the selected box close up, what the models thought of it, the label cards, and settings.
+      <b>Show</b> can list only the boxes nobody has checked, or the ones the model was least sure of first.</li>
+    <li><b>Your name</b> at the top left opens the menu: this guide, your panel widths, log out.</li>
   </ul>
-  <h2>Box every insect</h2>
-  <p>Tiny, blurred, half-hidden, overlapping and decayed ones too. A detector trained on photos where they were left out
-  learns to miss them. Press <b>B</b> and drag to draw a box, or in draw mode just <b>click</b> an insect and the site
-  draws the box for you. One box over two insects: shrink it to one and draw the other.</p>
-  <h2>Tags on a box</h2>
-  <p><b>O</b> (overlapping another insect) is added by itself whenever two boxes share part of their area. Yours to set:
-  <b>E</b> cut off by the photo edge · <b>W</b> worn or decayed · <b>U</b> unsure
-  (you labelled it but aren't confident). Use <b>U</b> rather than guessing.</p>
-  <h2>Pass 2: species (anyone, when you're sure)</h2>
-  <p>Switch to pass 2 on the right. <b>Tab</b> jumps to the moths that have no species yet. CM, OFM, OBLR, the look-alikes
-  (redbanded leafroller, lesser appleworm), other tortricids, other moths. <b>0</b> = moth, species unsure. When in doubt,
-  use 0: a wrong species is worse than none, and the examples below show what each looks like on glue.</p>
+
+  <h2 id="g-pass1">Pass 1: what is it?</h2>
+  <p>Pass 1 is for everyone. Each box gets one of three labels:</p>
+  <table class="gtable">
+    <tr><th>Key</th><th>Label</th><th>What goes here</th></tr>
+    <tr><td><kbd>1</kbd></td><td><b>moth</b></td><td>Any moth: whole, worn bald, flattened, wings spread or folded, half under another insect.
+      If you can see moth wings (scaly, often patterned, held flat or like a tent) it's a moth.</td></tr>
+    <tr><td><kbd>2</kbd></td><td><b>other insect</b></td><td>Anything else that was alive: flies, gnats, wasps, bees, beetles, lacewings,
+      leafhoppers, spiders, earwigs. Flies have two clear wings with veins; wasps have a narrow waist; beetles have hard shiny wing cases.</td></tr>
+    <tr><td><kbd>3</kbd></td><td><b>debris</b></td><td>On the liner but not a whole insect: loose legs, a wing on its own, scale smudges,
+      leaf and bark bits, seeds, hair, glue blobs, droppings, dirt.</td></tr>
+    <tr><td><kbd>Delete</kbd></td><td><i>(no label)</i></td><td>Only for a box on nothing at all, or on something off the liner
+      (the trap's frame, the table, a finger).</td></tr>
+  </table>
+  <ul>
+    <li><b>Keep debris boxes; don't delete them.</b> The trap's camera sees debris too, and it has to learn that it isn't a moth.</li>
+    <li><b>Part of a moth is still a moth</b> if most of the body is there. A single wing or a lone leg is debris.</li>
+    <li><b>Unsure between moth and other insect?</b> Label your best guess and press <b>U</b> (unsure). Don't skip it.</li>
+  </ul>
+
+  <h2 id="g-boxes">Boxes</h2>
+  <p><b>Box every insect on the liner</b>: tiny, blurred, half hidden, overlapping, decayed ones too. A model trained on
+  photos where small ones were left out learns to miss them, and its counts drift towards the big insects.</p>
+  <ul>
+    <li><b>Tight:</b> the box touches the insect's outermost edges, wings and all, with a hair of space. Not the antennae or legs
+      sticking far out, and not its shadow or the glue around it.</li>
+    <li><b>One insect per box.</b> If a box covers two, shrink it to one and draw the other.</li>
+    <li><b>Overlapping insects</b> each get their own box, even if the boxes overlap. The site tags them for you (<b>O</b>).</li>
+    <li><b>Draw a box:</b> press <b>B</b> (or <b>Draw box</b>) and drag across the insect. Or, in draw mode, just
+      <b>click</b> the insect and the site draws a box round it for you; check it fits.</li>
+    <li><b>Fix a box:</b> select it and drag its edges or corners, or drag the middle to move it. <b>L</b> locks a box so it
+      can't move by accident; checked boxes can't be dragged unless you turn that off under <b>Show</b>.</li>
+    <li><b>Undo</b> anything with <b>⌘Z</b> (redo <b>⇧⌘Z</b>), or the arrows.</li>
+  </ul>
+
+  <h2 id="g-tags">Tags on a box</h2>
+  <table class="gtable">
+    <tr><td><kbd>E</kbd></td><td><b>cut off</b></td><td>The insect runs off the edge of the photo.</td></tr>
+    <tr><td><kbd>W</kbd></td><td><b>worn</b></td><td>Decayed, rubbed bald, squashed, or mostly scales gone: hard to judge from its looks.</td></tr>
+    <tr><td><kbd>U</kbd></td><td><b>unsure</b></td><td>You labelled it but aren't confident. Use it freely: an honest "unsure" is worth more than a guess.</td></tr>
+    <tr><td><b>O</b></td><td><b>overlapping</b></td><td>Added by itself when two boxes share part of their area.</td></tr>
+  </table>
+
+  <h2 id="g-pass2">Pass 2: which species?</h2>
+  <p>Switch to <b>2 · species</b> on the right. <b>Tab</b> now jumps to the moths that have no species yet. Anyone can do
+  pass 2, but only name a species when you're sure from what you can see: each person's species calls are scored on
+  hidden test photos, so the team knows whose calls to trust.</p>
+  <p><b>When in doubt, press <kbd>0</kbd> (moth, unsure).</b> A wrong species is worse than none: the trap counts the
+  three pests to time sprays, and a wrong name moves those counts.</p>
+  <ol>
+    <li><b>Size first.</b> The liner's grid squares are a known size, and the details on the right show the box's length
+      in mm. Most mix-ups are fixed by size alone.</li>
+    <li><b>Shape at rest.</b> Leafrollers (OBLR, RBLR and other tortricids) fold their wings into a broad <b>bell</b> with square
+      shoulders. CM, OFM and LAW are narrower, with the wings folded back like a long roof.</li>
+    <li><b>Marks.</b> Then look for the species' own marks below. On glue, wings are often spread and the scales rubbed off,
+      so marks can be faint or missing: that's what <b>0</b> is for.</li>
+  </ol>
+
+  <h2 id="g-species">The species</h2>
+  <p class="mute">Sizes are rough wingspans, wings spread, which is how most end up on the glue. Folded, a moth is about half as long.</p>
+  <div class="sp"><span data-icon="CM"></span><div><h3><kbd>1</kbd> CM · codling moth</h3>
+    <p>About 15–22 mm. <b>Grey</b>, with fine wavy cross-lines like wood grain. The giveaway is a <b>copper or bronze shiny
+    patch at the tip of each forewing</b>, edged darker. The main apple pest. Lure: codling moth.</p></div></div>
+  <div class="sp"><span data-icon="OFM"></span><div><h3><kbd>2</kbd> OFM · oriental fruit moth</h3>
+    <p>Small: about 10–15 mm. <b>Dark grey-brown</b>, narrow, with <b>a row of short pale dashes along the front edge</b> of
+    the forewing and faint pale bands. <b>No copper patch</b>, which tells it from a small CM.</p></div></div>
+  <div class="sp"><span data-icon="OBLR"></span><div><h3><kbd>3</kbd> OBLR · obliquebanded leafroller</h3>
+    <p>Larger: about 20–30 mm. A <b>tan to light brown bell</b> with square shoulders and <b>dark brown bands</b>: a patch at
+    the wing base, a broad band running <b>slantwise</b> across the middle (the "oblique band"), and a spot near the tip.</p></div></div>
+  <div class="sp"><span data-icon="lookalike_RBLR"></span><div><h3><kbd>4</kbd> RBLR · redbanded leafroller (look-alike)</h3>
+    <p>About 13–17 mm, smaller than OBLR. A <b>pale brown</b> bell with <b>one narrow reddish-brown band</b> running slantwise
+    across the wings, and no dark patch at the base. Not a pest we count, but easy to call OBLR by mistake.</p></div></div>
+  <div class="sp"><span data-icon="lookalike_LAW"></span><div><h3><kbd>5</kbd> LAW · lesser appleworm (look-alike)</h3>
+    <p>The smallest: about 9–11 mm. Dark brown with grey and orange-brown scales and fine pale bands. It looks a lot like OFM
+    and turns up in OFM traps. If you can't split it from OFM, use <kbd>0</kbd>.</p></div></div>
+  <div class="sp"><span data-icon="other_tortricid"></span><div><h3><kbd>6</kbd> other tortricid</h3>
+    <p>A leafroller-type moth (the bell shape) that is none of the above.</p></div></div>
+  <div class="sp"><span data-icon="other_moth"></span><div><h3><kbd>7</kbd> other moth</h3>
+    <p>Any moth that isn't a tortricid: noctuids (stout, often bigger), pyralids and crambids (long and thin, snout-like),
+    geometrids (broad thin wings), tiny micro-moths. Most bycatch ends up here.</p></div></div>
+  <div class="sp"><span data-icon="moth" data-unsure></span><div><h3><kbd>0</kbd> moth?, species unsure</h3>
+    <p>A moth you can't name with confidence. Always better than a guess.</p></div></div>
+  <table class="gtable">
+    <tr><th>If you're torn between</th><th>Look at</th></tr>
+    <tr><td>CM and OFM</td><td>Size (CM is clearly bigger) and the copper patch at the wing tip (CM only).</td></tr>
+    <tr><td>OFM and LAW</td><td>LAW is smaller and browner. Hard even for experts: <kbd>0</kbd> is fine.</td></tr>
+    <tr><td>OBLR and RBLR</td><td>OBLR is bigger and darker, with a base patch as well as the band; RBLR has one thin red-brown band on a paler wing.</td></tr>
+    <tr><td>a pest and other moth</td><td>Shape at rest and size first. A moth that fits none of the pests' descriptions is "other moth".</td></tr>
+  </table>
+  <p>Pass 2 also has <kbd>8</kbd> other insect and <kbd>9</kbd> debris, for boxes pass 1 got wrong.</p>
+
+  <h2 id="g-photo">Problem photos</h2>
+  <p>Under <b>This photo</b> (on a phone, <b>More settings</b>):</p>
+  <ul>
+    <li><b>Unusable:</b> too blurred, dark or glary to label at all. Tick it and press Done.</li>
+    <li><b>Wrong scale:</b> the mm sizes are clearly off (a moth reads as 2 mm or 80 mm). Keep labelling; it just tells us not to trust the sizes.</li>
+    <li><b>Not a gridded liner:</b> it isn't a sticky liner with a grid at all.</li>
+  </ul>
+
+  <h2 id="g-review">Comments and review</h2>
+  <ul>
+    <li><b>Right-click</b> anywhere on the photo (on a computer) to pin a comment: a question for a reviewer, or a note.</li>
+    <li>A reviewer either <b>accepts</b> your photo or <b>sends it back</b> with comments pinned where something needs fixing.
+      Sent-back photos come first in your list. Fix what each comment says, then press <b>Resolve</b> on it, then Done again.</li>
+    <li><b>Two-person photos:</b> some photos are labelled by two people separately. Where you disagreed, a third person
+      decides each box marked with a comment.</li>
+    <li><b>Reference photos</b> are labelled by the team's most careful people; everyone else is scored against them.</li>
+  </ul>
+
+  <h2 id="g-scores">Hidden test photos</h2>
+  <p>A few photos in your list are hidden tests: they look like any other photo and already have reference labels. Label
+  them as you would any photo. The dashboard scores them: <b>found</b> (how many of the reference's insects you boxed),
+  <b>right</b> (how many of those got the reference's label), <b>kept wrong guess</b> (how often you pressed Enter on a
+  wrong model guess without looking) and <b>species right</b>.</p>
+
+  <h2 id="g-keys">Keys, and labelling on a phone</h2>
+  <table class="gtable keys">
+    <tr><td><kbd>Tab</kbd> / <kbd>⇧Tab</kbd></td><td>next / previous box to check</td><td><kbd>Enter</kbd></td><td>the guess is right, next</td></tr>
+    <tr><td><kbd>1</kbd>–<kbd>9</kbd>, <kbd>0</kbd></td><td>label (the cards show the numbers)</td><td><kbd>Delete</kbd></td><td>remove the box (not on the liner)</td></tr>
+    <tr><td><kbd>,</kbd> / <kbd>.</kbd></td><td>back / forward through boxes you looked at</td><td><kbd>B</kbd></td><td>draw mode</td></tr>
+    <tr><td><kbd>E</kbd> <kbd>W</kbd> <kbd>U</kbd></td><td>cut off, worn, unsure</td><td><kbd>L</kbd></td><td>lock the box</td></tr>
+    <tr><td><kbd>H</kbd></td><td>hide all boxes (to see the liner)</td><td><kbd>F</kbd></td><td>fit the photo</td></tr>
+    <tr><td><kbd>+</kbd> / <kbd>-</kbd>, arrows</td><td>zoom, move around</td><td><kbd>space</kbd> + drag</td><td>pan</td></tr>
+    <tr><td><kbd>[</kbd> / <kbd>]</kbd></td><td>previous / next photo</td><td><kbd>\</kbd></td><td>hide the photo list</td></tr>
+    <tr><td><kbd>⌘Z</kbd> / <kbd>⇧⌘Z</kbd></td><td>undo / redo</td><td><kbd>?</kbd> / <kbd>Esc</kbd></td><td>this guide / close</td></tr>
+  </table>
+  <p><b>On a phone</b> the photo is on top and the buttons are under it. Tap a box to select it; drag with one finger to move
+  around; pinch or double-tap to zoom. <b>✓ Right</b> is Enter, <b>◀ ▶</b> move between boxes, and the cards label. <b>Draw box</b>
+  and the undo arrows are just above the photo, and the photo list is behind <b>☰</b>.</p>
+
+  <h2 id="g-mistakes">Common mistakes</h2>
+  <ul>
+    <li><b>Pressing Enter without looking.</b> The models are wrong often enough that the test photos measure this.</li>
+    <li><b>Deleting debris.</b> Label it debris instead.</li>
+    <li><b>Skipping tiny or blurred insects.</b> Box them; tag U if you can't tell what they are.</li>
+    <li><b>Loose boxes</b> with lots of glue around the insect, or one box round two insects.</li>
+    <li><b>Guessing species.</b> Use <kbd>0</kbd> when you aren't sure.</li>
+    <li><b>Pressing Done with boxes left unchecked.</b> The site warns you and outlines them in red.</li>
+  </ul>
+
+  <h2 id="g-examples">Examples from real liners</h2>
+  <p class="mute">Crops of each kind as they look on glue.</p>
   <div id="examples"></div>
-  <h2>Comments</h2>
-  <p>Right-click anywhere on the photo to pin a comment (a reviewer uses this to ask for a fix; you can use it to ask a
-  question). Fix what it says, then press <b>Resolve</b> on it.</p>
-  <h2>When you're done</h2>
-  <p>Press <b>Done with this photo</b>. A reviewer accepts it or sends it back with comments.</p>
 </div></div>
 <div class="grip" id="gripL" title="Drag to resize · double-click to reset"></div>
 <div class="grip" id="gripR" title="Drag to resize · double-click to reset"></div>

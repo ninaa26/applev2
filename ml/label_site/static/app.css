@@ -269,3 +269,26 @@ body:not(.left-off) #leftToggle .fill { opacity:.9; } body.left-off #leftToggle 
 .paused-note { margin:14px 0 4px; padding:14px; border-radius:12px; border:1px solid var(--hair); background:var(--field); font-size:13px;
                line-height:1.5; color:var(--mute); }
 .paused-note b { display:block; font-size:15px; color:var(--orange); margin-bottom:4px; }
+
+/* the guide: contents, tables, tips and a card per species */
+#guide .sheet { width:min(820px, 100vw - 24px); line-height:1.55; font-size:14px; padding:24px 28px 30px; }
+#guide .lead { font-size:15px; }
+#guide h2 { margin-top:28px; scroll-margin-top:12px; }
+#guide h3 { margin:0 0 2px; font-size:15px; } #guide h3 kbd { margin-right:4px; }
+#guide li { margin:4px 0; }
+#guide .toc { display:flex; flex-wrap:wrap; gap:6px; margin:14px 0 6px; }
+#guide .toc a { font-size:12.5px; padding:4px 10px; border-radius:999px; border:1px solid var(--hair-strong); color:var(--ink); text-decoration:none; }
+#guide .toc a:hover { background:var(--hover); }
+#guide .tip { padding:10px 14px; border-radius:10px; background:var(--field); border-left:4px solid var(--green); }
+#guide .gtable { width:100%; border-collapse:collapse; margin:10px 0; font-size:13px; }
+#guide .gtable th, #guide .gtable td { text-align:left; vertical-align:top; padding:7px 8px; border-bottom:1px solid var(--hair); }
+#guide .gtable th { font-weight:700; color:var(--mute); font-size:12px; }
+#guide .gtable td:first-child { white-space:nowrap; }
+#guide .keys td:nth-child(3) { white-space:nowrap; }
+#guide kbd { font:600 11.5px ui-monospace, "SF Mono", monospace; border:1px solid var(--hair-strong); border-radius:5px; padding:1px 5px;
+             background:var(--field); }
+#guide .sp { display:flex; gap:14px; align-items:flex-start; padding:12px 0; border-bottom:1px solid var(--hair); }
+#guide .sp > span { flex:none; width:52px; height:52px; display:grid; place-items:center; border-radius:12px; background:var(--field); }
+#guide .sp > span svg { width:40px; height:40px; fill:currentColor; }
+#guide .sp p { margin:0; }
+@media (max-width: 760px) { #guide .sheet { padding:20px 16px 24px; max-height:94dvh; } #guide .keys td { white-space:normal !important; } }
