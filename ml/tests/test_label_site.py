@@ -42,6 +42,9 @@ class TestScoring(unittest.TestCase):
         s = scoring.gold_score(person, gold)
         self.assertEqual((s["gold"], s["found"], s["extra"], s["label_right"]), (3, 2, 1, 1))
         self.assertEqual((s["model_wrong"], s["took_wrong"]), (1, 1))
+        sp = scoring.gold_score([box(0, 0, 10, 10, "OFM"), box(20, 20, 30, 30, "CM")],
+                                [box(0, 0, 10, 10, "OFM"), box(20, 20, 30, 30, "OBLR")])
+        self.assertEqual((sp["species_named"], sp["species_right"]), (2, 1))
 
     def test_merge_two_marks_disputes(self):
         a = [box(0, 0, 10, 10, "moth"), box(20, 20, 30, 30, "debris"), box(60, 60, 70, 70, "moth")]

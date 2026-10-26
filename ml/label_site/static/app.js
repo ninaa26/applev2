@@ -168,7 +168,6 @@ $("undo").onclick = () => restore(undoStack, redoStack); $("redo").onclick = () 
 
 // ---------- what to show
 function setPass(m) {
-  if (m === 2 && !me.species && !(task && task.kind === "species") && !me.admin) m = 1;
   pass = m; try { localStorage.setItem("pass", m); } catch (e) {}
   document.querySelectorAll(".modes button").forEach(b => b.classList.toggle("on", Number(b.dataset.m) === m));
   renderKey(); draw();
@@ -505,7 +504,6 @@ $("help").onclick = toggleGuide; $("guideClose").onclick = toggleGuide;
   $("me").innerHTML = `<span>Signed in as <b>${esc(me.user)}</b></span><span>${me.admin ? `<a href="/dashboard">Dashboard</a> · ` : ""}<button id="logout" class="small">Log out</button></span>`;
   $("logout").onclick = async () => { await api("/logout", {}); location.href = "/login"; };
   $("reviewTab").hidden = !me.admin;
-  $("passBox").hidden = !(me.species || me.admin);
   setPass(pass); setDraw(false); renderKey();
   await loadQueue();
   const first = queue.tasks.find(t => t.status === "returned") || queue.tasks.find(t => t.status === "open") || queue.tasks[0];

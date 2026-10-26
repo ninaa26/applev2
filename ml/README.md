@@ -200,7 +200,7 @@ around each insect so a card shot at an angle still gets the right scale. The la
 passes. Pass 1 (anyone): moth / other insect / debris, Delete for things that aren't on the card or
 aren't insects, B (or the Draw box button) then drag to box an insect flatbug missed, drag a box's
 handles to fix it, ⌘Z to undo. Drag or two-finger scroll pans; pinch, wheel or double-click zooms; F fits.
-Pass 2 (a trained eye): the species of every `moth`. `labels.csv` records which boxes flatbug got
+Pass 2 (anyone who is sure; `0` when not): the species of every `moth`. `labels.csv` records which boxes flatbug got
 right, which it got wrong (`skip`), which needed fixing (`flatbug-edited`) and which it missed
 (`manual`), which is also flatbug's score on field cards. Oct 2 2026 labels, 11 cards, phone
 resolution: 60 of 94 moths found (64%), worst on pale OBLR on a white card; 7 of 81 boxes were not

@@ -147,7 +147,8 @@ def dashboard(store: Store) -> dict:
         gold = [gold_result(store, r["photo"], r["copy"]) for r in
                 store.q("SELECT photo, copy FROM tasks WHERE user=? AND kind='gold_check' AND status!='open'", u)]
         gold = [g for g in gold if g]
-        tot = {k: sum(g[k] for g in gold) for k in ("gold", "found", "extra", "label_right", "model_wrong", "took_wrong")}
+        tot = {k: sum(g[k] for g in gold) for k in ("gold", "found", "extra", "label_right", "model_wrong", "took_wrong",
+                                                     "species_named", "species_right")}
         people.append({
             "user": u,
             "open": sum(r["status"] == "open" for r in t), "returned": sum(r["status"] == "returned" for r in t),

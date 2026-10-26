@@ -8,7 +8,8 @@ at least MATCH_IOU (intersection over union), greedily from the best overlap dow
 from __future__ import annotations
 
 MATCH_IOU = 0.5
-MOTHS = {"CM", "OFM", "OBLR", "other_moth", "lookalike_RBLR", "lookalike_LAW", "other_tortricid", "moth"}
+SPECIES = {"CM", "OFM", "OBLR", "other_moth", "lookalike_RBLR", "lookalike_LAW", "other_tortricid"}
+MOTHS = SPECIES | {"moth"}
 
 
 def pass1(label: str) -> str:
@@ -58,8 +59,11 @@ def gold_score(person: list[dict], gold: list[dict], species: bool = False) -> d
     model_wrong = [(i, j) for i, j in pairs if p[i].get("model_label")
                    and norm(p[i]["model_label"]) != norm(g[j].get("label", ""))]
     took = sum(norm(p[i].get("label", "")) == norm(p[i]["model_label"]) for i, j in model_wrong)
+    # Species, on the moths the expert named a species for: how many the person named, and how many right.
+    named = [(i, j) for i, j in pairs if g[j].get("label") in SPECIES and p[i].get("label") in SPECIES]
     return {"gold": len(g), "boxes": len(p), "found": len(pairs), "extra": len(extra), "label_right": right,
-            "model_wrong": len(model_wrong), "took_wrong": took}
+            "model_wrong": len(model_wrong), "took_wrong": took, "species_named": len(named),
+            "species_right": sum(p[i]["label"] == g[j]["label"] for i, j in named)}
 
 
 def merge_two(a: list[dict], b: list[dict], who: tuple[str, str]) -> tuple[list[dict], list[dict], float]:

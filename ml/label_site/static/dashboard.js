@@ -13,11 +13,12 @@ const pct = (a, b) => b ? `${Math.round(100 * a / b)}%` : "–";
     tile(d.issues_open, "open comments");
   document.getElementById("people").innerHTML =
     "<tr><th>Person</th><th>To do</th><th>Sent back</th><th>In review</th><th>Accepted</th><th>Box changes</th><th>s / box</th>" +
-    "<th>Test photos</th><th>Found</th><th>Right</th><th>Kept wrong guess</th><th>Extra boxes</th></tr>" +
+    "<th>Test photos</th><th>Found</th><th>Right</th><th>Kept wrong guess</th><th>Species right</th><th>Extra boxes</th></tr>" +
     d.people.map(p => `<tr><td>${esc(p.user)}</td><td>${p.open}</td><td>${p.returned}</td><td>${p.done}</td><td>${p.accepted}</td>` +
       `<td>${p.box_changes}</td><td>${p.sec_per_box == null ? "–" : p.sec_per_box.toFixed(1)}</td><td>${p.gold_photos}</td>` +
       `<td>${pct(p.gold_found, p.gold_gold)}</td><td>${pct(p.gold_label_right, p.gold_found)}</td>` +
-      `<td>${pct(p.gold_took_wrong, p.gold_model_wrong)}${p.gold_model_wrong ? ` (${p.gold_took_wrong}/${p.gold_model_wrong})` : ""}</td><td>${p.gold_extra ?? 0}</td></tr>`).join("");
+      `<td>${pct(p.gold_took_wrong, p.gold_model_wrong)}${p.gold_model_wrong ? ` (${p.gold_took_wrong}/${p.gold_model_wrong})` : ""}</td>` +
+      `<td>${pct(p.gold_species_right, p.gold_species_named)}${p.gold_species_named ? ` (${p.gold_species_right}/${p.gold_species_named})` : ""}</td><td>${p.gold_extra ?? 0}</td></tr>`).join("");
   document.getElementById("merges").innerHTML = "<tr><th>Photo</th><th>People</th><th>Agreement</th><th>Disputed boxes</th></tr>" +
     (d.merges.map(m => `<tr><td>${esc(m.photo)}</td><td>${esc(m.a)} + ${esc(m.b)}</td><td>${pct(m.agreement, 1)}</td><td>${m.disputes}</td></tr>`).join("")
      || `<tr><td colspan="4">None finished yet.</td></tr>`);
