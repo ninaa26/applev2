@@ -487,7 +487,7 @@ function showSel() {
   $("prevBox").disabled = trailPos <= 0;
   zc.fillStyle = "#111111"; zc.fillRect(0, 0, 256, 256);
   document.querySelectorAll("#attrs button").forEach(x => x.classList.remove("on"));
-  if (sel < 0 || !boxes[sel]) { $("info").textContent = "Nothing selected"; $("lock").textContent = "🔒 Lock box (L)"; return; }
+  if (sel < 0 || !boxes[sel]) { $("info").textContent = $("mInfo").textContent = "Nothing selected"; $("lock").textContent = "🔒 Lock box (L)"; return; }
   const b = boxes[sel], side = Math.max(b.x2 - b.x1, b.y2 - b.y1) * 1.7, cx = (b.x1 + b.x2) / 2, cy = (b.y1 + b.y2) / 2;
   if (img.complete && img.width) {
     zc.filter = `brightness(${$("bri").value}%) contrast(${$("con").value}%) saturate(${$("sat").value}%)`;
@@ -499,6 +499,7 @@ function showSel() {
     + (b.model_label ? `<br>classifier: ${esc(b.model_label)} ${esc(b.model_conf)}` : "")
     + (b.old_label ? `<br>earlier: ${esc(b.old_label)}` : "")
     + (b.length_mm ? `<br>~${esc(b.length_mm)} mm${b.body_mm ? " (body " + esc(b.body_mm) + ")" : ""}${b.length_from === "box" ? " from the box" : ""}` : "");
+  $("mInfo").innerHTML = $("info").innerHTML;  // phones show it in the strip above the photo
   attrsOf(b).forEach(a => { const x = document.querySelector(`#attrs [data-a="${a}"]`); if (x) x.classList.add("on"); });
   $("lock").textContent = b.locked ? "🔓 Unlock box (L)" : "🔒 Lock box (L)";
 }
@@ -544,9 +545,10 @@ $("lock").onclick = toggleLock;
 function setDraw(on) {
   drawMode = on; const b = $("draw");
   b.classList.toggle("on", on); b.textContent = on ? "▭ Draw box: ON (B) · click or drag" : "▭ Draw box: off (B)";
+  $("mDraw").classList.toggle("on", on); $("mDraw").textContent = on ? "▭ Drawing" : "▭ Draw";
   cv.style.cursor = on ? "crosshair" : "grab";
 }
-$("draw").onclick = () => setDraw(!drawMode);
+$("draw").onclick = $("mDraw").onclick = () => setDraw(!drawMode);
 async function grabAtPoint(x, y) {
   setStatus("finding the insect…");
   const r = await api("/api/grab", {task: task.id, x, y});

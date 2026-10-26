@@ -208,10 +208,11 @@ body.left-off aside.left, body.left-off #gripL { display:none; }
 body:not(.left-off) #leftToggle .fill { opacity:.9; } body.left-off #leftToggle .fill { opacity:0; }
 
 /* ---------- phones: the photo on top, a sheet of big buttons under it, the photo list in a drawer ---------- */
-#mbar, #mActions, #mMore, #mScrim { display:none; }
+#mbar, #mActions, #mMore, #mScrim, #mStrip { display:none; }
 @media (max-width: 760px) {
-  body { display:block; height:100dvh; }
-  #mbar { display:flex; position:fixed; z-index:15; top:0; left:0; right:0; height:52px; box-sizing:border-box; align-items:center;
+  /* top to bottom: the bar, a strip with Draw and the selected box, the photo, the sheet */
+  body { display:flex; flex-direction:column; height:100dvh; }
+  #mbar { display:flex; order:1; flex:none; z-index:15; height:52px; box-sizing:border-box; align-items:center;
           gap:8px; padding:0 8px; background:var(--panel); border-bottom:1px solid var(--hair); }
   #mbar button { width:42px; height:42px; padding:0; display:grid; place-items:center; border-radius:12px; font-size:17px; font-weight:700; flex:none; }
   #mbar svg { width:22px; height:22px; }
@@ -219,7 +220,13 @@ body:not(.left-off) #leftToggle .fill { opacity:.9; } body.left-off #leftToggle 
   #mTitle b { font-size:13.5px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   #mTitle span { font-size:12px; color:var(--mute); }
   /* the photo: one finger pans, a tap picks a box, two fingers zoom */
-  main { position:fixed; top:52px; left:0; right:0; height:46dvh; }
+  #mStrip { display:flex; order:2; flex:none; align-items:center; gap:10px; min-height:52px; box-sizing:border-box; padding:6px 10px;
+            background:var(--panel); border-bottom:1px solid var(--hair); }
+  #mDraw { flex:none; min-height:40px; padding:0 14px; border-radius:12px; font-size:13.5px; font-weight:600; }
+  #mDraw.on { background:var(--pink); border-color:transparent; color:#fff; }
+  #mInfo { flex:1; min-width:0; text-align:center; font-size:12px; line-height:1.35; color:var(--mute); }
+  #mInfo b { color:var(--ink); font-weight:600; }
+  main { order:3; flex:0 0 42dvh; position:relative; }
   #cv { touch-action:none; }
   #leftToggle, .grip { display:none; }
   /* the photo list slides in from the left */
@@ -231,15 +238,14 @@ body:not(.left-off) #leftToggle .fill { opacity:.9; } body.left-off #leftToggle 
   body.left-off aside.left { display:block; }  /* the desktop hide button doesn't apply here */
   aside.left .item { padding:12px 12px; }
   /* the sheet under the photo */
-  aside.right { position:fixed; left:0; right:0; bottom:0; top:calc(52px + 46dvh); display:flex; flex-direction:column; box-sizing:border-box;
+  aside.right { order:4; flex:1; min-height:0; display:flex; flex-direction:column; box-sizing:border-box;
                 padding:0 12px calc(16px + env(safe-area-inset-bottom)); border:0; border-top:1px solid var(--hair); overflow:auto;
                 overscroll-behavior:contain; }
   #mActions { display:grid; order:1; grid-template-columns:54px 1fr 1fr 54px; gap:8px; position:sticky; top:0; z-index:2;
               padding:10px 0 8px; background:var(--panel); }
   #mActions button { height:50px; padding:0; font-size:16px; font-weight:700; border-radius:14px; }
   #mDelete { color:var(--pink); }
-  #secSel { order:2; } #secSel h2, #zoom, #secSel .nav { display:none; }
-  aside.right #info { min-height:0; margin:2px 0 4px; font-size:12.5px; }
+  #secSel, #draw { display:none; }  /* the box's details and Draw are in the strip above the photo */
   #secLabel { order:3; } #secLabel h2 { display:none; }
   aside.right .lcards { gap:8px; } aside.right .lcards.many { gap:6px; }
   .lcard { min-height:70px; } .lcard svg { width:36px; height:36px; }
