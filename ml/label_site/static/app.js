@@ -273,13 +273,13 @@ function renderKey() {  // the key doubles as buttons: a row does what its key d
   const row = (k, text, n, act, on = false) =>
     `<button class="krow${on ? " on" : ""}" data-act="${esc(act)}" ${sel < 0 ? "disabled" : ""}><kbd>${k}</kbd><span>${text}</span><span class="n">${n}</span></button>`;
   const info = (k, text) => `<div class="krow info"><kbd>${k}</kbd><span>${text}</span><span></span></div>`;
-  $("key").innerHTML = keys.map(([k, l]) => row(k, `<span class="sw" style="background:${colorOf({label:l})}"></span> ${pass === 1 ? NAMES[l] : (k === "0" ? "moth, unsure" : l)}`,
-      counts[l] || 0, "label:" + l, cur === l)).join("")
-    + row("⏎", "the guess is right, next", `${boxes.filter(unchecked).length} left`, "confirm")
+  $("labelKeys").innerHTML = keys.map(([k, l]) => row(k, `<span class="sw" style="background:${colorOf({label:l})}"></span> ${pass === 1 ? NAMES[l] : (k === "0" ? "moth, unsure" : l)}`,
+      counts[l] || 0, "label:" + l, cur === l)).join("");
+  $("key").innerHTML = row("⏎", "the guess is right, next", `${boxes.filter(unchecked).length} left`, "confirm")
     + row("⌫", "delete (not on the card)", counts.skip || 0, "delete")
     + info("B", "draw (click an insect, or drag)") + info("Tab", "next to check · [ ] photos")
     + info(", .", "previous / next box you were on") + info("?", "guide · right-click: comment");
-  document.querySelectorAll("#key button.krow").forEach(x => x.onclick = () => {
+  document.querySelectorAll("#key button.krow, #labelKeys button.krow").forEach(x => x.onclick = () => {
     const a = x.dataset.act;
     if (a === "confirm") confirmSel(); else if (a === "delete") deleteSel(); else if (sel >= 0) setLabel(a.slice(6));
   });

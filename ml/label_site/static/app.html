@@ -29,11 +29,7 @@
   <h2>Selected</h2><canvas id="zoom" width="256" height="256"></canvas>
   <div class="row nav"><button id="prevBox" title="Back to the box you were on before (,)">◀ Previous</button><button id="nextBox" title="Forward, then the next box to check (.)">Next ▶</button></div>
   <div id="info">Nothing selected</div>
-  <div class="row attrs" id="attrs">
-    <button data-a="cut_off" title="E">E cut off</button>
-    <button data-a="decayed" title="W">W worn</button><button data-a="unsure" title="U">U unsure</button>
-  </div>
-  <div class="row"><button id="lock" title="L">🔒 Lock box (L)</button></div>
+  <div id="taskActions"></div>
   <h2>Show</h2>
   <label class="line">Boxes <select id="filter">
     <option value="all">all</option><option value="unchecked">not checked yet</option>
@@ -41,18 +37,23 @@
     <option value="disputed">disputed</option></select></label>
   <label class="line">Hide detector boxes under <input id="thr" type="range" min="0" max="0.9" step="0.05" value="0"> <span id="thrv">0</span></label>
   <label class="line"><input type="checkbox" id="hideAll"> Hide all boxes (H)</label>
+  <div class="row"><button id="lock" title="L">🔒 Lock box (L)</button></div>
   <label class="line"><input type="checkbox" id="lockChecked" checked> Checked boxes can't be dragged</label>
-  <h2>Image</h2>
-  <label class="line">Brightness <input id="bri" type="range" min="50" max="200" value="100"></label>
-  <label class="line">Contrast <input id="con" type="range" min="50" max="250" value="100"></label>
-  <label class="line">Colour <input id="sat" type="range" min="0" max="250" value="100"></label>
-  <button id="resetImg" class="small">reset</button>
+  <h2>Label</h2><div class="key" id="labelKeys"></div>
+  <div class="row attrs" id="attrs">
+    <button data-a="cut_off" title="E">E cut off</button>
+    <button data-a="decayed" title="W">W worn</button><button data-a="unsure" title="U">U unsure</button>
+  </div>
   <h2>This photo</h2>
   <label class="line"><input type="checkbox" data-tag="unusable"> Unusable (can't label it)</label>
   <label class="line"><input type="checkbox" data-tag="wrong_scale"> Wrong scale (sizes look off)</label>
   <label class="line"><input type="checkbox" data-tag="not_gridded"> Not a gridded liner</label>
   <div id="issues"></div>
-  <div id="taskActions"></div>
+  <h2>Image</h2>
+  <label class="line">Brightness <input id="bri" type="range" min="50" max="200" value="100"></label>
+  <label class="line">Contrast <input id="con" type="range" min="50" max="250" value="100"></label>
+  <label class="line">Colour <input id="sat" type="range" min="0" max="250" value="100"></label>
+  <button id="resetImg" class="small">reset</button>
   <h2>Keys</h2><div class="key" id="key"></div>
   <button id="panelDefault" class="small" hidden title="Everyone who hasn't resized the panels themselves gets these widths">Make these panel widths everyone's default</button>
 </aside>
