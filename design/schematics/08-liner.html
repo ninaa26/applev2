@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Liner View · Orchard Sentinel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="kit.css">
+<style>
+/* Direction 8, Liner view (taste-skill page direction split-stage, applied to the trap page).
+   Half the screen never moves: the sticky liner the camera photographed, every insect boxed in its
+   species colour. The other half scrolls: what the liner means. Idea: the liner becomes the page's
+   stage, so the grower sees the evidence beside every number. Live thing: pick a trap and the liner
+   changes. Shell: 56px bar; split 50/50 on desktop, liner first and short on the phone. */
+:root{
+  --ground:#f4f4f1; --surface:#fff; --stage:#2a2b27; --rule:#e5e5e0; --control:#cfd0c9;
+  --ink:#161714; --muted:#5e6059; --grid:#e8e8e3; --track:#e4e4de;
+  --cm:#b42a3c; --ofm:#bf640d; --oblr:#2b6d8e; --other:#7d8079; --negative:#b3261e;
+  --liner:#f3f1e6; --liner-grid:#c3c0ae;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font:15px/1.55 "Hanken Grotesk",system-ui,sans-serif;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+.bar{height:56px;display:flex;align-items:center;gap:24px;padding:0 24px;background:var(--surface);border-bottom:1px solid var(--rule);position:sticky;top:0;z-index:4}
+.bar b{font-weight:700}
+.bar nav{display:flex;gap:18px}
+.bar nav a{color:var(--muted);text-decoration:none}.bar nav a.on{color:var(--ink);font-weight:600}
+.btn{display:inline-flex;align-items:center;justify-content:center;height:40px;padding:0 16px;border-radius:0;border:0;font:600 14.5px "Hanken Grotesk",sans-serif;text-decoration:none;cursor:pointer;transition:transform 140ms cubic-bezier(.23,1,.32,1),background-color 150ms ease}
+.btn:active{transform:scale(.97)}
+.btn.primary{background:var(--ink);color:#fff}.btn.primary:hover{background:#34362f}
+.btn.line{background:transparent;border:1px solid var(--control);color:var(--ink)}.btn.line:hover{background:#ecece7}
+.bar .btn{margin-left:auto}
+.split{display:grid;grid-template-columns:1fr 1fr;min-height:calc(100vh - 56px)}
+.stage{background:var(--stage);position:sticky;top:56px;height:calc(100vh - 56px);display:flex;flex-direction:column;padding:20px 28px 24px;color:#ecebe4}
+.pick{display:flex;gap:4px;flex-wrap:wrap}
+.pick button{height:36px;padding:0 12px;border:0;background:transparent;color:#bdbcb3;font:500 14px "Hanken Grotesk",sans-serif;cursor:pointer;border-bottom:2px solid transparent;transition:color 120ms ease}
+.pick button:hover{color:#fff}
+.pick button[aria-pressed="true"]{color:#fff;border-color:#fff}
+.pick button.off{color:#f0948c}
+.photo{flex:1;display:flex;align-items:center;justify-content:center;min-height:0;padding:16px 0}
+.photo svg{max-height:100%;width:auto;max-width:100%}
+.cap{display:flex;justify-content:space-between;gap:12px;font-size:13px;color:#bdbcb3}
+.cap span{display:flex;gap:12px;flex-wrap:wrap}
+.cap i{display:inline-block;width:12px;height:12px;border:2px solid;margin-right:5px;vertical-align:-1px}
+.read{padding:32px 40px 64px;max-width:640px}
+h1{font-size:30px;font-weight:700;line-height:1.15;margin:0;letter-spacing:-.01em}
+.read .sub{color:var(--muted);margin:6px 0 0}
+.counts{display:grid;grid-template-columns:repeat(3,1fr);margin:28px 0 0;background:var(--surface)}
+.counts div{padding:16px 18px}
+.counts div+div{border-left:1px solid var(--rule)}
+.counts .l{color:var(--muted);font-size:13px;display:flex;align-items:center;gap:6px}
+.counts .v{font-size:30px;font-weight:600}
+.counts .c{font-size:12.5px;color:var(--muted)}
+h2{font-size:18px;font-weight:700;margin:40px 0 12px}
+.when{background:var(--surface);padding:18px 20px}
+.when .hl{font-weight:600;font-size:17px;margin:0 0 4px}
+.when .hl.soon{color:var(--cm)}
+.when p{margin:0 0 14px;color:var(--muted)}
+.days{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.days div{background:var(--surface);padding:10px 6px;text-align:center}
+.days .d{font-size:12px;color:var(--muted)}
+.days .v{font-size:20px;font-weight:600}
+.days .v.z{color:#b0b2aa}
+.days .v.gap{color:var(--negative)}
+.facts{background:var(--surface)}
+.facts div{display:flex;justify-content:space-between;gap:12px;padding:12px 18px;border-top:1px solid var(--rule)}
+.facts div:first-child{border-top:0}
+.facts span{color:var(--muted)}
+.acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+@media (max-width:900px){
+  .bar nav{display:none}
+  .bar{padding:0 16px}
+  .split{grid-template-columns:1fr}
+  .stage{position:relative;top:0;height:auto;padding:12px 16px 16px}
+  .pick{flex-wrap:nowrap;overflow-x:auto}
+  .pick button{height:44px;flex:none}
+  .photo svg{max-height:52vh}
+  .read{padding:24px 16px 48px}
+  h1{font-size:24px}
+  .counts .v{font-size:24px}
+  .acts .btn{flex:1;height:46px}
+}
+@media (prefers-reduced-motion:reduce){.btn{transition:none}}
+</style>
+</head>
+<body>
+<header class="bar"><b>Orchard Sentinel</b><nav aria-label="Main"><a href="#">Orchard</a><a class="on" href="#">Traps</a><a href="#">Confirm 6</a><a href="#">Set up</a></nav><a class="btn primary" href="#" id="confirm">Confirm 3 from this trap</a></header>
+<div class="split">
+  <section class="stage" aria-label="Liner photo">
+    <div class="pick" role="group" aria-label="Choose a trap" id="pick"></div>
+    <div class="photo" id="photo"></div>
+    <div class="cap"><span id="key"></span><span id="when"></span></div>
+  </section>
+  <main class="read" id="read"></main>
+</div>
+<script src="data.js"></script><script src="kit.js"></script>
+<script>
+const { traps, pheno, LABEL, ago, LINER_MAX_DAYS, day, DAYS } = OS;
+const $ = (id) => document.getElementById(id);
+const showTrap = (id) => {
+  const t = traps.find((x) => x.id === id), p = pheno[t.lure], off = t.state === 'offline', row = Kit.trap7[t.id];
+  document.querySelectorAll('.pick button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.id === id));
+  $('photo').innerHTML = Kit.liner(id, { w: 560 });
+  const sp = Object.keys(t.week);
+  $('key').innerHTML = (sp.length ? sp : [t.lure]).map((s) => `<span><i style="border-color:var(--${s === 'other_moth' ? 'other' : s.toLowerCase()})"></i>${s === 'other_moth' ? 'Other moth' : s}</span>`).join('');
+  $('when').textContent = off ? `Last photo ${ago(t.lastMin)}` : `Photo ${ago(t.lastMin)} · liner day ${t.linerDays}`;
+  $('confirm').textContent = t.pending ? `Confirm ${t.pending} from this trap` : 'Take a photo now';
+  $('read').innerHTML = `<h1>${t.name}, ${t.lure} trap</h1><p class="sub">${t.id} · ${t.block} · ESP32 camera via the fieldhouse hub</p>
+    <div class="counts"><div><div class="l"><i class="dot c-${t.lure}"></i>${t.lure} this week</div><div class="v">${off ? '—' : t.week[t.lure] || 0}</div><div class="c">${off ? 'no photos since Sunday' : 'Jun 9–15'}</div></div><div><div class="l">Other insects</div><div class="v">${t.week.other_moth || 0}</div><div class="c">not counted as pests</div></div><div><div class="l">To confirm</div><div class="v">${t.pending}</div><div class="c">${t.pending ? 'boxed in the photo' : 'all done'}</div></div></div>
+    <h2>When to act</h2><div class="when"><p class="hl ${p.state}">${p.headline}</p><p>${p.detail}</p>${Kit.dd(t.lure)}</div>
+    <h2>Day by day</h2><div class="days">${row.map((v, i) => `<div><div class="d">${day(DAYS - 7 + i).toLocaleDateString('en-US', { weekday: 'short' })}</div><div class="v ${v == null ? 'gap' : v ? '' : 'z'}">${v == null ? '!' : v}</div></div>`).join('')}</div>
+    <h2>The trap</h2><div class="facts"><div><span>Liner in</span>${t.linerDays} days${t.linerDays > LINER_MAX_DAYS ? ' · <b style="color:#8a4b06">change it</b>' : ''}</div><div><span>Battery</span>${t.battery.toFixed(2)} V</div><div><span>Status</span>${off ? `<b style="color:var(--negative)">Offline, last photo ${ago(t.lastMin)}</b>` : 'Online'}</div><div><span>Photos</span>6 a day, 06:10 to 21:10</div></div>
+    <div class="acts"><a class="btn line" href="#">Record a new liner</a><a class="btn line" href="#">Take a photo now</a><a class="btn line" href="#">All photos</a></div>`;
+};
+$('pick').innerHTML = traps.map((t) => `<button type="button" data-id="${t.id}" class="${t.state === 'offline' ? 'off' : ''}" aria-pressed="false">${t.id} ${t.name.split(' ')[0]}</button>`).join('');
+$('pick').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) showTrap(b.dataset.id); });
+showTrap('T2');
+</script>
+</body>
+</html>

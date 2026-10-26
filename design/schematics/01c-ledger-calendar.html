@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ledger Calendar · Orchard Sentinel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="kit.css">
+<style>
+/* Ledger C, Spray calendar. Organised by time: three weeks on one screen, every spray, flight and
+   liner change on its day, so the grower can plan labour and the sprayer. Type: Barlow (drawn from
+   California highway signage, built to read at a glance outdoors) with its semi-condensed cut for the
+   calendar's small labels. Palette "moss and slate": grey-green ground, near-black ink, moss green
+   only on today and the next spray; liner changes dashed, flights outlined.
+   Grid: 1120px column; calendar 7 equal columns, 1px gaps; below it 1fr / 1fr. */
+:root{
+  --ground:#edf0ea; --surface:#fff; --sunk:#e3e7df; --border:#d9dfd4; --rule:#e8ebe4; --control:#c3cbbe;
+  --ink:#1b2017; --muted:#58614f; --grid:#e3e7df; --track:#e0e5dc;
+  --moss:#2e5935; --moss-soft:#e1ece0; --fix:#8d4f0f; --fix-soft:#f6eadb;
+  --cm:#2e5935; --ofm:#4d5647; --oblr:#8f998a; --other:#c6cdc2;
+  --r:8px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font:16px/1.45 Barlow,system-ui,sans-serif;font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1;-webkit-font-smoothing:antialiased}
+.col{max-width:1120px;margin:0 auto;padding:0 24px}
+header{height:56px;display:flex;align-items:center;gap:24px}
+.mark{display:flex;align-items:center;gap:9px;font-weight:700}
+header nav{display:flex;gap:2px}
+header nav a{padding:7px 12px;border-radius:6px;color:var(--muted);text-decoration:none;font-weight:500}
+header nav a.on{background:var(--sunk);color:var(--ink)}
+.btn{display:inline-flex;align-items:center;justify-content:center;height:42px;padding:0 16px;border-radius:6px;border:0;font:600 15px Barlow,sans-serif;cursor:pointer;text-decoration:none;transition:transform 140ms cubic-bezier(.23,1,.32,1),background-color 150ms ease;white-space:nowrap}
+.btn:active{transform:scale(.97)}
+.btn.primary{background:var(--ink);color:#fff}.btn.primary:hover{background:#30372b}
+.btn.line{background:var(--surface);border:1px solid var(--control);color:var(--ink)}.btn.line:hover{background:#f5f7f3}
+header .btn{margin-left:auto}
+.title{padding:20px 0 16px;display:flex;justify-content:space-between;align-items:flex-end;gap:16px}
+h1{font-size:28px;font-weight:700;margin:0;letter-spacing:-.01em}
+.title p{margin:2px 0 0;color:var(--muted)}
+.title p b{color:var(--moss)}
+.key{display:flex;gap:16px;flex-wrap:wrap;font-size:14px;color:var(--muted)}
+.key span{display:flex;align-items:center;gap:6px}
+.key i{display:inline-block;width:22px;height:12px;border-radius:3px}
+.cal{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.dow{display:grid;grid-template-columns:repeat(7,1fr);font:600 13px "Barlow Semi Condensed",sans-serif;color:var(--muted);border-bottom:1px solid var(--rule)}
+.dow span{padding:8px 10px}
+.wk{display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:min-content;border-bottom:1px solid var(--rule);min-height:128px;position:relative}
+.wk:last-child{border-bottom:0}
+.wk .bgs{position:absolute;inset:0;display:grid;grid-template-columns:repeat(7,1fr);pointer-events:none}
+.wk .bg{border-left:1px solid var(--rule)}
+.wk>.num,.wk>.ev{position:relative}
+.wk .bg:first-child{border-left:0}
+.wk .bg.we{background:#f7f8f5}
+.wk .bg.today{background:var(--moss-soft)}
+.wk .num{grid-row:1;padding:6px 10px 4px;font:600 14px "Barlow Semi Condensed",sans-serif;color:var(--muted)}
+.wk .num.today{color:var(--moss)}
+.wk .num.today::after{content:" Today";font-weight:600}
+.wk .num.past{color:var(--muted);font-weight:500}
+.ev{margin:2px 4px;padding:3px 8px;border-radius:4px;font:600 13.5px/1.3 "Barlow Semi Condensed",sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.ev.spray{background:var(--ink);color:#fff}
+.ev.spray.next{background:var(--moss)}
+.ev.watch{border:1.5px solid var(--control);color:var(--ink);background:var(--surface)}
+.ev.liner{border:1.5px dashed var(--fix);color:var(--fix);background:var(--surface)}
+.ev.liner.over{background:var(--fix-soft)}
+.ev small{font-weight:500;opacity:.8}
+.agenda{display:none;list-style:none;margin:0;padding:0}
+.agenda li{display:grid;grid-template-columns:64px 1fr;gap:12px;padding:12px 16px;border-top:1px solid var(--rule)}
+.agenda li:first-child{border-top:0}
+.agenda .d{font-weight:700;line-height:1.15}
+.agenda .d small{display:block;font-weight:500;color:var(--muted)}
+.agenda .d.today{color:var(--moss)}
+.agenda .ev{white-space:normal;margin:0 0 4px}
+.below{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:16px 0 56px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:16px 20px}
+.card h2{font-size:18px;font-weight:700;margin:0 0 8px;display:flex;justify-content:space-between;align-items:baseline}
+.card h2 span{font-size:14px;font-weight:500;color:var(--muted)}
+.cr{display:grid;grid-template-columns:1fr 60px 120px;gap:12px;align-items:baseline;padding:9px 0;border-top:1px solid var(--rule)}
+.cr:first-of-type{border-top:0}
+.cr .n{text-align:right;font-size:22px;font-weight:700}
+.cr .c{text-align:right;color:var(--muted);font-size:14px}
+.fixl{list-style:none;margin:0;padding:0}
+.fixl li{padding:9px 0;border-top:1px solid var(--rule)}
+.fixl li:first-child{border-top:0}
+.fixl b{font-weight:600}
+.fixl span{display:block;color:var(--muted);font-size:14.5px}
+.menu{display:none}
+@media (max-width:760px){
+  .col{padding:0 16px}
+  header nav,header .btn{display:none}
+  .menu{display:inline-flex;margin-left:auto;width:44px;height:44px;align-items:center;justify-content:center;background:none;border:0}
+  .title{flex-direction:column;align-items:stretch}
+  .title .btn{height:46px}
+  .dow,.wk{display:none}
+  .agenda{display:block}
+  .below{grid-template-columns:1fr}
+  .cr{grid-template-columns:1fr 44px 100px}
+}
+</style>
+</head>
+<body>
+<header class="col">
+  <span class="mark"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect x="2" y="3.5" width="18" height="16" rx="3" fill="none" stroke="#1b2017" stroke-width="1.7"/><path d="M2 8.5h18M7 2v3.5M15 2v3.5" stroke="#1b2017" stroke-width="1.7" stroke-linecap="round"/><rect x="6" y="11.5" width="4" height="4" rx="1" fill="#2e5935"/></svg>Orchard Sentinel</span>
+  <nav aria-label="Main"><a href="#">Today</a><a class="on" href="#">Calendar</a><a href="#">Traps</a><a href="#">Spray log</a></nav>
+  <a class="btn primary" href="#">Confirm 6 insects</a>
+  <button class="menu" aria-label="Menu"><svg width="22" height="22" viewBox="0 0 20 20" aria-hidden="true"><path d="M3 6h14M3 10h14M3 14h14" stroke="#1b2017" stroke-width="1.7" stroke-linecap="round"/></svg></button>
+</header>
+<main class="col">
+  <div class="title">
+    <div><h1>Spray calendar</h1><p id="line"></p></div>
+    <div class="key" aria-label="Key"><span><i style="background:var(--moss)"></i>Next spray</span><span><i style="background:var(--ink)"></i>Spray</span><span><i style="border:1.5px solid var(--control)"></i>Moth flight</span><span><i style="border:1.5px dashed var(--fix)"></i>Change liner</span></div>
+  </div>
+  <section class="cal" aria-label="Three weeks from Monday June 14">
+    <div class="dow" aria-hidden="true"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>
+    <div id="weeks"></div>
+    <ul class="agenda" id="agenda"></ul>
+  </section>
+  <div class="below">
+    <section class="card" aria-labelledby="c-h"><h2 id="c-h">Moths caught <span>Jun 9–15, all traps</span></h2><div id="catch"></div></section>
+    <section class="card" aria-labelledby="f-h"><h2 id="f-h">To fix <span id="fixn"></span></h2><ul class="fixl" id="fix"></ul></section>
+  </div>
+</main>
+<script src="data.js"></script><script src="kit.js"></script><script src="ledger.js"></script>
+<script>
+const { TODAY, traps, reporting, LABEL, weekday } = OS;
+const { jobs, liners, rounds, catchRows, fmt, range, add } = LG;
+const $ = (id) => document.getElementById(id);
+$('line').innerHTML = `${weekday} · <b>next spray ${fmt(jobs[0].date, { weekday: 'long' })}</b> · dates move with the weather`;
+const start = add(-((TODAY.getDay() + 6) % 7)); // the Monday of this week
+const dayIdx = (d) => Math.round((d - start) / 864e5);
+const short = { CM: 'Codling moth', OFM: 'Oriental fruit moth', OBLR: 'Leafroller' };
+// every calendar item: [from, to, kind, label]
+const items = [];
+jobs.forEach((j, i) => items.push({ a: dayIdx(j.date), b: dayIdx(j.end || j.date), cls: j.kind === 'spray' ? 'spray' + (i === 0 ? ' next' : '') : 'watch', label: j.kind === 'spray' ? `${j.end ? '2nd ' : '1st '}${short[j.sp]} spray` : `${j.sp} flight 2 starts`, sub: j.where }));
+// liners due inside the window, grouped by day
+const byDay = {};
+liners.forEach((l) => { const i = dayIdx(l.due); (byDay[i] = byDay[i] || []).push(l); });
+Object.entries(byDay).forEach(([i, ls]) => items.push({ a: +i, b: +i, cls: 'liner' + (ls.some((l) => l.overdue) ? ' over' : ''), label: `Liner ${ls.map((l) => l.trap.id).join(', ')}`, sub: ls.some((l) => l.overdue) ? 'overdue' : '' }));
+const N = 21, today = dayIdx(TODAY);
+let html = '';
+for (let w = 0; w < 3; w++) {
+  let row = '<div class="bgs" aria-hidden="true">';
+  for (let c = 0; c < 7; c++) { const i = w * 7 + c; row += `<div class="bg${c > 4 ? ' we' : ''}${i === today ? ' today' : ''}"></div>`; }
+  row += '</div>';
+  for (let c = 0; c < 7; c++) { const i = w * 7 + c, d = add(i - today); row += `<div class="num${i === today ? ' today' : i < today ? ' past' : ''}" style="grid-column:${c + 1}">${d.getDate() === 1 || i === 0 ? fmt(d, { month: 'short', day: 'numeric' }) : d.getDate()}</div>`; }
+  items.filter((e) => e.b >= w * 7 && e.a < w * 7 + 7).sort((x, y) => x.a - y.a).forEach((e) => {
+    const a = Math.max(e.a, w * 7) - w * 7, b = Math.min(e.b, w * 7 + 6) - w * 7;
+    row += `<div class="ev ${e.cls}" style="grid-column:${a + 1}/${b + 2}" title="${e.label}${e.sub ? ', ' + e.sub : ''}">${e.label}${e.sub && b > a ? ` <small>${e.sub}</small>` : ''}</div>`;
+  });
+  html += `<div class="wk">${row}</div>`;
+}
+$('weeks').innerHTML = html;
+// phone: an agenda of the days that have something on them
+const days = [...new Set(items.flatMap((e) => [e.a]))].filter((i) => i >= today && i < N).sort((a, b) => a - b);
+$('agenda').innerHTML = days.map((i) => { const d = add(i - today);
+  return `<li><div class="d${i === today ? ' today' : ''}">${i === today ? 'Today' : fmt(d, { weekday: 'short' })}<small>${fmt(d, { month: 'short', day: 'numeric' })}</small></div><div>${items.filter((e) => e.a === i).map((e) => `<div class="ev ${e.cls}">${e.label}${e.b > e.a ? ` <small>until ${fmt(add(e.b - today), { month: 'short', day: 'numeric' })}</small>` : ''}${e.sub ? ` <small>· ${e.sub}</small>` : ''}</div>`).join('')}</div></li>`; }).join('');
+$('catch').innerHTML = catchRows.map((r) => { const d = r.now - r.before; return `<div class="cr"><span style="display:flex;align-items:center;gap:8px"><i class="dot c-${r.sp}"></i>${LABEL[r.sp]}</span><span class="n">${r.now}</span><span class="c">${d > 0 ? '+' : d < 0 ? '−' : ''}${Math.abs(d)} on week before</span></div>`; }).join('');
+const fixes = rounds.filter((r) => r.id !== 'r3');
+$('fixn').textContent = `${fixes.length} things`;
+$('fix').innerHTML = fixes.map((r) => `<li><b>${r.title}</b><span>${r.detail}</span></li>`).join('') + `<li><b>${reporting} of ${traps.length} cameras sending</b><span>Everything else reported this morning.</span></li>`;
+</script>
+</body>
+</html>

@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pest Chapters · Orchard Sentinel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,400..800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="kit.css">
+<style>
+/* Direction 9, Pest chapters (taste-skill page direction colour-chapters, applied to the overview).
+   Every pest is a chapter in its own flat field, floor to ceiling, butted together, one typeface
+   (Archivo, condensed for the figures) and one grid. Idea: the three lures become three fields, so a
+   grower scrolling on a phone in the sun knows which pest they are reading by colour alone, and the
+   one due now comes first. The most expressive of the ten; least dense. */
+:root{
+  --ink:#141513; --muted:#5f625c; --ground:#f1f1ec; --rule:#dcdcd5;
+  --cm:#8f1d2c; --ofm:#8a4a0c; --oblr:#1f4f68; --other:#8b8e86; --negative:#b3261e;
+  --grid:rgba(255,255,255,.18); --track:rgba(255,255,255,.22);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--ground);color:var(--ink);font:16px/1.5 Archivo,system-ui,sans-serif;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+.bar{position:sticky;top:0;z-index:4;height:56px;display:flex;align-items:center;gap:20px;padding:0 32px;background:var(--ground)}
+.bar b{font-weight:700;font-stretch:85%;font-size:18px;letter-spacing:.01em}
+.bar nav{display:flex;gap:6px;margin-left:auto}
+.bar nav a{display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 12px;text-decoration:none;color:var(--ink);font-weight:500;border-radius:18px;transition:background-color 120ms ease}
+.bar nav a:hover{background:#e3e3dc}
+.btn{display:inline-flex;align-items:center;justify-content:center;height:44px;padding:0 20px;border-radius:22px;border:0;font:600 15px Archivo,sans-serif;text-decoration:none;cursor:pointer;transition:transform 140ms cubic-bezier(.23,1,.32,1),opacity 150ms ease}
+.btn:active{transform:scale(.97)}
+.btn.ink{background:var(--ink);color:#fff}
+.btn.paper{background:#fff;color:var(--ink)}
+.btn.clear{background:rgba(255,255,255,.14);color:#fff}.btn.clear:hover{background:rgba(255,255,255,.22)}
+.intro{padding:40px 32px 48px;display:grid;grid-template-columns:repeat(12,1fr);gap:24px;align-items:end}
+.intro h1{grid-column:span 8;font-size:clamp(34px,4.6vw,64px);line-height:1;font-weight:800;font-stretch:80%;margin:0;letter-spacing:-.01em}
+.intro .r{grid-column:span 4}
+.intro p{margin:0 0 16px;color:var(--muted)}
+.ch{color:#fff;padding:56px 32px 64px;min-height:88vh;display:grid;grid-template-columns:repeat(12,1fr);gap:24px;align-content:center}
+.ch.CM{background:var(--cm)}.ch.OFM{background:var(--ofm)}.ch.OBLR{background:var(--oblr)}
+.ch .l{grid-column:span 6}
+.ch .r{grid-column:8/span 5;align-self:center}
+.ch .name{font-size:18px;font-weight:500;opacity:.85}
+.ch h2{font-size:clamp(40px,6.4vw,96px);line-height:.95;font-weight:800;font-stretch:78%;margin:10px 0 18px;letter-spacing:-.01em}
+.ch .count{font-size:clamp(64px,10vw,150px);line-height:.85;font-weight:700;font-stretch:75%}
+.ch .count small{display:block;font-size:17px;font-weight:500;font-stretch:100%;opacity:.85;margin-top:12px}
+.ch p{opacity:.9;max-width:44ch;margin:0 0 22px}
+.ch .k-dd{--ink:#fff;--muted:rgba(255,255,255,.75)}
+.ch .k-fill{background:#fff!important}
+.ch .k-tick{background:#fff}
+.ch .traps{margin-top:28px}
+.ch .traps div{display:flex;justify-content:space-between;padding:12px 0;border-top:1px solid rgba(255,255,255,.22)}
+.ch .traps span{opacity:.8}
+.ch .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:24px}
+.last{padding:64px 32px 72px;display:grid;grid-template-columns:repeat(12,1fr);gap:24px}
+.last h2{grid-column:1/-1;font-size:40px;font-weight:800;font-stretch:80%;margin:0}
+.last .l{grid-column:span 7}.last .r{grid-column:span 5}
+.row{display:grid;grid-template-columns:1fr auto;gap:12px;padding:14px 0;border-top:1px solid var(--rule)}
+.row span{color:var(--muted);display:block;font-size:14px}
+.row b.bad{color:var(--negative)}
+.q{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
+.q .k-crop{width:100%;height:auto}
+.foot{background:var(--ink);color:#fff;padding:40px 32px;font-size:clamp(40px,8vw,110px);font-weight:800;font-stretch:75%;line-height:.9}
+@media (max-width:860px){
+  .bar{padding:0 16px}.bar b{font-size:15px}
+  .bar nav{gap:2px}.bar nav a{padding:0 8px;font-size:14px}.bar nav .t{display:none}
+  .intro,.ch,.last{padding-left:16px;padding-right:16px;grid-template-columns:1fr}
+  .intro h1,.intro .r,.ch .l,.ch .r,.last .l,.last .r{grid-column:1/-1}
+  .ch{min-height:auto;padding-top:40px;padding-bottom:48px}
+  .ch .acts .btn{flex:1}
+  .foot{padding:28px 16px}
+}
+</style>
+</head>
+<body>
+<header class="bar"><b>ORCHARD SENTINEL</b><nav aria-label="Chapters" id="nav"></nav></header>
+<section class="intro">
+  <h1>Lansing Ridge, week of June 9</h1>
+  <div class="r"><p id="line"></p><a class="btn ink" href="#">Confirm 6 insects</a></div>
+</section>
+<div id="chapters"></div>
+<section class="last" id="traps">
+  <h2>The traps</h2>
+  <div class="l" id="trapRows"></div>
+  <div class="r"><p style="margin:14px 0 12px;color:var(--muted)">Insects waiting for a person. They aren't counted until someone says yes.</p><div class="q" id="q"></div><a class="btn ink" href="#">Confirm 6 insects</a></div>
+</section>
+<div class="foot">Orchard Sentinel</div>
+<script src="data.js"></script><script src="kit.js"></script>
+<script>
+const { traps, pheno, week, reporting, review, LABEL, PESTS, weekday, ago, LINER_MAX_DAYS } = OS;
+const $ = (id) => document.getElementById(id);
+const order = [...PESTS].sort((a, b) => ({ now: 0, soon: 1, later: 2, waiting: 3 }[pheno[a].state] - { now: 0, soon: 1, later: 2, waiting: 3 }[pheno[b].state]));
+$('nav').innerHTML = order.map((sp) => `<a href="#${sp}"><i class="dot c-${sp}"></i>${sp}</a>`).join('') + '<a href="#traps"><span class="t">Traps</span><span class="t" style="display:none"></span></a>';
+$('line').textContent = `${weekday}. ${reporting} of ${traps.length} traps reporting. Codling moth comes first: its spray is due in about a day.`;
+$('chapters').innerHTML = order.map((sp) => { const p = pheno[sp], ts = traps.filter((t) => t.lure === sp);
+  return `<section class="ch ${sp}" id="${sp}" aria-labelledby="h-${sp}"><div class="l"><div class="name">${LABEL[sp]}</div><h2 id="h-${sp}">${p.headline}</h2><p>${p.detail}</p>${Kit.dd(sp)}<div class="acts"><a class="btn paper" href="#">${p.state === 'soon' ? 'Log the spray' : 'See the model'}</a><a class="btn clear" href="#">NEWA guide</a></div></div>
+  <div class="r"><div class="count">${week[sp]}<small>${LABEL[sp].toLowerCase()} caught Jun 9–15</small></div><div class="traps">${ts.map((t) => `<div><b>${t.name} ${t.id}</b><span>${t.state === 'offline' ? 'offline ' + ago(t.lastMin).replace(' ago', '') : (t.week[sp] || 0) + ' this week'}</span></div>`).join('')}</div></div></section>`; }).join('');
+$('trapRows').innerHTML = traps.map((t) => { const off = t.state === 'offline', old = t.linerDays > LINER_MAX_DAYS;
+  return `<div class="row"><div>${t.name} ${t.id}<span>${t.lure} lure · ${t.block} · liner ${t.linerDays} d · ${t.battery.toFixed(2)} V</span></div>${off ? `<b class="bad">Quiet ${ago(t.lastMin).replace(' ago', '')}</b>` : old ? '<b style="color:#8a4b06">Change liner</b>' : `<span>${ago(t.lastMin)}</span>`}</div>`; }).join('');
+$('q').innerHTML = review.map((r) => Kit.moth(r.guess, r.seed, 100)).join('');
+</script>
+</body>
+</html>

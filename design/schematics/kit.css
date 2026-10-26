@@ -1,0 +1,23 @@
+/* Shared pieces of the Kit drawings; each direction sets the variables. */
+.k-stack svg{display:block;overflow:visible}
+.k-y span,.k-x span{position:absolute;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;line-height:1}
+.k-y span{left:0;transform:translateY(-50%)}
+.k-x{position:relative;height:16px;margin-top:4px}
+.k-x span{transform:translateX(-50%);white-space:nowrap}
+.k-dd{position:relative;padding-top:18px}
+.k-dd .k-next{position:absolute;top:0;transform:translateX(-100%);font-size:11.5px;color:var(--muted);white-space:nowrap}
+.k-track{position:relative;height:8px;background:var(--track);border-radius:4px}
+.k-fill{position:absolute;left:0;top:0;bottom:0;border-radius:4px}
+.k-tick{position:absolute;top:-3px;width:2px;height:14px;margin-left:-1px;background:var(--muted);opacity:.45}
+.k-tick.on{opacity:.9;background:var(--ink)}
+.k-tick.next{opacity:1;background:var(--ink);height:18px;top:-5px}
+.k-ddlab{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:6px;font-variant-numeric:tabular-nums}
+.k-ddlab b{color:var(--ink);font-weight:600}
+.k-crop{display:block;border-radius:var(--crop-radius,4px)}
+.k-liner{display:block}
+.k-map{display:block}
+.k-maplab{font-size:11px;fill:var(--muted);font-family:inherit}
+.k-pinn{font-size:13px;font-weight:700;font-family:inherit;font-variant-numeric:tabular-nums}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;flex:none}
+.c-CM{background:var(--cm)}.c-OFM{background:var(--ofm)}.c-OBLR{background:var(--oblr)}.c-other_moth{background:var(--other)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
