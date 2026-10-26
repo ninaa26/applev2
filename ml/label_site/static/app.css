@@ -187,3 +187,13 @@ aside.right .lcards.many { gap:6px; }
 aside.right #attrs { margin-top:10px; }
 aside.right #issues:not(:empty) { margin-top:10px; }
 aside.right .key { gap:6px; }
+
+/* the left panel, spaced out the same way */
+aside.left .brand { margin:2px 0 12px; }
+aside.left #me { margin-bottom:16px; }
+aside.left .tabs { gap:6px; margin-bottom:10px; }
+aside.left #queueInfo { margin-bottom:6px; }
+aside.left h2 { margin:22px 0 10px; }
+aside.left #queue { display:flex; flex-direction:column; gap:4px; }
+aside.left .item { padding:9px 10px; gap:6px 10px; }
+aside.left .item .sub { margin-top:1px; }
