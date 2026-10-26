@@ -246,11 +246,12 @@ $("thr").oninput = () => { $("thrv").textContent = thr().toFixed(2); draw(); };
 $("resetImg").onclick = () => { $("bri").value = 100; $("con").value = 100; $("sat").value = 100; draw(); };
 function colorOf(b) {
   const l = b.label;
-  if (!l) return "#d946ef";
-  if (l === "other_insect") return "#16a34a";
-  if (l === "debris") return "#a8a29e";
+  // the poster's colours: moth orange, other insect denim, debris mauve, a named species hot pink, unlabelled sky
+  if (!l) return "#8FC9D9";
+  if (l === "other_insect") return "#4A7DB0";
+  if (l === "debris") return "#D46FA6";
   if (l === "skip") return "#ffffff55";
-  return l === "moth" ? "#f97316" : "#2563eb";
+  return l === "moth" ? "#FF9E1B" : "#EE4A7F";
 }
 function confirmSel() {  // Enter, or the ⏎ row: the guess is right, on to the next
   if (sel < 0) { setStatus("select a box first"); return; }
@@ -319,7 +320,8 @@ function hit(x, y) {
   return best;
 }
 function draw() {
-  ctx.setTransform(1,0,0,1,0,0); ctx.fillStyle = "#2a2a28"; ctx.fillRect(0, 0, cv.width, cv.height);
+  ctx.setTransform(1,0,0,1,0,0); ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--stage").trim() || "#4A7DB0";
+  ctx.fillRect(0, 0, cv.width, cv.height);
   if (!img.complete || !img.width || !photo) return;
   ctx.setTransform(view.s, 0, 0, view.s, view.x, view.y);
   ctx.filter = `brightness(${$("bri").value}%) contrast(${$("con").value}%) saturate(${$("sat").value}%)`;
@@ -339,18 +341,18 @@ function draw() {
     const a = attrsOf(b).map(x => ({overlapping:"O", cut_off:"E", decayed:"W", unsure:"U", disputed:"!"}[x])).join("");
     const t = (b.label ? (b.label === "other_insect" ? "insect" : b.label) : "?") + (unchecked(b) ? "?" : "")
       + (b.source === "manual" ? " ✎" : "") + (a ? " " + a : "") + (b.locked ? " 🔒" : "");
-    ctx.font = `${12*lw}px system-ui`; const w = ctx.measureText(t).width + 6*lw;
+    ctx.font = `600 ${12*lw}px -apple-system, system-ui, sans-serif`; const w = ctx.measureText(t).width + 6*lw;
     ctx.fillStyle = colorOf(b); ctx.fillRect(b.x1, b.y1 - 16*lw, w, 16*lw);
-    ctx.fillStyle = b.label === "debris" ? "#1d1d1b" : "#fff"; ctx.fillText(t, b.x1 + 3*lw, b.y1 - 4*lw);
+    ctx.fillStyle = (!b.label || b.label === "moth") ? "#1A1A1A" : "#fff"; ctx.fillText(t, b.x1 + 3*lw, b.y1 - 4*lw);
     ctx.globalAlpha = 1;
   });
   if (warnUnchecked) {  // after Done with dashed boxes left: a red ring around each, drawn in screen-sized pixels
-    ctx.strokeStyle = "#ef4444"; ctx.lineWidth = 4 * lw; ctx.setLineDash([]);
+    ctx.strokeStyle = "#D40000"; ctx.lineWidth = 4 * lw; ctx.setLineDash([]);
     boxes.forEach(b => { if (unchecked(b)) { const m = 6 * lw; ctx.strokeRect(b.x1 - m, b.y1 - m, b.x2 - b.x1 + 2 * m, b.y2 - b.y1 + 2 * m); } });
   }
   issues.forEach((it, k) => {  // pinned comments
     ctx.beginPath(); ctx.arc(it.x, it.y, 10*lw, 0, 7);
-    ctx.fillStyle = it.resolved_at ? "#9ca3af" : "#facc15"; ctx.fill(); ctx.strokeStyle = "#1d1d1b"; ctx.lineWidth = 1.5*lw; ctx.stroke();
+    ctx.fillStyle = it.resolved_at ? "#C9BCCB" : "#FF9E1B"; ctx.fill(); ctx.strokeStyle = "#1A1A1A"; ctx.lineWidth = 1.5*lw; ctx.stroke();
     ctx.fillStyle = "#1d1d1b"; ctx.font = `bold ${11*lw}px system-ui`; ctx.fillText(String(k + 1), it.x - 3.5*lw, it.y + 4*lw);
   });
   ctx.setTransform(1,0,0,1,0,0);
@@ -390,7 +392,7 @@ $("prevBox").onclick = prevBox; $("nextBox").onclick = nextBox;
 function showSel() {
   remember(); renderKey();
   $("prevBox").disabled = trailPos <= 0;
-  zc.fillStyle = "#eee"; zc.fillRect(0, 0, 256, 256);
+  zc.fillStyle = "#8FC9D9"; zc.fillRect(0, 0, 256, 256);
   document.querySelectorAll("#attrs button").forEach(x => x.classList.remove("on"));
   if (sel < 0 || !boxes[sel]) { $("info").textContent = "Nothing selected"; $("lock").textContent = "🔒 Lock box (L)"; return; }
   const b = boxes[sel], side = Math.max(b.x2 - b.x1, b.y2 - b.y1) * 1.7, cx = (b.x1 + b.x2) / 2, cy = (b.y1 + b.y2) / 2;
