@@ -40,6 +40,11 @@ function renderQueue() {
   const items = tab === "mine" ? queue.tasks : queue.review;
   const isOpen = t => t.status === "open" || t.status === "returned";
   const open = queue.tasks.filter(isOpen).length;
+  if (queue.paused) {  // an admin has paused this person: nothing to open until they resume them
+    $("queueInfo").textContent = "";
+    $("queue").innerHTML = `<div class="paused-note"><b>Paused</b>An admin has paused your labelling for now. Your photos are kept for you and come back when you're resumed.</div>`;
+    return;
+  }
   $("queueInfo").textContent = tab === "mine" ? `${open} to do · ${queue.tasks.length - open} finished` : `${items.length} waiting for review`;
   const row = t => {
     const short = t.photo.replace(/\.RAW-01\.COVER/, "").replace(/__/, " · ");
@@ -212,8 +217,9 @@ function restore(from, to) {
   boxes.forEach(b => { if (b.locked) b.unlock = true; });
   changed();
 }
-function undoButtons() { $("undo").disabled = !undoStack.length; $("redo").disabled = !redoStack.length; }
-$("undo").onclick = () => restore(undoStack, redoStack); $("redo").onclick = () => restore(redoStack, undoStack);
+function undoButtons() { $("undo").disabled = $("mUndo").disabled = !undoStack.length; $("redo").disabled = $("mRedo").disabled = !redoStack.length; }
+$("undo").onclick = $("mUndo").onclick = () => restore(undoStack, redoStack);
+$("redo").onclick = $("mRedo").onclick = () => restore(redoStack, undoStack);
 
 // ---------- what to show
 function setPass(m) {
@@ -487,7 +493,7 @@ function showSel() {
   $("prevBox").disabled = trailPos <= 0;
   zc.fillStyle = "#111111"; zc.fillRect(0, 0, 256, 256);
   document.querySelectorAll("#attrs button").forEach(x => x.classList.remove("on"));
-  if (sel < 0 || !boxes[sel]) { $("info").textContent = $("mInfo").textContent = "Nothing selected"; $("lock").textContent = "🔒 Lock box (L)"; return; }
+  if (sel < 0 || !boxes[sel]) { $("info").textContent = "Nothing selected"; $("lock").textContent = "🔒 Lock box (L)"; return; }
   const b = boxes[sel], side = Math.max(b.x2 - b.x1, b.y2 - b.y1) * 1.7, cx = (b.x1 + b.x2) / 2, cy = (b.y1 + b.y2) / 2;
   if (img.complete && img.width) {
     zc.filter = `brightness(${$("bri").value}%) contrast(${$("con").value}%) saturate(${$("sat").value}%)`;
@@ -499,7 +505,6 @@ function showSel() {
     + (b.model_label ? `<br>classifier: ${esc(b.model_label)} ${esc(b.model_conf)}` : "")
     + (b.old_label ? `<br>earlier: ${esc(b.old_label)}` : "")
     + (b.length_mm ? `<br>~${esc(b.length_mm)} mm${b.body_mm ? " (body " + esc(b.body_mm) + ")" : ""}${b.length_from === "box" ? " from the box" : ""}` : "");
-  $("mInfo").innerHTML = $("info").innerHTML;  // phones show it in the strip above the photo
   attrsOf(b).forEach(a => { const x = document.querySelector(`#attrs [data-a="${a}"]`); if (x) x.classList.add("on"); });
   $("lock").textContent = b.locked ? "🔓 Unlock box (L)" : "🔒 Lock box (L)";
 }
