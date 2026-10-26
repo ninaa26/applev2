@@ -271,7 +271,9 @@ def handler(store: Store, auth: Auth, secure: bool, species_experts: list[str]):
                 t = store.task(int(task_id))
             except (TypeError, ValueError):
                 return None
-            if t and (t["user"] == user or auth.is_admin(user)):
+            if auth.is_admin(user):
+                return t
+            if t and t["user"] == user and user not in workflow.paused(store):  # a paused person can't label until resumed
                 return t
             return None
 
@@ -307,6 +309,8 @@ def handler(store: Store, auth: Auth, secure: bool, species_experts: list[str]):
                 return self.json({"user": user, "admin": admin, "species": user in species_experts,
                                   "csrf": auth.csrf(self.cookie() or ""), "panels": store.setting("panels")})
             if path == "/api/queue":
+                if not admin and user in workflow.paused(store):  # paused: their photos wait for them, out of reach
+                    return self.json({"tasks": [], "review": [], "paused": True})
                 mine = store.q("SELECT t.*, (SELECT count(*) FROM boxes b WHERE b.photo=t.photo AND b.copy=t.copy AND b.label!='skip') AS n,"
                                " (SELECT count(*) FROM boxes b WHERE b.photo=t.photo AND b.copy=t.copy AND b.label!='skip' AND (b.by='' OR b.label='')) AS unchecked,"
                                " (SELECT count(*) FROM issues i WHERE i.photo=t.photo AND i.copy=t.copy AND i.resolved_at IS NULL) AS issues"

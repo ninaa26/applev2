@@ -29,3 +29,6 @@ tr:hover td { background:var(--hover); }
 select, button { font:inherit; font-size:12px; padding:4px 8px; border:1px solid rgba(26,26,26,.32); border-radius:8px; background:var(--field); color:var(--ink); }
 button { cursor:pointer; font-weight:700; } button:hover { background:var(--pink); color:#fff; }
 .paused { color:#fff; background:var(--orange); color:var(--outline); font-weight:700; font-size:11px; padding:0 6px; border-radius:6px; border:1px solid rgba(26,26,26,.32); }
+
+/* Resume and Hand out side by side */
+td.acts { white-space:nowrap; } td.acts button + button { margin-left:6px; }

@@ -220,12 +220,13 @@ body:not(.left-off) #leftToggle .fill { opacity:.9; } body.left-off #leftToggle 
   #mTitle b { font-size:13.5px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   #mTitle span { font-size:12px; color:var(--mute); }
   /* the photo: one finger pans, a tap picks a box, two fingers zoom */
-  #mStrip { display:flex; order:2; flex:none; align-items:center; gap:10px; min-height:52px; box-sizing:border-box; padding:6px 10px;
+  #mStrip { display:flex; order:2; flex:none; align-items:center; justify-content:center; min-height:52px; box-sizing:border-box; padding:6px 10px;
             background:var(--panel); border-bottom:1px solid var(--hair); }
-  #mDraw { flex:none; min-height:40px; padding:0 14px; border-radius:12px; font-size:13.5px; font-weight:600; }
+  #mStrip { gap:8px; }
+  #mUndo, #mRedo { flex:none; min-height:40px; padding:0 14px; border-radius:12px; font-size:13.5px; font-weight:600; }
+  #secTools > .row:first-child { display:none; }  /* undo and redo are in the strip */
+  #mDraw { flex:none; min-height:40px; padding:0 22px; border-radius:12px; font-size:13.5px; font-weight:600; }
   #mDraw.on { background:var(--pink); border-color:transparent; color:#fff; }
-  #mInfo { flex:1; min-width:0; text-align:center; font-size:12px; line-height:1.35; color:var(--mute); }
-  #mInfo b { color:var(--ink); font-weight:600; }
   main { order:3; flex:0 0 42dvh; position:relative; }
   #cv { touch-action:none; }
   #leftToggle, .grip { display:none; }
@@ -245,7 +246,10 @@ body:not(.left-off) #leftToggle .fill { opacity:.9; } body.left-off #leftToggle 
               padding:10px 0 8px; background:var(--panel); }
   #mActions button { height:50px; padding:0; font-size:16px; font-weight:700; border-radius:14px; }
   #mDelete { color:var(--pink); }
-  #secSel, #draw { display:none; }  /* the box's details and Draw are in the strip above the photo */
+  #draw { display:none; }  /* Draw is in the strip above the photo */
+  /* the selected box's details, under the buttons, across the whole width */
+  #secSel { order:2; } #secSel h2, #zoom, #secSel .nav { display:none; }
+  aside.right #info { min-height:0; margin:4px 0 6px; width:100%; text-align:center; font-size:12.5px; line-height:1.45; }
   #secLabel { order:3; } #secLabel h2 { display:none; }
   aside.right .lcards { gap:8px; } aside.right .lcards.many { gap:6px; }
   .lcard { min-height:70px; } .lcard svg { width:36px; height:36px; }
@@ -259,3 +263,8 @@ body:not(.left-off) #leftToggle .fill { opacity:.9; } body.left-off #leftToggle 
   body:not(.more-open) #secShow, body:not(.more-open) #secPhoto { display:none; }
   aside.right .line { min-height:32px; }
 }
+
+/* a paused labeller sees this instead of their photos */
+.paused-note { margin-top:14px; padding:14px; border-radius:12px; border:1px solid var(--hair); background:var(--field); font-size:13px;
+               line-height:1.5; color:var(--mute); }
+.paused-note b { display:block; font-size:15px; color:var(--orange); margin-bottom:4px; }
