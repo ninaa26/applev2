@@ -197,3 +197,12 @@ aside.left h2 { margin:22px 0 10px; }
 aside.left #queue { display:flex; flex-direction:column; gap:4px; }
 aside.left .item { padding:9px 10px; gap:6px 10px; }
 aside.left .item .sub { margin-top:1px; }
+
+/* the left panel can be hidden (button at the photo's top left, or the \ key) */
+body.left-off { grid-template-columns:1fr var(--rw, 280px); }  /* the panel is taken out, so two columns */
+body.left-off aside.left, body.left-off #gripL { display:none; }
+#leftToggle { position:absolute; top:10px; left:10px; z-index:5; width:32px; height:32px; padding:0; display:grid; place-items:center;
+              border-radius:9px; border:1px solid var(--hair-strong); background:color-mix(in srgb, var(--panel) 88%, transparent); color:var(--mute); }
+#leftToggle:hover { color:var(--ink); background:var(--panel); }
+#leftToggle svg { width:18px; height:18px; }
+body:not(.left-off) #leftToggle .fill { opacity:.9; } body.left-off #leftToggle .fill { opacity:0; }

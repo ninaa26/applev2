@@ -630,12 +630,23 @@ cv.addEventListener("wheel", e => {
 }, {passive:false});
 cv.addEventListener("dblclick", e => zoomAt(e.offsetX, e.offsetY, e.shiftKey ? 0.5 : 2));
 window.addEventListener("keyup", e => { if (e.key === " ") space = false; });
+// The left panel (the photo list) can be hidden to give the photo more room; remembered in this browser.
+function setLeft(show) {
+  document.body.classList.toggle("left-off", !show);
+  const b = $("leftToggle"), what = show ? "Hide" : "Show";
+  b.title = `${what} the photo list (\\)`; b.setAttribute("aria-label", `${what} the photo list`); b.setAttribute("aria-pressed", String(!show));
+  try { localStorage.setItem("leftOff", show ? "" : "1"); } catch (e) {}
+  fit(); draw();
+}
+$("leftToggle").onclick = () => setLeft(document.body.classList.contains("left-off"));
+try { if (localStorage.getItem("leftOff")) setLeft(false); } catch (e) {}
 window.addEventListener("keydown", e => {
   if (e.target.tagName === "TEXTAREA" || e.target.tagName === "INPUT" && e.target.type === "text") return;
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") { e.preventDefault(); e.shiftKey ? restore(redoStack, undoStack) : restore(undoStack, redoStack); return; }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "y") { e.preventDefault(); restore(redoStack, undoStack); return; }
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === "?") { toggleGuide(); return; }
+  if (e.key === "\\") { setLeft(document.body.classList.contains("left-off")); return; }
   if (e.key === "Escape") { if (!$("guide").hidden) return toggleGuide(); $("issueMenu").hidden = true; sel = -1; draw(); showSel(); return; }
   if (!task) return;
   if (e.key === " ") { space = true; e.preventDefault(); return; }
