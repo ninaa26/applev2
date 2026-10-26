@@ -120,4 +120,9 @@ button.krow.on { background:var(--pink); border-color:transparent; color:#fff; f
   .badge::after { background:radial-gradient(55% 120% at 14% -10%, rgba(255,255,255,.35), transparent 50%),
                              radial-gradient(35% 90% at 92% 115%, rgba(150,225,255,.35), transparent 60%); }
 }
+/* dense data (photo names, counts, details, the key) in Space Grotesk, regular weight */
+:root { --data:"Space Grotesk", -apple-system, system-ui, sans-serif; }
+.item, .item .name, .item .count, .item .sub, #queueInfo, #info, #info b, #taskActions .mute, .krow, .krow .n {
+  font-family:var(--data); font-weight:400; letter-spacing:.005em; }
+#info b, .item.on .name, button.krow.on { font-weight:500; }
 [hidden] { display:none !important; }
