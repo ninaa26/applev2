@@ -675,6 +675,7 @@ async function toggleGuide() {
   }
 }
 $("help").onclick = toggleGuide; $("guideClose").onclick = toggleGuide;
+$("guide").onclick = e => { if (e.target === $("guide")) toggleGuide(); };  // a click outside the sheet closes it too
 
 // ---------- resizable side panels (widths kept in this browser only)
 const PANEL = {l: 250, r: 280, min: 170, max: 640};
