@@ -25,8 +25,8 @@ train_v1.py does for the linear head: the web-photo val score says little about 
 forward pass runs in mixed precision.
 
 Reports use the same format as train_v1.py, with web photos and trap-style photos
-(make_trap_style.py) scored separately. Writes models/v2/<arch>.pt (weights, classes, arch,
-image size), metrics.json and report.md.
+(make_trap_style.py) scored separately. Writes models/classifier/cnn/<arch>/<arch>.pt (weights, classes,
+arch, image size), metrics.json, report.md and trained_on.json (what it was trained on).
 """
 
 from __future__ import annotations
@@ -38,6 +38,8 @@ import time
 from pathlib import Path
 
 import numpy as np
+import paths
+import trained_on
 from train_v1 import REAL, fit_temperature, format_report, load_rows, report
 
 ARCHS = ("efficientnet_b0", "mobilenet_v3_large", "mobilenet_v3_small", "convnext_tiny")
@@ -137,7 +139,7 @@ def predict(model, loader, device) -> np.ndarray:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--data", type=Path, default=Path("data"))
-    ap.add_argument("--out", type=Path, default=Path("models/v2"))
+    ap.add_argument("--out", type=Path, default=None, help="default: models/classifier/cnn/<arch>")
     ap.add_argument("--arch", choices=ARCHS, default="efficientnet_b0")
     ap.add_argument("--epochs", type=int, default=8)
     ap.add_argument("--batch", type=int, default=48)
@@ -149,6 +151,7 @@ def main(argv=None) -> int:
     ap.add_argument("--device", default="auto", help="auto (mps > cuda > cpu), or cpu if the GPU stalls")
     ap.add_argument("--final", action="store_true", help="also evaluate on the locked test cards")
     args = ap.parse_args(argv)
+    args.out = args.out or Path(paths.CNN) / args.arch
 
     import torch
     from torch.utils.data import DataLoader, WeightedRandomSampler
@@ -230,6 +233,9 @@ def main(argv=None) -> int:
     torch.save({"state_dict": best_state, "arch": args.arch, "classes": classes, "size": args.size,
                 "mean": MEAN, "std": STD, "T": T, "val_balanced_accuracy": best}, args.out / f"{args.arch}.pt")
     (args.out / "metrics.json").write_text(json.dumps(results, indent=2))
+    trained_on.write(args.out, trained_on.summary(args.data, f"torchvision {args.arch} (ImageNet weights)",
+                                                  args.data / paths.DATASET, rows, epochs=args.epochs,
+                                                  size=args.size, T=round(float(T), 4), final=args.final))
     md = [f"# Species ID v2: fine-tuned {args.arch}", "",
           f"{args.epochs} epochs, {args.samples_per_epoch} class-balanced draws each; best balanced accuracy on "
           f"{tune} {best:.3f}, temperature {T:.2f}. Web-photo and trap-style tests are sanity checks, not trap accuracy (see ml/README.md).", ""]
@@ -237,7 +243,7 @@ def main(argv=None) -> int:
     (args.out / "report.md").write_text("\n".join(md))
     for k, v in results.items():
         print("\n" + format_report(k, v))
-    print(f"Saved {args.out / (args.arch + '.pt')}, metrics.json, report.md")
+    print(f"Saved {args.out / (args.arch + '.pt')}, metrics.json, report.md, trained_on.json")
     return 0
 
 

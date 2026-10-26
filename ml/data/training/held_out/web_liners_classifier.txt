@@ -1,0 +1,10 @@
+# Web liners and cards the species classifier never trains on (liner_crops.py marks their crops `test`): the
+# real-liner score to quote. Photo-name prefixes; a liner's other days go with it. About a third of the moths,
+# and includes the detector's test liners (web_liners_detector.txt).
+om20180514_121032_1
+ap20210804_115441_3
+om20210425_110040_1
+om20210815_110841_1
+trap_positive__20250717_083644_5B
+trap_positive__20250717_082713_6C
+trap_positive__20250717_081351_no_label_5

@@ -5,12 +5,17 @@ __pycache__/
 .DS_Store
 .env
 server/data/
-ml/data/
+# ml/data/ is photos and results, except its README and the held-out lists (which photos no model trains on)
+ml/data/*
+!ml/data/README.md
+!ml/data/training/
+ml/data/training/*
+!ml/data/training/held_out/
 device/data/
 *.egg-info/
 ml/models/
 camera_bench/
 
-# model weights (flatbug downloads flat_bug_M.pt into the working dir; train_v2 writes models/v2/*.pt)
+# model weights (downloaded ones go to ml/models/detector/pretrained/; train_v2 writes ml/models/classifier/cnn/)
 *.pt
 constraints.txt.new

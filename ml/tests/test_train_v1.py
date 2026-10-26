@@ -11,6 +11,7 @@ from unittest import mock
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import paths  # noqa: E402
 import train_v1  # noqa: E402
 
 try:
@@ -44,8 +45,8 @@ class Final(unittest.TestCase):
         rows, X = fake_rows(np.random.default_rng(0))
         with tempfile.TemporaryDirectory() as tmp:
             data = Path(tmp) / "data"
-            data.mkdir()
-            with open(data / "dataset.csv", "w", newline="") as f:
+            (data / paths.DATASET).parent.mkdir(parents=True)
+            with open(data / paths.DATASET, "w", newline="") as f:
                 w = csv.DictWriter(f, fieldnames=["split", "class", "source"])
                 w.writeheader()
                 w.writerows(rows)
@@ -57,6 +58,10 @@ class Final(unittest.TestCase):
             self.assertIn("v1 linear head · LOCKED own cards", results)
             head = np.load(out / "head.npz")
             self.assertEqual(head["T"].shape, ())  # the temperature, a scalar
+            info = json.loads((out / "trained_on.json").read_text())
+            self.assertEqual(info["base_model"], train_v1.MODEL)
+            self.assertEqual(info["rows"], len(rows))
+            self.assertIn("locked", " ".join(info["by_source_and_split"]))
 
 
 if __name__ == "__main__":

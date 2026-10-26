@@ -28,13 +28,13 @@ cd ~/applev2/server && ~/.local/bin/uv sync --locked --python 3.12 --extra biocl
 ```
 
 The classifier's head is not in git: copy it from the machine that trained it, for example
-`scp ml/models/v1/head.npz pi@apple-pi-server:applev2/ml/models/v1/`.
+`scp ml/models/classifier/bioclip_head/current/head.npz pi@apple-pi-server:applev2/ml/models/classifier/bioclip_head/current/`.
 
 `cp .env.example .env` and set:
 
 ```
 SENTINEL_CLASSIFIER=bioclip-v1
-SENTINEL_CLASSIFIER_HEAD=../ml/models/v1/head.npz
+SENTINEL_CLASSIFIER_HEAD=../ml/models/classifier/bioclip_head/current/head.npz
 SENTINEL_DASHBOARD_PASSWORD=<something>
 ```
 

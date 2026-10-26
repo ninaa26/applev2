@@ -1,4 +1,4 @@
-"""Turn the server's reviewed detections into training photos: data/own/<label>/<card>/*.jpg.
+"""Turn the server's reviewed detections into training photos: data/real_liners/our_trap/<label>/<card>/*.jpg.
 
     python export_server_crops.py --server ../server/data                  # reviewed insects only
     python export_server_crops.py --server ../server/data --empty-card T1-20260924T1650
@@ -16,7 +16,7 @@ and after a few days on the glue. They all share the card's folder, so build_dat
 them in one split. Crops use the same square box and padding as the server's classifier
 (server/sentinel_server/pipeline/classify.py: crop), so training crops look like what the
 model will be given. Card folder names are <trap>-<install time>, e.g. T1-20260924T1650,
-which is the name to put in data/own/locked_test.txt. Re-running overwrites the same files.
+which is the name to put in data/training/held_out/our_trap_locked.txt. Re-running overwrites the same files.
 """
 
 from __future__ import annotations
@@ -28,6 +28,7 @@ from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
+import paths
 from PIL import Image
 
 LABELS = {"CM", "OFM", "OBLR", "other_moth", "other_insect", "debris"}
@@ -78,7 +79,7 @@ def main(argv=None) -> int:
         if image_path not in images:
             with Image.open(args.server / "media" / image_path) as im:
                 images[image_path] = im.convert("RGB")
-        dest = args.data / "own" / label / card / f"{Path(image_path).stem}_d{det}.jpg"
+        dest = args.data / paths.OWN / label / card / f"{Path(image_path).stem}_d{det}.jpg"
         dest.parent.mkdir(parents=True, exist_ok=True)
         crop(images[image_path], x1, y1, x2, y2).save(dest, quality=95)
         counts[(label, card)] += 1
@@ -88,7 +89,7 @@ def main(argv=None) -> int:
               file=sys.stderr)
     for (label, card), n in sorted(counts.items()):
         print(f"  {label:11} {card}  {n}")
-    print(f"Exported {sum(counts.values())} crops to {args.data / 'own'}"
+    print(f"Exported {sum(counts.values())} crops to {args.data / paths.OWN}"
           + (f" (skipped {skipped} smaller than {args.min_side} px)" if skipped else ""))
     return 0
 

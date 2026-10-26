@@ -9,7 +9,7 @@ on (e.g. debris, before we have debris crops) get probability 0. A head that car
 temperature T (picked on real-liner crops by train_v1.py) has its logits divided by it, so
 that a confidence of 0.80 is right about 80% of the time and track.py's thresholds hold.
 `cnn-v2` is the fine-tuned CNN from ml/train_v2.py (SENTINEL_CLASSIFIER_MODEL points at
-its models/v2/<arch>.pt).
+its models/classifier/cnn/<arch>/<arch>.pt).
 """
 
 from __future__ import annotations
@@ -143,11 +143,11 @@ def make_classifier(name: str):
     if name == "bioclip-v1":
         head = os.environ.get("SENTINEL_CLASSIFIER_HEAD", "")
         if not head:
-            raise ValueError("SENTINEL_CLASSIFIER=bioclip-v1 needs SENTINEL_CLASSIFIER_HEAD=<path to ml/models/v1/head.npz>")
+            raise ValueError("SENTINEL_CLASSIFIER=bioclip-v1 needs SENTINEL_CLASSIFIER_HEAD=<path to ml/models/classifier/bioclip_head/current/head.npz>")
         return BioClipLinear(head)
     if name == "cnn-v2":
         path = os.environ.get("SENTINEL_CLASSIFIER_MODEL", "")
         if not path:
-            raise ValueError("SENTINEL_CLASSIFIER=cnn-v2 needs SENTINEL_CLASSIFIER_MODEL=<path to ml/models/v2/<arch>.pt>")
+            raise ValueError("SENTINEL_CLASSIFIER=cnn-v2 needs SENTINEL_CLASSIFIER_MODEL=<path to ml/models/classifier/cnn/<arch>/<arch>.pt>")
         return FineTunedCNN(path)
     raise ValueError(f"unknown classifier {name!r}")

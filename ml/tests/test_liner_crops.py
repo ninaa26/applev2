@@ -12,6 +12,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import build_dataset  # noqa: E402
 import liner_crops  # noqa: E402
+import paths  # noqa: E402
 import train_v1  # noqa: E402
 
 FIELDS = ["photo", "n", "label", "source", "crop", "cutout", "x1", "y1", "x2", "y2", "conf", "ppm", "length_mm"]
@@ -49,8 +50,8 @@ class LinerCrops(unittest.TestCase):
             (field / "species.csv").write_text("photo,n,species,by,note\nPXL_20250617_1.jpg,1,OBLR,claude,\n"
                                                "PXL_20250617_1.jpg,2,,claude,unsure\ncard_T.jpg,1,CM,claude,\n"
                                                "PXL_20250422_174434151.RAW.jpg,1,OFM,claude,\n")
-            (field / "test_cards.txt").write_text("# held out\ncard_T.jpg\n")
-            got = liner_crops.field_card_rows(field)
+            # an exact name (held_out/field_cards.txt) and a prefix (field_cards_classifier_only.txt)
+            got = liner_crops.field_card_rows(field, ["card_T.jpg", "PXL_20250422_174434151"])
         self.assertEqual([(r["label"], r["held_out"]) for r in got],
                          [("OBLR", False), ("CM", False), ("CM", True), ("OFM", True)])
 
@@ -62,8 +63,8 @@ class LinerCrops(unittest.TestCase):
     def test_dataset_keeps_held_out_liners_in_test_and_a_liner_on_one_side(self):
         with tempfile.TemporaryDirectory() as tmp:
             data = Path(tmp)
-            (data / "web_liners" / "species").mkdir(parents=True)
-            with open(data / "web_liners" / "species" / "manifest.csv", "w", newline="") as f:
+            (data / paths.WEB_LINERS / "species").mkdir(parents=True)
+            with open(data / paths.WEB_LINERS / "species" / "manifest.csv", "w", newline="") as f:
                 w = csv.DictWriter(f, fieldnames=liner_crops.FIELDS)
                 w.writeheader()
                 for g in range(9):
@@ -71,7 +72,7 @@ class LinerCrops(unittest.TestCase):
                         w.writerow({"path": f"{g}_{k}.jpg", "label": "OFM", "set": "ofm-liners", "photo": f"{g}.jpg",
                                     "group": f"g{g}", "split": "test" if g == 0 else "", "ppm": "15.0", "length_mm": "6"})
             build_dataset.main(["--data", str(data)])
-            with open(data / "dataset.csv", newline="") as f:
+            with open(data / paths.DATASET, newline="") as f:
                 rows = list(csv.DictReader(f))
         splits = {}
         for r in rows:
@@ -102,24 +103,28 @@ class Exclude(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             data = Path(tmp)
-            (data / "inat").mkdir()
+            (data / paths.INAT).mkdir(parents=True)
             rng = np.random.default_rng(0)
             rows = []
             for k in range(3):
-                path = data / "inat" / f"{k}.jpg"
+                path = data / paths.INAT / f"{k}.jpg"
                 Image.fromarray(rng.integers(0, 255, (120, 120, 3), dtype=np.uint8)).save(path)
                 rows.append({"local_path": str(path), "label": "CM", "observation": str(k), "photo": str(k),
                              "license": "cc0", "attribution": "", "status": "ok"})
-            with open(data / "inat" / "manifest.csv", "w", newline="") as f:
+            with open(data / paths.INAT / "manifest.csv", "w", newline="") as f:
                 w = csv.DictWriter(f, fieldnames=list(rows[0]))
                 w.writeheader()
                 w.writerows(rows)
-            with open(data / "exclude.csv", "w", newline="") as f:
+            (data / paths.EXCLUDE).parent.mkdir(parents=True)
+            with open(data / paths.EXCLUDE, "w", newline="") as f:
                 f.write(f"path,why\n{rows[1]['local_path']},not adult: larva 0.99\n")
             build_dataset.main(["--data", str(data)])
-            with open(data / "dataset.csv", newline="") as f:
+            with open(data / paths.DATASET, newline="") as f:
                 kept = [Path(r["path"]).name for r in csv.DictReader(f)]
+            with open(data / paths.DROPPED, newline="") as f:
+                dropped = [(Path(r["path"]).name, r["why"]) for r in csv.DictReader(f)]
         self.assertEqual(sorted(kept), ["0.jpg", "2.jpg"])
+        self.assertEqual(dropped, [("1.jpg", "excluded: not adult: larva 0.99")])
 
 
 class Temperature(unittest.TestCase):

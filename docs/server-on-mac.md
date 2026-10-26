@@ -68,10 +68,10 @@ for i in 1 2 3 4 5; do .venv/bin/sentinel-cycle --config config.toml --no-halt; 
 | Setting | Install | What it does |
 |---|---|---|
 | `SENTINEL_DETECTOR=flatbug` | `uv sync --locked --extra dev --extra flatbug` | Pretrained insect detector, which also works on crowded cards. Weights (50 MB) download to `data/models/` on first use |
-| `SENTINEL_DETECTOR=yolo` + `SENTINEL_DETECTOR_MODEL=../ml/models/yolo11/<run>/weights/best.pt` | `uv sync --locked --extra dev --extra yolo` | Our own YOLO11 from `ml/train_yolo.py`. The photo is shrunk to the px/mm the run was trained at, cut into overlapping tiles, and the tiles' boxes merged so an insect on a tile edge counts once. Not the default until a run has been scored on our own liners |
+| `SENTINEL_DETECTOR=yolo` + `SENTINEL_DETECTOR_MODEL=../ml/models/detector/yolo/<run>/weights/best.pt` | `uv sync --locked --extra dev --extra yolo` | Our own YOLO11 from `ml/train_yolo.py`. The photo is shrunk to the px/mm the run was trained at, cut into overlapping tiles, and the tiles' boxes merged so an insect on a tile edge counts once. Not the default until a run has been scored on our own liners |
 | `SENTINEL_CLASSIFIER=bioclip` | `uv sync --locked --extra dev --extra bioclip` | BioCLIP 2 zero-shot species ID (model v0) |
-| `SENTINEL_CLASSIFIER=bioclip-v1` + `SENTINEL_CLASSIFIER_HEAD=../ml/models/v1/head.npz` | same `[bioclip]` extra | BioCLIP 2 + the linear head from `ml/train_v1.py` (model v1) |
-| `SENTINEL_CLASSIFIER=cnn-v2` + `SENTINEL_CLASSIFIER_MODEL=../ml/models/v2/efficientnet_b0.pt` | same `[bioclip]` extra (brings torch + torchvision) | fine-tuned CNN from `ml/train_v2.py` (model v2) |
+| `SENTINEL_CLASSIFIER=bioclip-v1` + `SENTINEL_CLASSIFIER_HEAD=../ml/models/classifier/bioclip_head/current/head.npz` | same `[bioclip]` extra | BioCLIP 2 + the linear head from `ml/train_v1.py` (model v1) |
+| `SENTINEL_CLASSIFIER=cnn-v2` + `SENTINEL_CLASSIFIER_MODEL=../ml/models/classifier/cnn/efficientnet_b0/efficientnet_b0.pt` | same `[bioclip]` extra (brings torch + torchvision) | fine-tuned CNN from `ml/train_v2.py` (model v2) |
 
 The default `baseline` detector needs no downloads: it finds the liner's printed grid (which gives the
 scale in px/mm and, with a wide lens, how much to straighten the photo), removes the grid lines, and keeps dark blobs 3–30 mm long. Try any detector on

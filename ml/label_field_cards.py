@@ -3,7 +3,7 @@
     python label_field_cards.py                 # then open http://localhost:8765
     python label_field_cards.py --port 9000
 
-Reads and writes data/field/labels.csv (saved after every change). A box drawn or resized gets its
+Reads and writes data/real_liners/cornell_field_cards/labels.csv (saved after every change). A box drawn or resized gets its
 length from an outline GrabCut finds in it (crop_field_cards.box_lengths, so OpenCV is needed).
 
 In the page there are two passes (buttons on the right; the page remembers which):
@@ -33,6 +33,7 @@ from pathlib import Path
 from statistics import median
 from urllib.parse import unquote
 
+import paths
 from crop_field_cards import FIELDS, box_lengths, server_crop
 from PIL import Image, ImageOps
 
@@ -495,7 +496,7 @@ load();
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--data", type=Path, default=Path("data/field"))
+    ap.add_argument("--data", type=Path, default=paths.DATA / paths.FIELD)
     ap.add_argument("--port", type=int, default=8765)
     args = ap.parse_args(argv)
     if not (args.data / "labels.csv").exists():

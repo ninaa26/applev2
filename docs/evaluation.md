@@ -76,4 +76,4 @@ The known failure modes, so the numbers mean something (from Suto 2022, Trapview
 Any change to the trap's colour, liner, light, camera or its height means new locked cards: results
 measured before the change don't carry over.
 
-Keep the locked cards out of training: list them in `ml/data/own/locked_test.txt` (see `ml/README.md`).
+Keep the locked cards out of training: list them in `ml/data/training/held_out/our_trap_locked.txt` (see `ml/README.md`).

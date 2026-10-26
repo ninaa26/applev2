@@ -15,7 +15,7 @@
       "runtimeExecutable": "/bin/sh",
       "runtimeArgs": [
         "-c",
-        "cd ml && exec .venv/bin/python label_field_cards.py --data data/web_liners/label/ofm-ervins --port 8766"
+        "cd ml && exec .venv/bin/python label_field_cards.py --data data/real_liners/from_the_web/label/ofm-ervins --port 8766"
       ],
       "port": 8766
     },

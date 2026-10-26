@@ -1,30 +1,37 @@
-"""Merge every photo source into one labelled, de-duplicated, split dataset: data/dataset.csv.
+"""Merge every photo source into one labelled, de-duplicated, split dataset: data/training/classifier/dataset.csv.
 
     python build_dataset.py                 # after fetch_ami.py / fetch_inat.py / adding own photos
     python build_dataset.py --data data     # (default)
+    python build_dataset.py --trap-style v2_imx219_2026-11-02   # use another version of the trap-style fakes
 
-Sources, all optional:
-  data/ami/manifest.csv     from fetch_ami.py
-  data/inat/manifest.csv    from fetch_inat.py
-  data/own/<label>/<card>/*.jpg
+Folder names are in paths.py and data/README.md. Sources, all optional:
+  web_moth_photos/ami_gbif/manifest.csv      from fetch_ami.py
+  web_moth_photos/inaturalist/manifest.csv   from fetch_inat.py
+  real_liners/our_trap/<label>/<card>/*.jpg
                             our own photos: crops from staged cards or trap liners, one folder per
                             card. Labels: CM, OFM, OBLR, other_moth, other_insect, debris
                             (or any fine label below).
-  data/own/locked_test.txt  card folder names set aside for the final evaluation (one per line).
+  training/held_out/our_trap_locked.txt
+                            card folder names set aside for the final evaluation (one per line).
                             These get split "locked" and train_v1.py never touches them unless --final.
-  data/web_liners/species/manifest.csv
-                            from liner_crops.py: real insects on other people's liners, at trap
-                            resolution (source "liner"). Grouped by liner or card; the held-out ones
-                            listed there get split "test"; of the rest, liners holding about a fifth of
-                            each set's crops (the same ones every run) are val, for tuning the head.
+  real_liners/from_the_web/species/manifest.csv
+                            from liner_crops.py: real insects on other people's liners and on the field
+                            cards, at trap resolution (source "liner"). Grouped by liner or card; the
+                            held-out ones listed there get split "test"; of the rest, liners holding about
+                            a fifth of each set's crops (the same ones every run) are val, for tuning the head.
                             Not de-duplicated (one insect is there once per resolution, on purpose).
-  data/synth/manifest.csv   from make_trap_style.py: web moths pasted onto liner photos. Each one
+  trap_style/<version>/manifest.csv
+                            from make_trap_style.py: web moths pasted onto liner photos. Each one
                             takes its source photo's group, so it lands in the same split, and is
                             dropped if its source photo was dropped. Not de-duplicated (they are
                             all different by construction).
 
-  data/exclude.csv          from clean_dataset.py --write: web photos that are not an adult moth
-                            (caterpillars, pupae, damage, drawings). Left out, with their trap-style copies.
+  training/classifier/exclude.csv
+                            web photos a person looked at and decided to leave out (columns path, why;
+                            clean_dataset.py makes the lists to look at). Left out, with their trap-style copies.
+
+Every photo left out is written to training/classifier/dropped.csv with the reason (excluded, tiny or
+unreadable, AMI copy of an iNat photo, duplicate of another photo, label conflict, source photo dropped).
 
 Duplicates: AMI photos that came from iNaturalist are matched by photo id and the iNat copy
 is kept. Then every image gets a 256-bit difference hash (16x16); near-identical images
@@ -48,6 +55,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 import numpy as np
+import paths
 from PIL import Image, ImageOps
 
 # Fine label -> the class the trap's classifier predicts.
@@ -75,7 +83,7 @@ MIN_SIDE = 100
 
 
 def read_ami(data: Path) -> list[dict]:
-    path = data / "ami" / "manifest.csv"
+    path = data / paths.AMI / "manifest.csv"
     if not path.exists():
         return []
     rows = []
@@ -91,7 +99,7 @@ def read_ami(data: Path) -> list[dict]:
 
 
 def read_inat(data: Path) -> list[dict]:
-    path = data / "inat" / "manifest.csv"
+    path = data / paths.INAT / "manifest.csv"
     if not path.exists():
         return []
     with open(path, newline="") as f:
@@ -102,9 +110,8 @@ def read_inat(data: Path) -> list[dict]:
 
 
 def read_own(data: Path) -> tuple[list[dict], set[str]]:
-    root = data / "own"
-    locked_file = root / "locked_test.txt"
-    locked = {ln.strip() for ln in locked_file.read_text().splitlines() if ln.strip()} if locked_file.exists() else set()
+    root = data / paths.OWN
+    locked = set(paths.held_out_list(data, paths.OWN_LOCKED))
     rows = []
     if root.exists():
         for img in sorted(root.glob("*/*/*")):
@@ -120,18 +127,18 @@ def read_own(data: Path) -> tuple[list[dict], set[str]]:
 
 
 def read_liner(data: Path) -> list[dict]:
-    path = data / "web_liners" / "species" / "manifest.csv"
+    path = data / paths.WEB_LINERS / "species" / "manifest.csv"
     if not path.exists():
         return []
     with open(path, newline="") as f:
         return [{"path": r["path"], "label": r["label"], "source": "liner", "group": f"liner:{r['group']}",
-                 "held_out": r["split"] == "test", "set": r["set"], "license": "see data/web_liners/README.md",
+                 "held_out": r["split"] == "test", "set": r["set"], "license": f"see data/{paths.WEB_LINERS}/README.md",
                  "credit": f"{r['set']}: {r['photo']}"}
                 for r in csv.DictReader(f) if r["label"] in CLASS_OF]
 
 
-def read_synth(data: Path) -> list[dict]:
-    path = data / "synth" / "manifest.csv"
+def read_synth(data: Path, version: str = paths.TRAP_STYLE_VERSION) -> list[dict]:
+    path = paths.trap_style(data, version) / "manifest.csv"
     if not path.exists():
         return []
     with open(path, newline="") as f:
@@ -192,23 +199,28 @@ def main(argv=None) -> int:
     ap.add_argument("--test", type=float, default=0.15)
     ap.add_argument("--max-bits", type=int, default=10, help="near-duplicate threshold (of 256)")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--trap-style", default=paths.TRAP_STYLE_VERSION, help="folder under data/trap_style/ to use")
     args = ap.parse_args(argv)
 
-    ami, inat, synth = read_ami(args.data), read_inat(args.data), read_synth(args.data)
+    ami, inat, synth = read_ami(args.data), read_inat(args.data), read_synth(args.data, args.trap_style)
     liner = read_liner(args.data)
     own, locked = read_own(args.data)
     inat_ids = {r["inat_photo"] for r in inat}
     ami_kept = [r for r in ami if not (r["inat_photo"] and r["inat_photo"] in inat_ids)]
+    dropped = [{"path": r["path"], "source": "ami", "why": "AMI copy of an iNat photo"}
+               for r in ami if r["inat_photo"] and r["inat_photo"] in inat_ids]
     print(f"Sources: own {len(own)}, iNat {len(inat)}, AMI {len(ami)} "
           f"({len(ami) - len(ami_kept)} AMI photos already in the iNat download), "
           f"real-liner crops {len(liner)}, trap-style synthetic {len(synth)}")
 
-    exclude = set()
-    if (args.data / "exclude.csv").exists():
-        with open(args.data / "exclude.csv", newline="") as f:
-            exclude = {r["path"] for r in csv.DictReader(f)}
+    exclude = {}
+    if (args.data / paths.EXCLUDE).exists():
+        with open(args.data / paths.EXCLUDE, newline="") as f:
+            exclude = {r["path"]: r.get("why", "") for r in csv.DictReader(f)}
     rows = sorted(own + inat + ami_kept, key=lambda r: SOURCE_RANK[r["source"]])
     if exclude:
+        dropped += [{"path": r["path"], "source": r["source"], "why": f"excluded: {exclude[r['path']]}".rstrip(": ")}
+                    for r in rows if r["path"] in exclude]
         n = len(rows)
         rows = [r for r in rows if r["path"] not in exclude]
         print(f"Left out {n - len(rows)} photos listed in exclude.csv")
@@ -216,19 +228,24 @@ def main(argv=None) -> int:
         r["dhash"] = dhash(r["path"])
     bad = [r for r in rows if r["dhash"] is None]
     rows = [r for r in rows if r["dhash"] is not None]
+    dropped += [{"path": r["path"], "source": r["source"], "why": f"unreadable or under {MIN_SIDE} px"} for r in bad]
     if bad:
         print(f"Dropped {len(bad)} unreadable or tiny (<{MIN_SIDE} px) images")
 
     hashes = np.stack([r["dhash"] for r in rows]) if rows else np.zeros((0, 4), np.uint64)
-    drop, conflicts = set(), []
+    drop, conflicts, why = set(), [], {}
     for i, j in near_duplicates(hashes, args.max_bits):
         if not same_picture(rows[i]["path"], rows[j]["path"]):
             continue
         if CLASS_OF[rows[i]["label"]] == CLASS_OF[rows[j]["label"]]:
             drop.add(j)  # rows are sorted by source preference, so i is the one to keep
+            why.setdefault(j, f"duplicate of {rows[i]['path']}")
         elif rows[i]["source"] != "own" or rows[j]["source"] != "own":
             drop |= {i, j}
             conflicts.append((rows[i]["path"], rows[i]["label"], rows[j]["path"], rows[j]["label"]))
+            why[i] = f"looks the same as {rows[j]['path']} but labelled {rows[j]['label']}"
+            why[j] = f"looks the same as {rows[i]['path']} but labelled {rows[i]['label']}"
+    dropped += [{"path": rows[k]["path"], "source": rows[k]["source"], "why": why[k]} for k in sorted(drop)]
     rows = [r for k, r in enumerate(rows) if k not in drop]
     print(f"Dropped {len(drop)} near-duplicates ({len(conflicts)} pairs with conflicting labels)")
     for c in conflicts[:10]:
@@ -243,6 +260,8 @@ def main(argv=None) -> int:
     # Synthetic photos follow their source photo; those whose source was dropped go too.
     kept = {r["path"]: r for r in rows}
     n_synth = len(synth)
+    dropped += [{"path": s["path"], "source": "synth", "why": f"its source photo was dropped: {s['source_path']}"}
+                for s in synth if not (s["own_group"] or not s["source_path"] or s["source_path"] in kept)]
     synth = [s for s in synth if s["own_group"] or not s["source_path"] or s["source_path"] in kept]
     for s in synth:
         src = None if s["own_group"] else kept.get(s["source_path"])
@@ -266,7 +285,12 @@ def main(argv=None) -> int:
         r["split"] = "test" if r["held_out"] else "val" if r["group"] in liner_val else "train"
     rows += liner
 
-    out = args.data / "dataset.csv"
+    out = args.data / paths.DATASET
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with open(args.data / paths.DROPPED, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=["path", "source", "why"])
+        w.writeheader()
+        w.writerows(dropped)
     fields = ["path", "label", "class", "source", "group", "split", "license", "credit", "dhash"]
     with open(out, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
@@ -286,7 +310,7 @@ def main(argv=None) -> int:
         c = table[key]
         print(f"{key[0]:16} {CLASS_OF[key[0]]:11} {key[1]:10} {c['train']:6} {c['val']:5} {c['test']:5} {c['locked']:6}"
               f"  {len(groups[key])}")
-    print(f"\nWrote {len(rows)} rows to {out}")
+    print(f"\nWrote {len(rows)} rows to {out}, and the {len(dropped)} photos left out to {args.data / paths.DROPPED}")
     return 0
 
 
