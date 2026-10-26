@@ -109,9 +109,9 @@ class TestPhotoChecks(unittest.TestCase):
         ok = {"megapixels": 12, "camera_exif": True, "jpeg_q": 95, "px_per_mm": 13, "scale_spread": 1.1,
               "sharpness": 100, "glare": 0.01, "brightness": 180, "duplicate_of": ""}
         self.assertEqual(decide(ok, 100, originals=True), ("keep", []))
-        self.assertEqual(decide({**ok, "px_per_mm": None}, 100)[0], "exclude")
+        self.assertEqual(decide({**ok, "px_per_mm": None}, 100)[0], "flag")  # no scale: still labelled
         self.assertEqual(decide({**ok, "sharpness": 10}, 100)[0], "exclude")
-        self.assertEqual(decide({**ok, "sharpness": 40}, 100)[0], "flag")
+        self.assertEqual(decide({**ok, "sharpness": 30}, 100)[0], "flag")
         copy = {**ok, "megapixels": 1.0, "camera_exif": False, "jpeg_q": 70}
         self.assertEqual(decide(copy, 100, originals=True)[0], "exclude")
         self.assertEqual(decide(copy, 100, originals=False)[0], "keep")  # a web export: small is normal

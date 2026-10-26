@@ -35,6 +35,7 @@ import os
 import shutil
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import cv2
@@ -181,6 +182,7 @@ def main(argv=None) -> int:
     ap.add_argument("--grid-mm", type=float, default=25.0, help="the liners' printed grid spacing")
     ap.add_argument("--trap-ppm", type=float, default=15.0, help="px/mm crops are shrunk to (Camera Module 3 ~15)")
     ap.add_argument("--match-iou", type=float, default=0.3, help="overlap for carrying an earlier label over")
+    ap.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) - 1), help="threads for the per-box work")
     ap.add_argument("--no-cutouts", action="store_true", help="skip GrabCut (no cutouts, box-based lengths): faster")
     args = ap.parse_args(argv)
     site = args.data / paths.LABEL_SITE
@@ -208,6 +210,7 @@ def main(argv=None) -> int:
     detector, classifier = Yolo(args.yolo), V1Classifier(args.head)
     print(f"detector {detector.version} (conf {detector.conf}, NMS IoU {detector.iou}), classifier {classifier.version}")
     t0 = time.time()
+    pool = ThreadPoolExecutor(max_workers=args.workers)
     for k, photo in enumerate(todo, 1):
         c = checks[photo]
         src = args.data / c["source"]
@@ -219,16 +222,17 @@ def main(argv=None) -> int:
         bgr = cv2.cvtColor(np.asarray(img), cv2.COLOR_RGB2BGR)
         photo_ppm = float(c["px_per_mm"]) if c["px_per_mm"] else None
         stem = Path(photo).stem
-        new, crops = [], []
+        found = []
         for b, ylab in detector.detect(bgr, photo_ppm):
             box = (max(0, int(b.x1)), max(0, int(b.y1)), min(img.width, int(round(b.x2))), min(img.height, int(round(b.y2))))
-            if box[2] - box[0] < 4 or box[3] - box[1] < 4:
-                continue
-            n = len(new) + 1
+            if box[2] - box[0] >= 4 and box[3] - box[1] >= 4:
+                found.append((b, ylab, box))
+
+        def one(item, n, bgr=bgr, img=img, photo_ppm=photo_ppm, stem=stem, photo=photo):  # the per-box work: scale, crop, GrabCut outline, lengths. Runs in threads (OpenCV lets go of the GIL)
+            b, ylab, box = item
             ppm = insect_ppm(bgr, box, args.grid_mm, photo_ppm)
             crop = server_crop(img, box)
             crop_path = site / "crops" / stem / f"{stem}_y{n:03d}.jpg"
-            crop_path.parent.mkdir(parents=True, exist_ok=True)
             crop.save(crop_path, quality=90)
             mask = None if args.no_cutouts else grabcut_mask(img, box)
             cut = ""
@@ -241,8 +245,11 @@ def main(argv=None) -> int:
                  "x1": box[0], "y1": box[1], "x2": box[2], "y2": box[3], "conf": f"{b.conf:.2f}",
                  "ppm": f"{ppm:.2f}" if ppm else "", "detector_label": ylab, "by": ""}
             r.update(measure(mask, box, ppm))
-            new.append(r)
-            crops.append(trap_res(crop, ppm, args.trap_ppm))
+            return r, trap_res(crop, ppm, args.trap_ppm)
+
+        (site / "crops" / stem).mkdir(parents=True, exist_ok=True)
+        done_boxes = list(pool.map(one, found, range(1, len(found) + 1)))
+        new, crops = [r for r, _ in done_boxes], [c for _, c in done_boxes]
         for r, probs in zip(new, classifier.classify(crops) if crops else []):
             top = max(probs, key=probs.get)
             r.update(label=pass1(top), model_label=top, model_conf=f"{probs[top]:.2f}")

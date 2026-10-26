@@ -2,8 +2,8 @@
 
 What a photo can do to the model, and so what is checked (docs/ml-research-status.md, .claude/rules/ml.md):
   - the wrong scale: make_trap_style.py --field shrinks each insect to trap px/mm with the scale read off the
-    card's grid, so a photo with no readable grid, or one whose grid reads differently in different corners,
-    gives wrongly sized training insects;
+    card's grid, so a photo with no readable grid (flagged: it is still labelled, its insects just get no size),
+    or one whose grid reads differently in different corners, gives wrongly sized training insects;
   - a copy instead of the original (a chat app's: small, recompressed, EXIF stripped): its fine detail is gone;
   - the whole shot out of focus, blown out or dark: insects can't be told apart. Blurred *insects* on a sharp
     photo stay in: the trap camera is blurrier than a phone, and "box every insect" is the rule;
@@ -28,8 +28,8 @@ _STD_LUMA = np.array([
 # Laplacian or a glare share means different things on different phones and distances.
 MIN_MEGAPIXELS = 3.0  # phones of the last ten years shoot 8-50 MP; chat apps resize to ~1-2 MP
 COPY_QUALITY = 80  # JPEG quality below this, with no camera EXIF: likely a recompressed copy
-BLUR_EXCLUDE = 0.25  # sharpness under this share of the batch median: the shot itself is out of focus
-BLUR_FLAG = 0.5
+BLUR_EXCLUDE = 0.15  # sharpness (of the photo's sharpest part) under this share of the batch median: nothing in focus
+BLUR_FLAG = 0.4
 GLARE_EXCLUDE = 0.35  # share of the card blown out to white
 GLARE_FLAG = 0.08
 DARK_FLAG = 70  # median grey of the card (0-255)
@@ -65,14 +65,16 @@ def decide(m: dict, batch_sharpness: float | None, originals: bool = False) -> t
     elif originals and copy_like:
         flags.append(f"recompressed (JPEG quality ~{m['jpeg_q']}) with no camera EXIF: maybe a copy")
     if not m.get("px_per_mm"):
-        out.append("no grid found: no scale, so its insects can't be sized for the trap")
+        flags.append("no grid scale found: labelled like the rest, but no sizes and no trap-style copies")
     elif m["px_per_mm"] < LOW_PPM:
         flags.append(f"low resolution ({m['px_per_mm']:.1f} px/mm; the trap camera ~15): small insects are a few px")
     elif (m.get("scale_spread") or 1) > SCALE_SPREAD_FLAG:
         flags.append(f"grid scale differs {m['scale_spread']:.2f}x across the photo: tilted or curled card")
     if batch_sharpness:
         r = m["sharpness"] / batch_sharpness
-        if r < BLUR_EXCLUDE:
+        # Without a scale the photo is compared at an unknown magnification (a close-up looks soft next to whole
+        # cards), so blur can only flag it.
+        if r < BLUR_EXCLUDE and m.get("px_per_mm"):
             out.append(f"whole photo blurred ({r:.2f} of the batch's sharpness)")
         elif r < BLUR_FLAG:
             flags.append(f"softer than most ({r:.2f} of the batch's sharpness)")

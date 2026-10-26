@@ -111,11 +111,16 @@ def grid_ppm(bgr: np.ndarray, grid_mm: float, ink: str = "auto") -> tuple[float 
 
 
 def sharpness(bgr: np.ndarray, ppm: float | None, outline) -> float:
-    """photo_quality's Laplacian variance, on the photo resized to SHARP_PPM px/mm (or 1000 px without a grid)."""
-    f = SHARP_PPM / ppm if ppm else 1000 / max(bgr.shape[:2])
-    f = min(1.0, f)
+    """How sharp the photo's sharpest part is: the Laplacian variance (photo_quality's measure) in each cell of an
+    8 x 8 grid, 90th percentile, on the photo resized to SHARP_PPM px/mm (or 1000 px without a grid). A close-up
+    with the moth in focus and the background soft is usable; only a photo with nothing in focus scores low. The
+    whole-card average called 5 sharp iNaturalist close-ups blurred (Oct 25 2026)."""
+    f = min(1.0, SHARP_PPM / ppm if ppm else 1000 / max(bgr.shape[:2]))
     small = cv2.resize(bgr, None, fx=f, fy=f, interpolation=cv2.INTER_AREA)
-    return photo_quality(small, None if outline is None else outline * f, max_side=10**6)["sharpness"]
+    lap = cv2.Laplacian(cv2.cvtColor(small, cv2.COLOR_BGR2GRAY), cv2.CV_32F)
+    h, w = lap.shape
+    cells = [lap[y * h // 8:(y + 1) * h // 8, x * w // 8:(x + 1) * w // 8].var() for y in range(8) for x in range(8)]
+    return float(np.percentile(cells, 90))
 
 
 def orb_features(bgr: np.ndarray):
@@ -267,6 +272,40 @@ def check_set(data: Path, s: LabelSet, grid_mm: float, ink: str, sheet: Path,
     return rows, add
 
 
+def redecide(path: Path, tags: dict) -> int:
+    with open(path, newline="") as f:
+        rows = list(csv.DictReader(f))
+    for name in {r["set"] for r in rows}:
+        mine = [r for r in rows if r["set"] == name]
+        batch = float(np.median([float(r["sharpness"]) for r in mine if float(r["sharpness"] or 0) > 0] or [0])) or None
+        s = BY_NAME[name]
+        for r in mine:
+            m = {"megapixels": float(r["megapixels"] or 0), "camera_exif": bool(r["camera_exif"]),
+                 "jpeg_q": int(r["jpeg_q"]) if r["jpeg_q"] else None,
+                 "px_per_mm": float(r["px_per_mm"]) if r["px_per_mm"] else None,
+                 "scale_spread": float(r["scale_spread"]) if r["scale_spread"] else None,
+                 "sharpness": float(r["sharpness"] or 0), "glare": float(r["glare"] or 0),
+                 "brightness": float(r["brightness"] or 0), "duplicate_of": r["duplicate_of"]}
+            decision, why = decide(m, batch, originals=s.originals)
+            by = "check_liner_photos.py"
+            for tag, who in tags.get(r["photo"], []):
+                if tag in ("unusable", "not_gridded"):
+                    decision, by, why = "exclude", who, [f"{who} tagged it {tag.replace('_', ' ')} on the site"] + why
+                elif tag == "wrong_scale":
+                    decision, why = ("flag" if decision == "keep" else decision), [f"{who} says the scale looks wrong"] + why
+            r.update(decision=decision, why="; ".join(why), by=by)
+    with open(path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=FIELDS)
+        w.writeheader()
+        w.writerows(rows)
+    for d in ("keep", "flag", "exclude"):
+        print(f"{d}: {sum(r['decision'] == d for r in rows)}")
+    for r in rows:
+        if r["decision"] == "exclude":
+            print(f"  exclude {r['photo']}: {r['why']}")
+    return 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--data", type=Path, default=paths.DATA)
@@ -275,8 +314,12 @@ def main(argv=None) -> int:
     ap.add_argument("--ink", choices=["auto", "green", "any"], default="auto",
                     help="the grid's ink: auto picks green where the grid is green (the Trécé cards)")
     ap.add_argument("--write-held-out", action="store_true", help="add held-out cards' other shots to the list")
+    ap.add_argument("--redecide", action="store_true",
+                    help="re-apply the decisions to the numbers already in photo_checks.csv (after changing a rule)")
     args = ap.parse_args(argv)
     site = args.data / paths.LABEL_SITE
+    if args.redecide:
+        return redecide(site / "photo_checks.csv", person_tags(site))
     site.mkdir(parents=True, exist_ok=True)
     out = site / "photo_checks.csv"
     old = []
