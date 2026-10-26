@@ -727,6 +727,9 @@ window.addEventListener("resize", () => { if (img.complete) { fit(); draw(); } }
 // ---------- guide
 async function toggleGuide() {
   const g = $("guide"); g.hidden = !g.hidden;
+  // the species cards' drawings, in each label's colour, the same as the label buttons
+  g.querySelectorAll("[data-icon]:empty").forEach(x => {
+    x.style.color = colorOf({label: x.dataset.icon}); x.innerHTML = iconFor(x.dataset.icon, x.hasAttribute("data-unsure")); });
   if (!g.hidden && !$("examples").dataset.done) {
     $("examples").dataset.done = 1;
     try {
