@@ -68,6 +68,7 @@ async function openTask(id) {
   if (dirty) await flush();
   const d = await (await api(`/api/photo?task=${id}`)).json();
   task = d.task; photo = d.photo; boxes = d.boxes; version = d.version; issues = d.issues; tags = d.tags;
+  warnUnchecked = false; $("finishAsk").hidden = true;
   sel = -1; undoStack = []; redoStack = [];
   img = new Image(); img.onload = () => { fit(); draw(); }; img.src = "/img/" + encodeURIComponent(photo.name);
   if (task.kind === "species") setPass(2);
@@ -95,21 +96,25 @@ function renderActions() {
   }
   el.insertAdjacentHTML("beforeend", `<span class="mute">${esc(photo.name)} · ${photo.px_per_mm ? photo.px_per_mm.toFixed(1) + " px/mm" : "no scale"}${photo.why ? " · " + esc(photo.why) : ""}${photo.other_shots.length ? ` · ${photo.other_shots.length} other shot(s) of this card` : ""}</span>`);
 }
-let finishArmed = 0;
-async function finish(e) {
+let warnUnchecked = false;  // Done was pressed with dashed boxes left: they're outlined in red until answered
+function hideFinishAsk() { warnUnchecked = false; $("finishAsk").hidden = true; draw(); }
+async function finish(e, sure = false) {
   if (dirty) await flush();
-  const left = boxes.filter(unchecked).length, btn = e && e.currentTarget;
-  if (left && Date.now() - finishArmed > 5000) {  // a second press within 5 s finishes anyway
-    finishArmed = Date.now();
-    setStatus(`${left} box(es) not checked yet (Tab shows them). Press Done again to finish anyway.`);
-    if (btn) btn.textContent = `Finish with ${left} unchecked?`;
+  const left = boxes.filter(unchecked).length;
+  if (left && !sure) {
+    warnUnchecked = true; fit(); draw();
+    $("finishAskText").textContent = `${left} box${left === 1 ? " is" : "es are"} still not checked (outlined in red). Are you sure you're done?`;
+    $("finishAsk").hidden = false;
     return;
   }
-  finishArmed = 0;
+  hideFinishAsk();
   const r = await api("/api/done", {task: task.id});
   setStatus((await r.json()).message || "done");
   await loadQueue(); next();
 }
+$("finishYes").onclick = () => finish(null, true);
+$("finishShow").onclick = () => { $("finishAsk").hidden = true; sel = -1; jump(1); };  // red outlines stay while they work
+$("finishCancel").onclick = hideFinishAsk;
 async function reviewTask(accept) {
   const note = $("note") ? $("note").value : "";
   if (!accept && !note && !issues.some(i => !i.resolved_at)) { setStatus("say what to fix: a note or a pinned comment"); return; }
@@ -125,6 +130,8 @@ function next() {
 
 // ---------- saving
 function changed() {
+  if (warnUnchecked && !boxes.some(unchecked)) { hideFinishAsk(); setStatus("all boxes checked: press Done"); }
+  else if (warnUnchecked) $("finishAskText").textContent = `${boxes.filter(unchecked).length} still not checked (outlined in red). Are you sure you're done?`;
   undoButtons(); draw(); showSel(); renderKey();
   dirty = true; setStatus("saving…");
   clearTimeout(saveTimer); saveTimer = setTimeout(flush, 300);
@@ -285,6 +292,10 @@ function draw() {
     ctx.fillStyle = b.label === "debris" ? "#1d1d1b" : "#fff"; ctx.fillText(t, b.x1 + 3*lw, b.y1 - 4*lw);
     ctx.globalAlpha = 1;
   });
+  if (warnUnchecked) {  // after Done with dashed boxes left: a red ring around each, drawn in screen-sized pixels
+    ctx.strokeStyle = "#ef4444"; ctx.lineWidth = 4 * lw; ctx.setLineDash([]);
+    boxes.forEach(b => { if (unchecked(b)) { const m = 6 * lw; ctx.strokeRect(b.x1 - m, b.y1 - m, b.x2 - b.x1 + 2 * m, b.y2 - b.y1 + 2 * m); } });
+  }
   issues.forEach((it, k) => {  // pinned comments
     ctx.beginPath(); ctx.arc(it.x, it.y, 10*lw, 0, 7);
     ctx.fillStyle = it.resolved_at ? "#9ca3af" : "#facc15"; ctx.fill(); ctx.strokeStyle = "#1d1d1b"; ctx.lineWidth = 1.5*lw; ctx.stroke();
