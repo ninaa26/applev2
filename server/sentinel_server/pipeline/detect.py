@@ -100,6 +100,7 @@ def photo_quality(img: np.ndarray, outline: np.ndarray | None = None, max_side: 
                the lens). Compared with the same liner's other photos, never against a fixed number.
     glare      share of the card that is blown out to white, where an insect cannot be seen.
     card_rgb   the card's median colour (R, G, B): drifts as the liner gets dirty or the light changes.
+    brightness the card's median grey level (0-255): near black at night, when nothing on it can be seen.
     """
     f = min(1.0, max_side / max(img.shape[:2]))
     small = cv2.resize(img, None, fx=f, fy=f, interpolation=cv2.INTER_AREA) if f < 1 else img
@@ -112,7 +113,9 @@ def photo_quality(img: np.ndarray, outline: np.ndarray | None = None, max_side: 
         on[:] = True
     lap = cv2.Laplacian(cv2.cvtColor(small, cv2.COLOR_BGR2GRAY), cv2.CV_32F)
     b, g, r = (float(np.median(small[..., c][on])) for c in range(3))
-    return {"sharpness": round(float(lap[on].var()), 2),
+    grey = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+    return {"brightness": round(float(np.median(grey[on])), 1),
+            "sharpness": round(float(lap[on].var()), 2),
             "glare": round(float((small.min(axis=2)[on] >= 250).mean()), 4),
             "card_rgb": [round(r), round(g), round(b)]}
 
@@ -633,11 +636,11 @@ def estimate_lens_k(img: np.ndarray, min_gain: float = 1.25) -> float:
 
     lo, hi = LENS_K_RANGE
     tried = {round(float(k), 4): score(float(k)) for k in np.arange(lo, hi + 1e-9, 0.05)}
-    best = max(tried, key=tried.get)
+    best = max(tried, key=tried.__getitem__)
     for k in (round(best - 0.025, 4), round(best + 0.025, 4)):
         if lo <= k <= hi:
             tried[k] = score(k)
-    best = max(tried, key=tried.get)
+    best = max(tried, key=tried.__getitem__)
     base = tried.get(0.0, 0.0)
     if tried[best] <= 0 or (best != 0 and tried[best] < min_gain * base):
         return 0.0
@@ -665,7 +668,7 @@ class FlatbugDetector:  # pragma: no cover - needs the flatbug package + weights
         boxes = pred.boxes.cpu().tolist() if hasattr(pred.boxes, "cpu") else list(pred.boxes)
         confs = pred.confs.cpu().tolist() if hasattr(pred.confs, "cpu") else list(pred.confs)
         found = [Box(float(b[0]), float(b[1]), float(b[2]), float(b[3]), float(c)) for b, c in zip(boxes, confs)]
-        outline = card_outline(cv2.imread(str(image_path)))
+        outline = card_outline(cv2.imread(str(image_path)))  # type: ignore[arg-type]  # flat-bug just read the same file
         self.last = {"card": outline}
         return on_card(found, outline)
 
@@ -751,6 +754,6 @@ def make_detector(name: str):
         return FlatbugDetector(models / "flat_bug_M.pt")  # downloaded there on first use
     if name == "yolo":
         if not s.detector_model:
-            raise ValueError("SENTINEL_DETECTOR=yolo needs SENTINEL_DETECTOR_MODEL=<path to ml/models/yolo11/<run>/weights/best.pt>")
+            raise ValueError("SENTINEL_DETECTOR=yolo needs SENTINEL_DETECTOR_MODEL=<path to ml/models/detector/yolo/<run>/weights/best.pt>")
         return YoloDetector(s.detector_model, grid_mm=s.grid_mm, lens=s.lens_k)
     raise ValueError(f"unknown detector {name!r}")

@@ -1,0 +1,3 @@
+# Our own trap's cards set aside for the report's final score (build_dataset.py gives them split "locked";
+# train_v1.py and train_v2.py only look at them with --final, once, at the end). Exact card folder names
+# from data/real_liners/our_trap/<label>/<card>/. None yet: our trap has no reviewed photos.

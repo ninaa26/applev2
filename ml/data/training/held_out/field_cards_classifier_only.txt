@@ -1,0 +1,6 @@
+# Field-card photos also kept out of the species classifier, so each of CM, OFM and OBLR has field moths it never
+# trained on. They still train the detector (train_yolo.py). Photo-name prefixes.
+PXL_20250422_174434151
+# the April 2025 OFM card
+PXL_20240617_1319
+# the June 2024 OBLR photos (131917, 131944, 131951)

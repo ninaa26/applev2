@@ -60,7 +60,7 @@ def read_sht4x(bus_no: int = 1, address: int = 0x44) -> dict | None:
             time.sleep(0.01)
             msg = i2c_msg.read(address, 6)
             bus.i2c_rdwr(msg)
-            temp_c, rh = sht4x_decode(bytes(list(msg)))
+            temp_c, rh = sht4x_decode(bytes(list(msg)))  # type: ignore[call-overload]  # i2c_msg iterates its bytes; smbus2's hints don't say so
         return {"temp_c": temp_c, "rh": rh}
     except Exception as e:
         log.warning("SHT4x read failed: %s", e)

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_status.html" import camera_status %}
+{% from "_location.html" import location_fields, location_script %}
 {% set nav = 'overview' %}
 {% block title %}{{ trap.name or trap.id }} · Orchard Sentinel{% endblock %}
 {% block head %}<meta http-equiv="refresh" content="60">{% endblock %}
@@ -28,4 +29,15 @@
   </tbody></table></div>
   {% else %}<p class="muted">No cameras use this hub yet. <a href="/manage">Add one</a>.</p>{% endif %}
 </section>
+
+<section class="section card" id="location">
+  <h2>Location</h2>
+  {% if trap.lat is not none %}<p>{{ '%.4f, %.4f'|format(trap.lat, trap.lon) }}. Its cameras' photos get the temperature and humidity from the nearest National Weather Service station, since the ESP32s have no sensor.</p>
+  {% else %}<p class="muted">Not set. Set it and its cameras' photos get the temperature and humidity from the nearest National Weather Service station (US only), since the ESP32s have no sensor.</p>{% endif %}
+  <form class="add" method="post" action="/traps/{{ trap.id }}/location" style="margin-top:12px">
+    {{ location_fields(trap.lat, trap.lon) }}
+    <div><button class="primary" type="submit">Save location</button></div>
+  </form>
+</section>
+{{ location_script() }}
 {% endblock %}

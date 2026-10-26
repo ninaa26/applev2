@@ -4,7 +4,7 @@
     python eval_detector_roboflow.py --detector baseline      # the server's default only (fast)
     python eval_detector_roboflow.py --trap-ppm 8             # also shrink each photo to the trap camera's px/mm
 
-The datasets are COCO exports in data/web_liners/roboflow_full/, or their boxes moved back onto the
+The datasets are COCO exports in data/real_liners/from_the_web/roboflow_full/, or their boxes moved back onto the
 original uploads in roboflow_recovered/ (see the README there): codling-moth-ervins (Trécé cards, phone photos, CM boxed) and ofm-ervins (trap-camera
 close-ups of a gridded liner, OFM boxed, class mislabelled `codling_moth`). Only the target moth
 was boxed, so a detection that matches no box may be real bycatch: precision here is a lower bound.
@@ -17,9 +17,9 @@ whose centres it contains, which is how the tracker counts it.
 
 "trap" resolution: the photo is shrunk so the card's printed grid (--grid-mm) comes out at
 --trap-ppm px/mm, which is what the trap camera would see. Photos where the grid isn't found are
-left out of that pass. Detections are cached in data/web_liners/detector_eval/cache/, so changing
+left out of that pass. Detections are cached in data/real_liners/from_the_web/detector_eval/cache/, so changing
 --iou re-scores without re-running the detectors. Writes
-data/web_liners/detector_eval/report.md, per_image.csv and an overlay of the worst photos per run.
+data/real_liners/from_the_web/detector_eval/report.md, per_image.csv and an overlay of the worst photos per run.
 """
 
 from __future__ import annotations
@@ -32,6 +32,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import paths
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "server"))
 from sentinel_server.pipeline.detect import BaselineDetector, find_grid  # noqa: E402
@@ -179,9 +180,9 @@ def overlay(im: dict, dets: list, found: list[bool], used: list[int], dest: Path
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--data", type=Path, default=Path("data/web_liners"))
+    ap.add_argument("--data", type=Path, default=paths.DATA / paths.WEB_LINERS)
     ap.add_argument("--detector", choices=["baseline", "flatbug", "both"], default="both")
-    ap.add_argument("--weights", default="flat_bug_M.pt")
+    ap.add_argument("--weights", default=paths.FLATBUG)
     ap.add_argument("--grid-mm", type=float, default=25.0, help="printed grid spacing on the liner")
     ap.add_argument("--trap-ppm", type=float, default=None, help="also score at this px/mm (webcam ~7, Camera Module 3 ~15)")
     ap.add_argument("--iou", type=float, default=0.3)

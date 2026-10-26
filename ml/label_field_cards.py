@@ -3,7 +3,8 @@
     python label_field_cards.py                 # then open http://localhost:8765
     python label_field_cards.py --port 9000
 
-Reads and writes data/field/labels.csv (saved after every change). Standard library + Pillow only.
+Reads and writes data/real_liners/cornell_field_cards/labels.csv (saved after every change). A box drawn or resized gets its
+length from an outline GrabCut finds in it (crop_field_cards.box_lengths, so OpenCV is needed).
 
 In the page there are two passes (buttons on the right; the page remembers which):
   pass 1, anyone:   click a box, then 1 moth  2 other_insect (not a moth)  3 debris (on the card, not an insect)
@@ -32,9 +33,9 @@ from pathlib import Path
 from statistics import median
 from urllib.parse import unquote
 
+import paths
+from crop_field_cards import FIELDS, box_lengths, server_crop
 from PIL import Image, ImageOps
-
-from crop_field_cards import FIELDS, server_crop
 
 # Pass 1 (anyone): moth / other_insect / debris, Delete = skip. Pass 2 (a trained eye): the species.
 SPECIES = ["CM", "OFM", "OBLR", "lookalike_RBLR", "lookalike_LAW", "other_tortricid", "other_moth"]
@@ -85,10 +86,9 @@ class Store:
                             img = ImageOps.exif_transpose(im).convert("RGB")
                     Path(r["crop"]).parent.mkdir(parents=True, exist_ok=True)
                     server_crop(img, box).save(r["crop"], quality=92)
-                    long_px = max(box[2] - box[0], box[3] - box[1])
                     r.update({"x1": box[0], "y1": box[1], "x2": box[2], "y2": box[3],
-                              "ppm": r.get("ppm") or (f"{ppm:.2f}" if ppm else ""),
-                              "length_mm": f"{long_px / ppm:.1f}" if ppm else ""})
+                              "ppm": r.get("ppm") or (f"{ppm:.2f}" if ppm else "")})
+                    r.update(box_lengths(img, r))  # GrabCut in the box, ~0.1 s; the box's long side if that fails
                 r["label"] = b.get("label", "")
                 rows.append(r)
             self.rows = [r for r in self.rows if r["photo"] != photo] + rows
@@ -104,7 +104,8 @@ class Store:
     def view(r: dict) -> dict:
         return {"n": r["n"], "label": r.get("label", ""), "source": r.get("source") or "flatbug",
                 "x1": float(r["x1"]), "y1": float(r["y1"]), "x2": float(r["x2"]), "y2": float(r["y2"]),
-                "conf": r.get("conf", ""), "length_mm": r.get("length_mm", "")}
+                "conf": r.get("conf", ""), "length_mm": r.get("length_mm", ""),
+                "length_from": r.get("length_from", "")}
 
 
 def handler(store: Store):
@@ -328,7 +329,7 @@ function showSel() {
   const b = boxes()[sel], side = Math.max(b.x2-b.x1, b.y2-b.y1) * 1.7, cx = (b.x1+b.x2)/2, cy = (b.y1+b.y2)/2;
   if (img.complete) zc.drawImage(img, cx-side/2, cy-side/2, side, side, 0, 0, 256, 256);
   const lab = b.label === "skip" ? "deleted (press a number to bring back)" : (b.label || "unlabelled");
-  info.innerHTML = `#${b.n ?? "new"} · <b>${lab}</b><br>${b.source}${b.conf?" · conf "+b.conf:""}${b.length_mm?" · ~"+b.length_mm+" mm":""}`;
+  info.innerHTML = `#${b.n ?? "new"} · <b>${lab}</b><br>${b.source}${b.conf?" · conf "+b.conf:""}${b.length_mm?" · ~"+b.length_mm+" mm"+(b.length_from==="box"?" (box)":""):""}`;
 }
 // Undo history: a copy of a photo's boxes taken just before each change.
 let undoStack = [], redoStack = [];
@@ -366,7 +367,7 @@ async function flush() {
       const rows = await r.json();
       // keep anything changed while the save was in flight; just learn the new ids
       if (data[p] === sent && sent.length === rows.length)
-        sent.forEach((b,i) => { b.n = rows[i].n; b.source = rows[i].source; b.length_mm = rows[i].length_mm; });
+        sent.forEach((b,i) => { b.n = rows[i].n; b.source = rows[i].source; b.length_mm = rows[i].length_mm; b.length_from = rows[i].length_from; });
       setStatus("saved");
     } catch (e) { dirty.add(p); setStatus("NOT SAVED: " + e.message); }
   }
@@ -495,7 +496,7 @@ load();
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--data", type=Path, default=Path("data/field"))
+    ap.add_argument("--data", type=Path, default=paths.DATA / paths.FIELD)
     ap.add_argument("--port", type=int, default=8765)
     args = ap.parse_args(argv)
     if not (args.data / "labels.csv").exists():

@@ -4,8 +4,9 @@
     python make_bundle.py --max-side 384 --no-zip
 
 data/ and models/ are not in git, so a clone of the repo cannot train anything. The bundle is a small copy
-of ml/ that can: the scripts, data/dataset.csv, every image it lists, the cached BioCLIP 2 features, the
-current head, and what train_yolo.py reads (the fully labelled field cards and OFM liners, the blank liners).
+of ml/ that can: the scripts, data/training/classifier/dataset.csv, every image it lists, the cached BioCLIP 2
+features, the held-out lists, the current head, and what train_yolo.py reads (the fully labelled field cards and
+OFM liners, the blank liners).
 Paths inside are the same as here, so the scripts run unchanged from the bundle's ml/ folder. RUN_ON_CUDA.md
 (copied in) has the commands.
 
@@ -26,15 +27,20 @@ import sys
 import zipfile
 from pathlib import Path
 
+import paths
 from PIL import Image, ImageOps
 
 HERE = Path(__file__).parent
-EXTRA = ["requirements-train.txt", "RUN_ON_CUDA.md", "README.md", "yolo11s.pt"]
-DETECTOR = ["data/field/labels.csv", "data/field/test_cards.txt", "data/field/species.csv",
-            "data/web_liners/label/ofm-ervins/labels.csv", "data/web_liners/label/ofm-ervins/liners.json",
-            "data/web_liners/species/manifest.csv", "data/exclude.csv"]
-DETECTOR_GLOBS = ["data/field/inbox/*", "data/web_liners/label/ofm-ervins/inbox/*", "data/liners/*",
-                  "data/trap_camera/capture_2026-10-06/calibrated_*.jpg", "models/v1/*"]
+D = paths.DATA
+EXTRA = ["requirements-train.txt", "RUN_ON_CUDA.md", "README.md", paths.YOLO_START, f"{D}/README.md"]
+OFM_LINERS = f"{D}/{paths.WEB_LINERS}/label/ofm-ervins"
+DETECTOR = [f"{D}/{paths.FIELD}/labels.csv", f"{D}/{paths.FIELD}/species.csv",
+            f"{OFM_LINERS}/labels.csv", f"{OFM_LINERS}/liners.json",
+            f"{D}/{paths.WEB_LINERS}/species/manifest.csv", f"{D}/{paths.EXCLUDE}"]
+DETECTOR_GLOBS = [f"{D}/{paths.FIELD}/inbox/*", f"{OFM_LINERS}/inbox/*", f"{D}/{paths.HELD_OUT}/*",
+                  f"{D}/{paths.TRAP_STYLE}/*/blank_liners/*",
+                  f"{D}/{paths.BENCH}/capture_2026-10-06/calibrated_*.jpg",
+                  f"{Path(paths.CLASSIFIER_HEAD).parent}/*"]
 
 
 def relative(path: str) -> str:
@@ -61,16 +67,18 @@ def put(src: Path, dest: Path, max_side: int = 0) -> None:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--out", type=Path, default=HERE / "data/bundle/orchard-train")
+    ap.add_argument("--out", type=Path, default=HERE / D / "bundle/orchard-train")
     ap.add_argument("--max-side", type=int, default=512, help="web photos are saved no larger than this")
     ap.add_argument("--no-zip", action="store_true")
     args = ap.parse_args(argv)
 
     ml = args.out / "ml"
-    for f in list(HERE.glob("*.py")) + [HERE / e for e in EXTRA]:
-        if f.exists():
-            put(f, ml / f.name)
-    with open(HERE / "data/dataset.csv", newline="") as f:
+    for f in HERE.glob("*.py"):
+        put(f, ml / f.name)
+    for e in EXTRA:
+        if (HERE / e).exists():
+            put(HERE / e, ml / e)
+    with open(HERE / D / paths.DATASET, newline="") as f:
         rows = list(csv.DictReader(f))
     missing = 0
     for n, r in enumerate(rows, 1):
@@ -82,17 +90,17 @@ def main(argv=None) -> int:
         put(src, ml / r["path"], args.max_side if r["source"] in ("inat", "ami") else 0)
         if n % 5000 == 0:
             print(f"  {n}/{len(rows)} images", flush=True)
-    (ml / "data").mkdir(parents=True, exist_ok=True)
-    with open(ml / "data/dataset.csv", "w", newline="") as f:
+    (ml / D / paths.DATASET).parent.mkdir(parents=True, exist_ok=True)
+    with open(ml / D / paths.DATASET, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=list(rows[0]))
         w.writeheader()
         w.writerows(rows)
     import numpy as np
 
-    for cache in (HERE / "data/embeddings").glob("*.npz"):  # same photos, same features, bundle paths
+    for cache in (HERE / D / paths.EMBEDDINGS).glob("*.npz"):  # same photos, same features, bundle paths
         z = np.load(cache, allow_pickle=False)
-        (ml / "data/embeddings").mkdir(parents=True, exist_ok=True)
-        np.savez(ml / "data/embeddings" / cache.name, paths=np.array([relative(k) for k in z["paths"].tolist()]),
+        (ml / D / paths.EMBEDDINGS).mkdir(parents=True, exist_ok=True)
+        np.savez(ml / D / paths.EMBEDDINGS / cache.name, paths=np.array([relative(k) for k in z["paths"].tolist()]),
                  feats=z["feats"])
     extra = 0
     for rel in DETECTOR:

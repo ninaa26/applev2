@@ -4,11 +4,11 @@
 
 Roboflow exports were resized to a square (640² or 416², "Stretch") and some were augmented
 (rotations, noise, flips: copies of each photo). The original uploads are in
-data/web_liners/roboflow_orig/<set>/<id>.jpg (fetched from source.roboflow.com/<workspace>/<id>/original.jpg).
+data/real_liners/from_the_web/roboflow_orig/<set>/<id>.jpg (fetched from source.roboflow.com/<workspace>/<id>/original.jpg).
 For each export image this finds its original by comparing them at the export's size; a stretch is
 a per-axis scale, so the boxes map back exactly. An export image whose closest original is not a
 near-exact match is an augmented copy (rotated, noised) and is skipped, so every original appears
-once. Writes data/web_liners/roboflow_recovered/<set>/_annotations.coco.json next to symlinks of
+once. Writes data/real_liners/from_the_web/roboflow_recovered/<set>/_annotations.coco.json next to symlinks of
 the originals, in the layout eval_detector_roboflow.py reads.
 
 Already run (2026-10-02). The exports it reads were deleted afterwards and the outputs were pruned of
@@ -19,10 +19,10 @@ and would bring the duplicates back.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import cv2
 import numpy as np
+import paths
 
 SETS = ["moth-counting-matogen", "grape-moth-nsect"]  # moth-project-5/6 turned out to be codling-moth-ervins again
 THUMB = 64     # compared at this size, grey
@@ -34,7 +34,7 @@ def thumb(img: np.ndarray) -> np.ndarray:
 
 
 def main() -> int:
-    root = Path("data/web_liners")
+    root = paths.DATA / paths.WEB_LINERS
     for s in SETS:
         origs = sorted((root / "roboflow_orig" / s).glob("*.jpg"))
         o_img = {p: cv2.imread(str(p)) for p in origs}

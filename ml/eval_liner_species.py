@@ -1,9 +1,9 @@
 """Score a species head on real insects on real liners, the way the server would treat each one.
 
-    python eval_liner_species.py                                  # models/v1/head.npz
-    python eval_liner_species.py --head models/v1/head.npz models/v1-no-liner/head.npz
+    python eval_liner_species.py                                  # models/classifier/bioclip_head/current/head.npz
+    python eval_liner_species.py --head models/classifier/bioclip_head/current/head.npz models/classifier/bioclip_head/archive/2026-10-07_no_real_liners/head.npz
 
-Reads the real-liner crops in data/dataset.csv (source "liner": liner_crops.py, then build_dataset.py). The
+Reads the real-liner crops in data/training/classifier/dataset.csv (source "liner": liner_crops.py, then build_dataset.py). The
 web-photo and trap-style tests in train_v1.py are photos BioCLIP 2 has probably seen and paste-ups of them;
 these are moths that sat on glue, photographed on the liner. The species is the uploader's claim and the
 liner, camera and light are not ours, so this is a development check for choosing between heads and settings;
@@ -16,10 +16,10 @@ is fine on 200 px crops and poor on 80 px ones is poor at the card's edges.
 One table per head, split and resolution (the px/mm each crop was shrunk to): what the true class was called,
 and what the server does with it (pipeline/track.py: confidence >= 0.80 is counted automatically, 0.50-0.80
 goes to review, below is "unknown"). "Auto & wrong" is the costly error: a count nobody looks at.
-  held out          liners and cards no head trains on (liner_crops.TEST_GROUPS): the score to quote.
+  held out          liners and cards no head trains on (data/training/held_out/web_liners_classifier.txt): the score to quote.
   used in training  the other liners: only a fair test for a head trained without them.
 A head's temperature (train_v1.py) is applied, as the server applies it. Embeddings come from the same cache
-as train_v1.py. Writes data/web_liners/species/report.md and predictions.csv.
+as train_v1.py. Writes data/real_liners/from_the_web/species/report.md and predictions.csv.
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ from collections import Counter
 from pathlib import Path
 
 import numpy as np
-
+import paths
 from train_v1 import embeddings, load_rows, softmax
 
 AUTO, REVIEW = 0.80, 0.50  # server/sentinel_server/pipeline/track.py
@@ -92,12 +92,12 @@ def table(title: str, rows: list[dict], classes: list[str], p: np.ndarray) -> li
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--data", type=Path, default=Path("data"))
-    ap.add_argument("--head", type=Path, nargs="+", default=[Path("models/v1/head.npz")])
+    ap.add_argument("--head", type=Path, nargs="+", default=[Path(paths.CLASSIFIER_HEAD)])
     ap.add_argument("--batch", type=int, default=16)
     ap.add_argument("--device", default="cpu")
     args = ap.parse_args(argv)
 
-    out = args.data / "web_liners" / "species"
+    out = args.data / paths.WEB_LINERS / "species"
     with open(out / "manifest.csv", newline="") as f:
         meta = {r["path"]: r for r in csv.DictReader(f)}
     rows = [{**r, "set": meta[r["path"]]["set"], "ppm": meta[r["path"]]["ppm"]}
@@ -110,7 +110,7 @@ def main(argv=None) -> int:
         raise SystemExit(f"heads use different feature models: {models}")
     model = models.pop()
     slug = model.split("/")[-1].replace(":", "_")
-    X, _ = embeddings(rows, args.data / "embeddings" / f"{slug}.npz", model, args.batch, args.device)
+    X, _ = embeddings(rows, args.data / paths.EMBEDDINGS / f"{slug}.npz", model, args.batch, args.device)
 
     from PIL import Image
 

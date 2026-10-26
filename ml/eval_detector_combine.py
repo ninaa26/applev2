@@ -14,7 +14,7 @@ Each row adds one step, so the table shows what every step costs in moths and bu
 Tried and not kept: the conf filter loses 7-14% of moths; the card mask fails when the card label or a
 pale background touches the card, and off-card junk doesn't exist in trap photos anyway.
 Junk/photo = detections that matched no boxed moth, per photo: bycatch is in there too, so it can't
-reach zero. Writes data/web_liners/detector_eval/combine.md and overlays of the final step.
+reach zero. Writes data/real_liners/from_the_web/detector_eval/combine.md and overlays of the final step.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-
+import paths
 from eval_detector_roboflow import GROUPS, centre, dataset_dir, grid_px_per_mm, inside, iou, load_coco, match, overlay
 
 
@@ -76,7 +76,7 @@ def union(fb, base):
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--data", type=Path, default=Path("data/web_liners"))
+    ap.add_argument("--data", type=Path, default=paths.DATA / paths.WEB_LINERS)
     ap.add_argument("--grid-mm", type=float, default=25.0)
     ap.add_argument("--min-short-mm", type=float, default=2.5)
     ap.add_argument("--max-aspect", type=float, default=3.5)

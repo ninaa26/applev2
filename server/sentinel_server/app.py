@@ -10,34 +10,53 @@ import json
 import re
 import secrets
 import threading
+import time
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from PIL import Image
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from . import __version__, services
+from . import __version__, fleet, services, weather
 from .db import get_session, init_db
-from .models import PESTS, SPECIES, SPECIES_LABELS, Capture, Detection, Event, Review, Track, Trap, utcnow
+from .models import PESTS, SPECIES, SPECIES_LABELS, Capture, Detection, Event, Firmware, Review, Track, Trap, utcnow
 from .settings import get_settings
 
 HERE = Path(__file__).parent
 # A capture uid becomes a file name: letters, digits, "_" and "-" only, so it can't point outside media/.
+WRONG_LIMIT, WRONG_WINDOW_S = 10, 600  # dashboard: 10 wrong passwords per address in 10 minutes
 SAFE_UID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,79}")
+
+
+class HubPairing(BaseModel):
+    """A hub's report. Each entry is checked on its own in fleet.hub_pairing, so one camera sending
+    something odd is skipped instead of failing the whole report."""
+
+    waiting: list[Any] = Field(default=[], description="cameras asking to be added: {code, fw, rssi}", max_length=200)
+    handed: list[Any] = Field(default=[], description="codes of cameras the hub has given their key", max_length=200)
+
+
+class HubClaim(BaseModel):
+    code: str = Field(default="", max_length=40, description="the pairing code on the hub's sticker")
+
+
 templates = Jinja2Templates(directory=str(HERE / "templates"))
 
 
 def _local(dt: datetime | None, fmt: str = "%b %d %H:%M") -> str:
     if dt is None:
         return "—"
-    return dt.replace(tzinfo=timezone.utc).astimezone(ZoneInfo(get_settings().timezone)).strftime(fmt)
+    return dt.replace(tzinfo=UTC).astimezone(ZoneInfo(get_settings().timezone)).strftime(fmt)
 
 
 def _ago(dt: datetime | None) -> str:
@@ -55,11 +74,13 @@ def _ago(dt: datetime | None) -> str:
 
 templates.env.filters["local"] = _local
 templates.env.filters["ago"] = _ago
+templates.env.filters["fromiso"] = datetime.fromisoformat
 # What each event means, in a grower's words (Event.kind).
 EVENT_LABELS = {
     "new_card": "New liner", "new_card_ignored": "Not a new liner after all: the same insects are still there",
     "card_full": "Liner is getting full", "card_old": "Liner is old", "glare": "Glare on the liner",
     "trap_added": "Trap added", "trap_changed": "Trap changed", "trap_removed": "Trap taken out", "trap_restored": "Trap put back",
+    "firmware_asked": "Camera update sent", "firmware_updated": "Camera updated",
 }
 # The stylesheet's URL carries a hash of its contents, so a deploy never leaves a browser on a cached old copy.
 CSS_V = hashlib.sha256((HERE / "static" / "app.css").read_bytes()).hexdigest()[:12]
@@ -87,21 +108,51 @@ def create_app(start_worker: bool = False) -> FastAPI:
     app.mount("/media", StaticFiles(directory=str(settings.media_dir)), name="media")
     app.mount("/static", StaticFiles(directory=str(HERE / "static")), name="static")
 
+    # ---------------------------------------------------------------- forms from other sites, headers
+
+    # The browser re-sends the dashboard password by itself, so any web page a teammate has open could post
+    # the dashboard's forms (a firmware upload reaches every camera). Browsers mark a POST with the page it
+    # came from: refuse it when that is another site. Traps, hubs and curl send no Origin and are let through.
+    @app.middleware("http")
+    async def same_site_forms(request: Request, call_next):
+        if request.method not in ("GET", "HEAD", "OPTIONS") and not request.url.path.startswith("/api/"):
+            origin = request.headers.get("origin") or request.headers.get("referer")
+            host = request.headers.get("x-forwarded-host") or request.headers.get("host", "")
+            if origin is not None and urlsplit(origin).netloc != host:
+                return Response("This form must be sent from the dashboard itself.", status_code=403)
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")  # no page may show the dashboard in a frame
+        response.headers.setdefault("Referrer-Policy", "same-origin")
+        return response
+
     # ---------------------------------------------------------------- dashboard password
 
-    # Traps sign uploads with their own key, and /healthz says nothing worth hiding.
-    no_password = {"/api/v1/captures", "/api/v1/hub/nodes", "/healthz"}
+    # Traps and hubs sign their requests with their own key (a hub claiming its key has the code on its
+    # sticker), and /healthz says nothing worth hiding.
+    no_password = {"/api/v1/captures", "/healthz"}
+    # Wrong passwords per address in the last WRONG_WINDOW_S; past WRONG_LIMIT that address waits, so the
+    # password can't be guessed by trying many. A browser's first visit, with no password yet, doesn't count.
+    wrong: dict[str, list[float]] = {}
 
     @app.middleware("http")
     async def dashboard_password(request: Request, call_next):
         expected = get_settings().dashboard_password
-        if expected and request.url.path not in no_password:
-            scheme, _, token = request.headers.get("authorization", "").partition(" ")
+        if expected and request.url.path not in no_password and not request.url.path.startswith("/api/v1/hub/"):
+            who, now = request.client.host if request.client else "", time.monotonic()
+            recent = [t for t in wrong.get(who, ()) if now - t < WRONG_WINDOW_S]
+            if len(recent) >= WRONG_LIMIT:
+                return Response("Too many wrong passwords. Try again in a few minutes.", status_code=429,
+                                headers={"Retry-After": str(int(WRONG_WINDOW_S - (now - recent[0])) + 1)})
+            header = request.headers.get("authorization", "")
+            scheme, _, token = header.partition(" ")
             try:
                 given = base64.b64decode(token, validate=True).decode().partition(":")[2] if scheme.lower() == "basic" else ""
             except (binascii.Error, UnicodeDecodeError):
                 given = ""
             if not secrets.compare_digest(given.encode(), expected.encode()):
+                if header:
+                    wrong[who] = [*recent, now]
                 return Response("Password needed.", status_code=401,
                                 headers={"WWW-Authenticate": 'Basic realm="Orchard Sentinel", charset="UTF-8"'})
         return await call_next(request)
@@ -118,6 +169,12 @@ def create_app(start_worker: bool = False) -> FastAPI:
         services.note_seen(trap)
         return trap
 
+    def hub_trap(trap: Trap = Depends(device_trap), db: Session = Depends(get_session)) -> Trap:
+        if trap.kind not in services.HUB_KINDS:
+            raise HTTPException(403, f"{trap.id} is a camera, not a hub")
+        fleet.hub_key_used(db, trap)
+        return trap
+
     # A plain def: FastAPI runs it in a worker thread. As `async def`, its database and file work blocked the
     # event loop, and with it every other request, for as long as an upload took.
     @app.post("/api/v1/captures", status_code=201)
@@ -131,10 +188,10 @@ def create_app(start_worker: bool = False) -> FastAPI:
             m = json.loads(meta)
             captured = datetime.fromisoformat(m["captured_at"])
         except (ValueError, KeyError, TypeError) as e:
-            raise HTTPException(422, f"bad meta: {e}")
+            raise HTTPException(422, f"bad meta: {e}") from e
         if m.get("trap_id") not in (None, trap.id):
             raise HTTPException(422, f"meta trap_id {m.get('trap_id')!r} does not match this key's trap {trap.id!r}")
-        captured = captured.astimezone(timezone.utc).replace(tzinfo=None) if captured.tzinfo else captured
+        captured = captured.astimezone(UTC).replace(tzinfo=None) if captured.tzinfo else captured
         uid = str(m.get("capture_uid") or Path(image.filename or "capture").stem)
         if not SAFE_UID.fullmatch(uid):
             raise HTTPException(422, f"bad capture_uid {uid!r}: use letters, digits, _ and - (max 80)")
@@ -154,7 +211,7 @@ def create_app(start_worker: bool = False) -> FastAPI:
             with Image.open(io.BytesIO(data)) as im:
                 im.verify()
         except Exception:
-            raise HTTPException(422, "image is not a readable picture")
+            raise HTTPException(422, "image is not a readable picture") from None
 
         # A photo goes on the liner that was in the trap when it was taken, not the one there when it arrives:
         # photos wait in the trap's (or hub's) queue while the server is out of reach, and a liner may have
@@ -163,7 +220,7 @@ def create_app(start_worker: bool = False) -> FastAPI:
         if current is None or (m.get("new_card") and current.installed_at < captured):
             card = services.start_new_card(db, trap.id, at=captured, note="from trap" if m.get("new_card") else "first photo")
         else:
-            card = services.card_at(db, trap.id, captured)
+            card = services.card_at(db, trap.id, captured)  # type: ignore[assignment]  # the trap has a liner, so this finds one
 
         rel = Path(trap.id) / captured.strftime("%Y/%m/%d") / f"{uid}.jpg"
         dest = settings.media_dir / rel
@@ -177,6 +234,7 @@ def create_app(start_worker: bool = False) -> FastAPI:
             battery_v=power.get("battery_v"), meta=m, status="new",
         )
         db.add(cap)
+        fleet.note_firmware(db, trap, str((m.get("device") or {}).get("sw_version") or ""))
         if trap.photo_requested_at is not None and captured >= trap.photo_requested_at:
             trap.photo_requested_at = None  # the photo asked for on the dashboard (or a newer one) is here
         db.flush()
@@ -185,8 +243,33 @@ def create_app(start_worker: bool = False) -> FastAPI:
     @app.get("/api/v1/hub/nodes")
     def api_hub_nodes(trap: Trap = Depends(device_trap), db: Session = Depends(get_session)):
         """The ESP32 traps this hub takes photos from, with their key hashes so the hub can check them,
-        and which of them have a photo asked for on the dashboard."""
-        return {"nodes": services.hub_nodes(db, trap.id), "photo_requests": services.photo_requests(db, trap.id)}
+        which of them have a photo asked for on the dashboard, and which have firmware to install."""
+        fleet.hub_key_used(db, trap)
+        return {"nodes": services.hub_nodes(db, trap.id), "photo_requests": services.photo_requests(db, trap.id),
+                "firmware": fleet.hub_firmware(db, trap.id)}
+
+    @app.get("/api/v1/hub/firmware/{version}")
+    def api_hub_firmware(version: str, trap: Trap = Depends(hub_trap)):
+        try:
+            path = fleet.firmware_path(version)
+        except ValueError as e:
+            raise HTTPException(404, str(e)) from e
+        if not path.exists():
+            raise HTTPException(404, f"no firmware {version}")
+        return FileResponse(path, media_type="application/octet-stream")
+
+    @app.post("/api/v1/hub/pairing")
+    def api_hub_pairing(body: HubPairing, trap: Trap = Depends(hub_trap), db: Session = Depends(get_session)):
+        """Cameras near this hub asking to be added, and keys it has handed over; replies with new keys."""
+        return {"assigned": fleet.hub_pairing(db, trap, body.waiting, body.handed)}
+
+    @app.post("/api/v1/hub/claim")
+    def api_hub_claim(body: HubClaim, db: Session = Depends(get_session)):
+        """A new hub with no key asks with the pairing code on its sticker; 404 until it is added on the dashboard."""
+        got = fleet.claim_hub(db, body.code)
+        if got is None:
+            raise HTTPException(404, "not added on the dashboard yet")
+        return got
 
     @app.get("/api/v1/traps")
     def api_traps(db: Session = Depends(get_session)):
@@ -221,7 +304,7 @@ def create_app(start_worker: bool = False) -> FastAPI:
         try:
             services.start_new_card(db, trap_id, note=note, lure=lure or None)
         except ValueError as e:
-            raise HTTPException(422, str(e))
+            raise HTTPException(422, str(e)) from e
         return RedirectResponse(f"/traps/{trap_id}", status_code=303)
 
     @app.post("/traps/{trap_id}/biofix")
@@ -236,10 +319,26 @@ def create_app(start_worker: bool = False) -> FastAPI:
             try:
                 when = datetime.strptime(date.strip(), "%Y-%m-%d").date()
             except ValueError:
-                raise HTTPException(422, "biofix date must be YYYY-MM-DD")
+                raise HTTPException(422, "biofix date must be YYYY-MM-DD") from None
             if when > services.local_date(services.utcnow()):
                 raise HTTPException(422, "the biofix can't be in the future")
             trap.biofix_date = when
+        return RedirectResponse(f"/traps/{trap_id}", status_code=303)
+
+    @app.post("/traps/{trap_id}/location")
+    def set_location(trap_id: str, lat: str = Form(default=""), lon: str = Form(default=""),
+                     db: Session = Depends(get_session)):
+        """Where a hub (or Pi trap) is, for the weather on its cameras' photos; both empty forgets it."""
+        trap = db.get(Trap, trap_id)
+        if trap is None:
+            raise HTTPException(404, "no such trap")
+        try:
+            where = weather.parse_location(lat, lon)
+        except ValueError as e:
+            raise HTTPException(422, str(e)) from e
+        if where != (trap.lat, trap.lon):
+            trap.lat, trap.lon = where
+            weather.forget(db, trap)
         return RedirectResponse(f"/traps/{trap_id}", status_code=303)
 
     @app.post("/traps/{trap_id}/request-photo")
@@ -250,7 +349,7 @@ def create_app(start_worker: bool = False) -> FastAPI:
         try:
             services.request_photo(trap)
         except ValueError as e:
-            raise HTTPException(422, str(e))
+            raise HTTPException(422, str(e)) from e
         return RedirectResponse(f"/traps/{trap_id}", status_code=303)
 
     @app.post("/tracks/{track_id}/review")
@@ -338,7 +437,7 @@ def create_app(start_worker: bool = False) -> FastAPI:
             raise HTTPException(404, "no such trap")
         per_page = 48
         total = db.scalar(select(func.count(Capture.id)).where(Capture.trap_id == trap_id))
-        pages = max(1, -(-total // per_page))
+        pages = max(1, -(-(total or 0) // per_page))  # count() always returns a number
         page = min(max(1, page), pages)
         caps = list(db.scalars(select(Capture).where(Capture.trap_id == trap_id).order_by(Capture.captured_at.desc())
                                .offset((page - 1) * per_page).limit(per_page)))
@@ -353,7 +452,9 @@ def create_app(start_worker: bool = False) -> FastAPI:
             "traps": traps, "hubs": [t for t in traps if t.kind in services.HUB_KINDS and t.retired_at is None],
             "health": {t.id: services.trap_health(db, t) for t in traps}, "suggest_id": services.next_trap_id(db),
             "kinds": services.TRAP_KINDS, "new_key": new_key, "error": error,
-            "server_url": str(request.base_url).rstrip("/"),
+            "server_url": str(request.base_url).rstrip("/"), "waiting": fleet.waiting_cameras(db),
+            "firmware": list(db.scalars(select(Firmware).order_by(Firmware.uploaded_at.desc()))),
+            "esp32s": [t for t in traps if t.kind == "esp32" and t.retired_at is None],
         }, status_code=status_code)
 
     @app.get("/manage", response_class=HTMLResponse)
@@ -363,12 +464,50 @@ def create_app(start_worker: bool = False) -> FastAPI:
     @app.post("/manage/traps", response_class=HTMLResponse)
     def manage_add(request: Request, trap_id: str = Form(...), name: str = Form(default=""), block: str = Form(default=""),
                    lure: str = Form(default="CM"), kind: str = Form(default="esp32"), hub_id: str = Form(default=""),
+                   lat: str = Form(default=""), lon: str = Form(default=""), pair_code: str = Form(default=""),
                    db: Session = Depends(get_session)):
         try:
-            key = services.create_trap(db, trap_id.strip(), name.strip()[:120], block.strip()[:120], lure, kind, hub_id or None)
+            # An ESP32 camera goes by its hub's location (see weather.location), so only Pis are asked for one.
+            la, lo = weather.parse_location(lat, lon) if kind != "esp32" else (None, None)
+            if kind == "hub" and pair_code.strip():  # the hub fetches its key itself with the code on its sticker
+                trap = fleet.add_hub_with_code(db, pair_code, trap_id.strip(), name.strip()[:120], block.strip()[:120], la, lo)
+                return manage_page(request, db, new_key={"trap": trap, "key": None, "why": "paired"})
+            key = services.create_trap(db, trap_id.strip(), name.strip()[:120], block.strip()[:120], lure, kind,
+                                       hub_id or None, la, lo)
         except ValueError as e:
             return manage_page(request, db, error=str(e), status_code=422)
         return manage_page(request, db, new_key={"trap": db.get(Trap, trap_id.strip()), "key": key, "why": "added"})
+
+    @app.post("/manage/waiting/{code}", response_class=HTMLResponse)
+    def manage_add_waiting(code: str, request: Request, trap_id: str = Form(...), name: str = Form(default=""),
+                           block: str = Form(default=""), lure: str = Form(default="CM"), db: Session = Depends(get_session)):
+        """Add a camera that powered on near a hub and is waiting: its key goes to the camera through the hub."""
+        try:
+            trap = fleet.add_waiting_camera(db, code, trap_id.strip(), name.strip()[:120], block.strip()[:120], lure)
+        except ValueError as e:
+            return manage_page(request, db, error=str(e), status_code=422)
+        return manage_page(request, db, new_key={"trap": trap, "key": None, "why": "paired"})
+
+    @app.post("/manage/firmware", response_class=HTMLResponse)
+    def manage_firmware_upload(request: Request, file: UploadFile = File(...), note: str = Form(default=""),
+                               db: Session = Depends(get_session)):
+        try:
+            fleet.add_firmware(db, file.file.read(fleet.MAX_FIRMWARE + 1), note.strip())
+        except ValueError as e:
+            return manage_page(request, db, error=str(e), status_code=422)
+        return RedirectResponse("/manage#firmware", status_code=303)
+
+    @app.post("/manage/firmware/target", response_class=HTMLResponse)
+    def manage_firmware_target(request: Request, version: str = Form(default=""), trap_id: str = Form(default="all"),
+                               db: Session = Depends(get_session)):
+        """Send a firmware version to one ESP32 camera or all of them (empty version: stop sending one)."""
+        ids = [t.id for t in db.scalars(select(Trap).where(Trap.kind == "esp32", Trap.retired_at.is_(None)))] \
+            if trap_id == "all" else [trap_id]
+        try:
+            fleet.set_firmware_target(db, version or None, ids)
+        except ValueError as e:
+            return manage_page(request, db, error=str(e), status_code=422)
+        return RedirectResponse("/manage#firmware", status_code=303)
 
     @app.post("/manage/traps/{trap_id}/{action}", response_class=HTMLResponse)
     def manage_action(trap_id: str, action: str, request: Request, db: Session = Depends(get_session)):
@@ -382,6 +521,7 @@ def create_app(start_worker: bool = False) -> FastAPI:
         elif action == "new-key":
             key = services.new_api_key()
             trap.api_key_hash = services.hash_key(key)
+            fleet.hub_key_used(db, trap)  # a hub's pairing claim would still hand out the old key
             return manage_page(request, db, new_key={"trap": trap, "key": key, "why": "new key"})
         else:
             raise HTTPException(404, "unknown action")
@@ -393,7 +533,12 @@ def create_app(start_worker: bool = False) -> FastAPI:
         if cap is None:
             raise HTTPException(404, "no such photo")
         tracks = {d.track_id: db.get(Track, d.track_id) for d in cap.detections if d.track_id}
-        return templates.TemplateResponse(request, "capture.html", {"cap": cap, "tracks": tracks, "trap": db.get(Trap, cap.trap_id)})
+        trap = db.get_one(Trap, cap.trap_id)
+        return templates.TemplateResponse(request, "capture.html", {
+            "cap": cap, "tracks": tracks, "trap": trap, "located": weather.location(db, trap) is not None,
+            "wx_pending": cap.captured_at >= utcnow() - weather.LOOK_BACK,
+            "hub": db.get(Trap, trap.hub_id) if trap.hub_id else None,
+        })
 
     @app.get("/review", response_class=HTMLResponse)
     def review_page(request: Request, db: Session = Depends(get_session)):

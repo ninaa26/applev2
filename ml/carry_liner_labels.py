@@ -1,7 +1,7 @@
 """Copy labels between photos of the same liner taken on different days (trap-camera time series).
 
-    python carry_liner_labels.py --data data/web_liners/label/ofm-ervins            # dry run: counts only
-    python carry_liner_labels.py --data data/web_liners/label/ofm-ervins --write    # stop the labeller first
+    python carry_liner_labels.py --data data/real_liners/from_the_web/label/ofm-ervins            # dry run: counts only
+    python carry_liner_labels.py --data data/real_liners/from_the_web/label/ofm-ervins --write    # stop the labeller first
 
 <data>/liners.json lists which photos show the same liner (photo names, any order). Moths stay where
 they stuck, so an unlabelled box in one photo that sits where a labelled insect sits in another photo
@@ -26,7 +26,6 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-
 from crop_field_cards import FIELDS
 
 

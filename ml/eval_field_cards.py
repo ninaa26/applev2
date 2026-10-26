@@ -1,7 +1,7 @@
 """Score the v1 head on labelled crops from photos of used field cards.
 
-    python eval_field_cards.py                       # models/v1/head.npz on data/field/labels.csv
-    python eval_field_cards.py --head models/v1/head.npz --trap-ppm 8
+    python eval_field_cards.py                       # models/classifier/bioclip_head/current/head.npz on data/real_liners/cornell_field_cards/labels.csv
+    python eval_field_cards.py --head models/classifier/bioclip_head/current/head.npz --trap-ppm 8
     python eval_field_cards.py --mask-neighbours     # grey out the other boxes inside each crop
 
 Pass 1 labels (label_field_cards.py) are coarse: moth / other_insect / debris. The head's moth
@@ -11,11 +11,11 @@ Each crop is scored twice: as photographed (a sharp phone close-up), and shrunk 
 camera's resolution (--trap-ppm px/mm, from the card's grid), which is what the trap will see.
 
 Crops whose cutout was pasted into the training set (make_trap_style.py --field, listed in
-data/synth/manifest.csv) are reported apart as "seen in training". That assumes the head was
+data/trap_style/v1_webcam_2026-09/manifest.csv) are reported apart as "seen in training". That assumes the head was
 trained on the current manifest: re-run train_v1.py after make_trap_style.py --field.
 --mask-neighbours fills every other box inside a crop with the card's colour first, so a crop
 around a bit of debris next to a moth shows only the debris (the server's square, padded crop
-otherwise takes in neighbours). Writes data/field/eval.md and predictions.csv (eval-masked.md and
+otherwise takes in neighbours). Writes data/real_liners/cornell_field_cards/eval.md and predictions.csv (eval-masked.md and
 predictions-masked.csv with --mask-neighbours).
 """
 
@@ -29,10 +29,10 @@ from collections import Counter
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageOps
-
+import paths
 from build_dataset import CLASS_OF
 from crop_field_cards import PAD
+from PIL import Image, ImageOps
 from train_v1 import Embedder
 
 MOTH_CLASSES = {"CM", "OFM", "OBLR", "other_moth"}
@@ -92,17 +92,20 @@ def table(title: str, truth: list[str], pred: list[str], labels: list[str]) -> l
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--data", type=Path, default=Path("data/field"))
-    ap.add_argument("--head", type=Path, default=Path("models/v1/head.npz"))
+    ap.add_argument("--root", type=Path, default=paths.DATA)
+    ap.add_argument("--data", type=Path, default=None, help="the field cards (default: <root>/real_liners/cornell_field_cards)")
+    ap.add_argument("--head", type=Path, default=Path(paths.CLASSIFIER_HEAD))
+    ap.add_argument("--trap-style", default=paths.TRAP_STYLE_VERSION, help="the fakes the head trained on")
     ap.add_argument("--trap-ppm", type=float, default=8.0, help="trap camera px/mm (webcam ~7, Camera Module 3 ~15)")
     ap.add_argument("--device", default="cpu")
     ap.add_argument("--mask-neighbours", action="store_true", help="grey out the other boxes inside each crop")
     args = ap.parse_args(argv)
+    args.data = args.data or args.root / paths.FIELD
     suffix = "-masked" if args.mask_neighbours else ""
 
     head = np.load(args.head)
     classes = [str(c) for c in head["classes"]]
-    manifest = args.data.parent / "synth" / "manifest.csv"
+    manifest = paths.trap_style(args.root, args.trap_style) / "manifest.csv"
     trained = set()
     if manifest.exists():
         with open(manifest, newline="") as f:
@@ -128,8 +131,8 @@ def main(argv=None) -> int:
                         crops[k] = masked_crop(img, box(r), [b for o, b in boxes if o is not r], Path(tmp) / f"m{k}.jpg")
         small = [trap_res(c, float(r["ppm"]), args.trap_ppm, Path(tmp) / f"{k}.jpg") if r["ppm"] else c
                  for k, (r, c) in enumerate(zip(rows, crops))]
-        for name, paths in (("phone", crops), ("trap", small)):
-            X = emb.images(paths, 16)
+        for name, files in (("phone", crops), ("trap", small)):
+            X = emb.images(files, 16)
             logits = (X @ head["W"].T + head["b"]) / (float(head["T"]) if "T" in head else 1.0)  # as the server does
             p = np.exp(logits - logits.max(1, keepdims=True))
             p /= p.sum(1, keepdims=True)

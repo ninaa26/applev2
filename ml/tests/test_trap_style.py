@@ -13,6 +13,7 @@ from PIL import Image, ImageDraw
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import export_server_crops  # noqa: E402
 import make_trap_style as ts  # noqa: E402
+import paths  # noqa: E402
 
 
 def fake_moth(w=300, h=100) -> Image.Image:
@@ -53,6 +54,23 @@ class TrapStyle(unittest.TestCase):
         self.assertEqual(img.width, img.height)
 
 
+class FieldJobs(unittest.TestCase):
+    def test_cards_held_out_from_either_list_are_not_pasted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data = Path(tmp)
+            (data / paths.FIELD).mkdir(parents=True)
+            (data / paths.HELD_OUT).mkdir(parents=True)
+            (data / paths.HELD_OUT / paths.FIELD_TEST).write_text("# both models\ncard_A.jpg\n")
+            (data / paths.HELD_OUT / paths.FIELD_TEST_CLASSIFIER).write_text("card_B\n")
+            with open(data / paths.FIELD / "labels.csv", "w") as f:
+                f.write("photo,n,label,cutout,length_mm\n")
+                for card in ("card_A.jpg", "card_B_day2.jpg", "card_C.jpg"):
+                    f.write(f"{card},1,other_insect,{card}.png,3\n")
+                f.write("card_C.jpg,2,moth,c2.png,9\n")  # no species yet: the classifier has no `moth`
+            got = [r["photo"] for r in ts.field_jobs(data)]
+        self.assertEqual(got, ["card_C.jpg"])
+
+
 class ExportServerCrops(unittest.TestCase):
     def test_reviewed_and_empty_card_detections(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -80,11 +98,11 @@ class ExportServerCrops(unittest.TestCase):
             db.close()
             export_server_crops.main(["--server", str(server), "--data", str(data),
                                       "--empty-card", "T1-20261001T0900"])
-            got = sorted(str(p.relative_to(data / "own")) for p in (data / "own").rglob("*.jpg"))
+            got = sorted(str(p.relative_to(data / paths.OWN)) for p in (data / paths.OWN).rglob("*.jpg"))
             self.assertEqual(got, ["OFM/T1-20260924T1650/a_d1.jpg",        # confirmed
                                    "debris/T1-20260924T1650/a_d2.jpg",     # rejected
                                    "debris/T1-20261001T0900/a_d4.jpg"])    # empty card; d3 unreviewed, d5 tiny
-            with Image.open(data / "own" / "OFM" / "T1-20260924T1650" / "a_d1.jpg") as im:
+            with Image.open(data / paths.OWN / "OFM" / "T1-20260924T1650" / "a_d1.jpg") as im:
                 self.assertEqual(im.size, (102, 102))  # 60 px box, padded 0.35 each side, square
 
 

@@ -4,11 +4,11 @@ The AMI Zenodo record (https://zenodo.org/records/12554005) is one Archive.zip.
 The GBIF half contains only image *links*. This script reads the zip remotely
 (HTTP range requests), extracts just the NE-America metadata CSVs, keeps rows
 for the species we care about, and downloads those photos from their original
-hosts into data/ami/<label>/.
+hosts into data/web_moth_photos/ami_gbif/<label>/.
 
-    python fetch_ami.py --out data/ami                          # our 5 moths
-    python fetch_ami.py --out data/ami --other-moths 80          # + 80 common NE moths as "other_moth"
-    python fetch_ami.py --out data/ami --dry-run                 # counts only
+    python fetch_ami.py --out data/web_moth_photos/ami_gbif                          # our 5 moths
+    python fetch_ami.py --out data/web_moth_photos/ami_gbif --other-moths 80          # + 80 common NE moths as "other_moth"
+    python fetch_ami.py --out data/web_moth_photos/ami_gbif --dry-run                 # counts only
 
 Photos keep their original licences; manifest.csv records each image's source URL
 so credits can be produced for the report.
@@ -27,6 +27,8 @@ import zipfile
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+
+import paths
 
 ZIP_URL = "https://zenodo.org/records/12554005/files/Archive.zip?download=1"
 META = "ami_gbif/fine-grained_classification/metadata/"
@@ -132,7 +134,7 @@ def download(row: dict, out: Path, retries: int = 3) -> tuple[str, str]:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--out", type=Path, default=Path("data/ami"))
+    ap.add_argument("--out", type=Path, default=paths.DATA / paths.AMI)
     ap.add_argument("--other-moths", type=int, default=0, help="also fetch the N most common other NE moths")
     ap.add_argument("--per-other", type=int, default=15, help="photos per 'other moth' species")
     ap.add_argument("--workers", type=int, default=8)

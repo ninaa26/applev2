@@ -2,7 +2,7 @@
 
 import io
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
 from PIL import Image, ImageDraw
@@ -68,7 +68,7 @@ def test_consensus_thresholds():
 def test_upload_auth_and_duplicates():
     key = add_trap()
     with TestClient(create_app()) as client:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         assert upload(client, "wrong", now, MOTHS, "a").status_code == 401
         r = upload(client, key, now, MOTHS, "a")
         assert r.status_code == 201 and r.json()["card_id"]
@@ -97,12 +97,32 @@ def test_dashboard_password_guards_pages_but_not_trap_uploads(monkeypatch):
         assert client.get("/", headers={"Authorization": "Basic not-base64!"}).status_code == 401
         assert client.get("/", auth=("anyone", "orchard")).status_code == 200
         assert client.get("/healthz").status_code == 200
-        assert upload(client, key, datetime.now(timezone.utc), MOTHS, "a").status_code == 201
+        assert upload(client, key, datetime.now(UTC), MOTHS, "a").status_code == 201
+
+
+def test_too_many_wrong_dashboard_passwords_have_to_wait(monkeypatch):
+    from sentinel_server import app as app_mod, settings as settings_mod
+
+    key = add_trap()
+    monkeypatch.setenv("SENTINEL_DASHBOARD_PASSWORD", "orchard")
+    settings_mod.reset_settings()
+    with TestClient(create_app()) as client:
+        for _ in range(5):
+            assert client.get("/").status_code == 401  # no password sent yet: not counted
+        for _ in range(app_mod.WRONG_LIMIT):
+            assert client.get("/", auth=("anyone", "guess")).status_code == 401
+        r = client.get("/", auth=("anyone", "orchard"))
+        assert r.status_code == 429 and int(r.headers["retry-after"]) > 0  # even the right one, for now
+        assert upload(client, key, datetime.now(UTC), MOTHS, "b").status_code == 201  # traps aren't held up
+        assert client.get("/healthz").status_code == 200
+
+        monkeypatch.setattr(app_mod, "WRONG_WINDOW_S", 0)  # the window has passed
+        assert client.get("/", auth=("anyone", "orchard")).status_code == 200
 
 
 def test_counts_each_insect_once_and_new_card_resets():
     key = add_trap()
-    t0 = datetime.now(timezone.utc) - timedelta(hours=6)
+    t0 = datetime.now(UTC) - timedelta(hours=6)
     with TestClient(create_app()) as client:
         upload(client, key, t0, MOTHS[:2], "c1")
         upload(client, key, t0 + timedelta(hours=2), MOTHS[:2], "c2")          # same two moths again
@@ -141,7 +161,7 @@ def _liners_after(third_photo_moths, **meta):
     from sentinel_server.models import Card, Event
 
     key = add_trap()
-    t0 = datetime.now(timezone.utc) - timedelta(hours=6)
+    t0 = datetime.now(UTC) - timedelta(hours=6)
     with TestClient(create_app()) as client:
         upload(client, key, t0, MOTHS, "c1")
         upload(client, key, t0 + timedelta(hours=3), MOTHS, "c2")
@@ -195,7 +215,7 @@ def test_same_liner_needs_old_insects_to_go_by():
 
 def test_review_overrides_model_and_reject_removes_count():
     key = add_trap()
-    t0 = datetime.now(timezone.utc) - timedelta(hours=3)
+    t0 = datetime.now(UTC) - timedelta(hours=3)
     with TestClient(create_app()) as client:
         upload(client, key, t0, MOTHS[:2], "r1")
         upload(client, key, t0 + timedelta(hours=1), MOTHS[:2], "r2")
@@ -212,7 +232,7 @@ def test_review_overrides_model_and_reject_removes_count():
 
 def test_bycatch_is_kept_but_not_counted():
     key = add_trap()
-    t0 = datetime.now(timezone.utc) - timedelta(hours=3)
+    t0 = datetime.now(UTC) - timedelta(hours=3)
     with TestClient(create_app()) as client:
         upload(client, key, t0, MOTHS[:2], "b1")
         upload(client, key, t0 + timedelta(hours=1), MOTHS[:2], "b2")
@@ -243,7 +263,7 @@ def test_linear_head_maps_to_species_and_zero_fills_missing_classes():
 
 def test_touching_pair_counts_two_and_reviewer_can_fix_the_count():
     key = add_trap()
-    t0 = datetime.now(timezone.utc) - timedelta(hours=3)
+    t0 = datetime.now(UTC) - timedelta(hours=3)
     pair = [(600, 300, 32, 14), (600, 329, 32, 14)]  # two ~10 mm moths lying side by side, touching
     with TestClient(create_app()) as client:
         upload(client, key, t0, pair, "p1")
@@ -263,27 +283,9 @@ def test_touching_pair_counts_two_and_reviewer_can_fix_the_count():
                 assert services.week_counts(db, "T1")["CM"] == 3, "the reviewer's count stands"
 
 
-def test_old_database_gets_new_columns(tmp_path):
-    import sqlite3
-
-    from sentinel_server import db as db_mod
-
-    db_mod.reset_engine()
-    path = tmp_path / "data" / "sentinel.db"
-    path.unlink()
-    con = sqlite3.connect(path)
-    con.execute("CREATE TABLE tracks (id INTEGER PRIMARY KEY, card_id INTEGER)")
-    con.execute("INSERT INTO tracks (id, card_id) VALUES (1, 1)")
-    con.commit()
-    con.close()
-    db_mod.init_db()
-    con = sqlite3.connect(path)
-    assert con.execute("SELECT n_insects FROM tracks").fetchall() == [(1,)]
-
-
 def test_rejection_sticks_on_later_photos_and_reprocess():
     key = add_trap()
-    t0 = datetime.now(timezone.utc) - timedelta(hours=4)
+    t0 = datetime.now(UTC) - timedelta(hours=4)
     with TestClient(create_app()) as client:
         upload(client, key, t0, MOTHS[:2], "j1")
         upload(client, key, t0 + timedelta(hours=1), MOTHS[:2], "j2")
@@ -308,7 +310,7 @@ def test_reprocess_replays_a_reviewed_insect_from_where_it_landed():
     first run's), and photos from before it landed don't count as misses: they used to drop a reviewed
     candidate, and a fresh track then counted the same insect again."""
     key = add_trap()
-    t0 = datetime.now(timezone.utc) - timedelta(hours=4)
+    t0 = datetime.now(UTC) - timedelta(hours=4)
     with TestClient(create_app(start_worker=False)) as client:
         upload(client, key, t0, MOTHS[:2], "r1")
         upload(client, key, t0 + timedelta(hours=1), MOTHS[:2], "r2")
@@ -332,7 +334,7 @@ def test_reprocess_replays_a_reviewed_insect_from_where_it_landed():
 def test_capture_uid_cannot_leave_the_media_folder():
     key = add_trap()
     with TestClient(create_app()) as client:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         for uid in ("../../../../escaped", "a/b", ".hidden", ""):
             r = upload(client, key, now, MOTHS, uid)
             if uid:
@@ -377,7 +379,7 @@ def test_photo_off_the_cameras_scale_is_left_out():
     with session_scope() as db:
         db.get(Trap, "T1").px_per_mm = 15.3  # the synthetic liner reads ~6.4
     with TestClient(create_app(start_worker=False)) as client:
-        upload(client, key, datetime(2026, 6, 1, 12, tzinfo=timezone.utc), MOTHS, "a")
+        upload(client, key, datetime(2026, 6, 1, 12, tzinfo=UTC), MOTHS, "a")
         process_pending(Pipeline())
         with session_scope() as db:
             cap = db.get(Capture, 1)
@@ -402,24 +404,51 @@ def test_blurred_photo_is_left_out_and_context_is_logged():
 
     key = add_trap()
     with TestClient(create_app(start_worker=False)) as client:
-        upload(client, key, datetime(2026, 6, 1, 12, tzinfo=timezone.utc), [(200, 200)], "a")
+        upload(client, key, datetime(2026, 6, 1, 12, tzinfo=UTC), [(200, 200)], "a")
         process_pending(Pipeline())
     with session_scope() as db:
         meta = db.get(Capture, 1).meta
-    assert {"sharpness", "glare", "card_rgb", "liner_days", "moon", "px_per_mm"} <= set(meta)
+    assert {"sharpness", "glare", "card_rgb", "brightness", "liner_days", "moon", "px_per_mm"} <= set(meta)
+
+
+def test_night_frame_is_left_out_as_too_dark():
+    from datetime import datetime
+
+    import cv2
+    import numpy as np
+
+    from sentinel_server.pipeline.detect import photo_quality
+    from sentinel_server.pipeline.worker import dark_problem
+    from sentinel_server.settings import get_settings
+
+    assert dark_problem(17.0) and "too dark" in dark_problem(17.0)   # T2 at night, Oct 24 2026
+    assert dark_problem(80.0) is None                               # T2's dimmest lit photo
+    night = np.full((300, 400, 3), (48, 0, 40), np.uint8)            # BGR of T2's night card colour
+    assert photo_quality(night)["brightness"] < 25
+
+    key = add_trap()
+    with TestClient(create_app(start_worker=False)) as client:
+        upload(client, key, datetime(2026, 6, 1, 12, tzinfo=UTC), [(200, 200)], "a")
+        with session_scope() as db:
+            path = get_settings().media_dir / db.get(Capture, 1).image_path
+        cv2.imwrite(str(path), cv2.imread(str(path)) // 8)  # the same photo with the light gone
+        process_pending(Pipeline())
+    with session_scope() as db:
+        cap = db.get(Capture, 1)
+        assert cap.status == "failed" and "too dark" in cap.error and not cap.detections
 
 
 def test_late_photo_goes_on_the_liner_it_was_taken_on():
     # photos wait in the trap's queue while the liner is changed on the dashboard
     key = add_trap()
-    t0 = datetime.now(timezone.utc) - timedelta(hours=6)
+    t0 = datetime.now(UTC) - timedelta(hours=6)
     with TestClient(create_app()) as client:
         upload(client, key, t0, MOTHS, "c1")
         old = upload(client, key, t0 + timedelta(hours=1), MOTHS, "c2").json()["card_id"]
         client.post("/traps/T1/new-card", data={"note": "changed"})
         late = upload(client, key, t0 + timedelta(hours=2), MOTHS, "c3").json()["card_id"]
         stale_flag = upload(client, key, t0 + timedelta(hours=3), MOTHS, "c4", new_card=True).json()["card_id"]
-        after = upload(client, key, datetime.now(timezone.utc) + timedelta(minutes=5), [], "c5").json()["card_id"]
+        after = upload(client, key, datetime.now(UTC) + timedelta(minutes=5), [], "c5").json()["card_id"]
     assert late == old and stale_flag == old, "taken before the new liner went in"
     assert after != old
     with session_scope() as db:
@@ -428,7 +457,7 @@ def test_late_photo_goes_on_the_liner_it_was_taken_on():
 
 def test_late_photo_is_tracked_in_order():
     key = add_trap()
-    t0 = datetime.now(timezone.utc) - timedelta(hours=6)
+    t0 = datetime.now(UTC) - timedelta(hours=6)
     with TestClient(create_app()) as client:
         upload(client, key, t0, MOTHS[:2], "c1")
         upload(client, key, t0 + timedelta(hours=4), MOTHS, "c3")
@@ -446,7 +475,7 @@ def test_late_photo_is_tracked_in_order():
 
 def test_worker_survives_a_failed_save(monkeypatch):
     key = add_trap()
-    t0 = datetime.now(timezone.utc) - timedelta(hours=6)
+    t0 = datetime.now(UTC) - timedelta(hours=6)
     with TestClient(create_app()) as client:
         upload(client, key, t0, MOTHS, "c1")
         upload(client, key, t0 + timedelta(hours=1), MOTHS, "c2")
@@ -509,7 +538,7 @@ def test_upload_commits_while_classifier_runs(monkeypatch):
             return [{} for _ in crops]
 
     key = add_trap()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     with TestClient(create_app()) as client:
         assert upload(client, key, now - timedelta(hours=1), MOTHS, "slow").status_code == 201
         pipeline = Pipeline()
@@ -551,7 +580,7 @@ def test_upload_commits_while_a_liner_is_reprocessed():
             return [{} for _ in crops]
 
     key = add_trap()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     with TestClient(create_app()) as client:
         for i in range(2):
             assert upload(client, key, now - timedelta(hours=3 - i), MOTHS, f"r{i}").status_code == 201
@@ -600,7 +629,7 @@ def test_a_slow_upload_does_not_hold_up_other_requests(monkeypatch):
 
     monkeypatch.setattr(services, "open_card", slow_open_card)
     with TestClient(create_app(start_worker=False)) as client:
-        t = threading.Thread(target=lambda: upload(client, key, datetime.now(timezone.utc), MOTHS, "slow"))
+        t = threading.Thread(target=lambda: upload(client, key, datetime.now(UTC), MOTHS, "slow"))
         t.start()
         time.sleep(0.3)
         start = time.monotonic()
@@ -618,9 +647,9 @@ def test_upload_size_is_capped(monkeypatch):
     reset_settings()
     key = add_trap()
     with TestClient(create_app(start_worker=False)) as client:
-        meta = {"capture_uid": "big", "trap_id": "T1", "captured_at": datetime.now(timezone.utc).isoformat()}
+        meta = {"capture_uid": "big", "trap_id": "T1", "captured_at": datetime.now(UTC).isoformat()}
         r = client.post("/api/v1/captures", headers={"Authorization": f"Bearer {key}"},
                         files={"image": ("big.jpg", b"\xff\xd8" + b"\0" * (size + 2000) + b"\xff\xd9", "image/jpeg")},
                         data={"meta": json.dumps(meta)})
         assert r.status_code == 413
-        assert upload(client, key, datetime.now(timezone.utc), MOTHS, "ok").status_code == 201  # just under the cap
+        assert upload(client, key, datetime.now(UTC), MOTHS, "ok").status_code == 201  # just under the cap

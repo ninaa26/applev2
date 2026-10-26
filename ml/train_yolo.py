@@ -1,13 +1,14 @@
 """Model v2 detector: train YOLO11 on the liner photos whose boxes were all checked by hand.
 
-    python train_yolo.py                          # build data/yolo/, train yolo11s, report on the test photos
+    python train_yolo.py                          # build data/training/detector/yolo_real/, train yolo11s, report on test
     python train_yolo.py --model yolo11n.pt       # smaller, a candidate for the Pi
     python train_yolo.py --build-only             # just write the tiles and data.yaml
-    python train_yolo.py --synth 3000 --out data/yolo-synth   # also paste AMI/iNat insects onto training tiles
-    python train_yolo.py --blank 'data/trap_camera/capture_2026-10-06/calibrated_*.jpg' --blank-ppm 15.3
+    python train_yolo.py --synth 3000 --out data/training/detector/yolo_synth   # also paste AMI/iNat insects on
+    python train_yolo.py --blank 'data/real_liners/our_trap_bench_tests/capture_2026-10-06/calibrated_*.jpg' --blank-ppm 15.3
                                                   # also train on blank-liner photos from the trap camera
 
-Only photos where every box was looked at go in: all of data/field/ (crop_field_cards.py + label_field_cards.py)
+Only photos where every box was looked at go in: all of the Cornell field cards (data/real_liners/cornell_field_cards/,
+crop_field_cards.py + label_field_cards.py)
 and the ofm-ervins liner photos with no box still unlabelled. The other Roboflow sets are left out, since only the
 target moth was boxed there, so their bycatch would teach the model that insects are background. `skip` rows
 (not an insect / off the card) are background too. Classes are pass-1 labels: moth, other_insect, debris.
@@ -17,13 +18,14 @@ into overlapping --tile px tiles, so moths are the size they'll be in the trap. 
 single moth (18 mm), so every insect is whole in some tile; a tile that holds less than --min-visible of an insect
 shows that part unlabelled, which is why the server merges tiles by overlap with the smaller box (merge_tiles in
 server/sentinel_server/pipeline/detect.py). Three splits, by card/liner (a liner's other days go with it: liners.json):
-  test   data/field/test_cards.txt plus --test-photos. Scored once, after training; the number to report.
+  test   data/training/held_out/field_cards.txt plus --test-photos (default: web_liners_detector.txt in the same
+         folder). Scored once, after training; the number to report.
   val    --val-frac of the remaining photos, the same ones every run. Training stops early on them and keeps the
          epoch that does best on them, so their score flatters the model and is not reported as accuracy.
   train  the rest.
 --synth N adds N training tiles with web-photo insects pasted on (AMI and iNaturalist, cut out by segment_moths.py,
 so their species label is right and their box exact): a random training tile, keeping its own boxes, or a blank liner
-from data/liners/, gets 2-12 cutouts at their species' real length (make_trap_style.LENGTH_MM), any angle, tinted by
+from the trap-style version's blank_liners/, gets 2-12 cutouts at their species' real length (make_trap_style.LENGTH_MM), any angle, tinted by
 the liner's light, with a contact shadow, then blurred and noised. Moths become `moth`, bycatch `other_insect`.
 --imgsz trains and runs the tiles enlarged (e.g. 800 for 640 px tiles), which gave modest gains for small insects
 elsewhere. --one-insect-class folds moth and other_insect into `insect` (a generic insect detector found 80% of
@@ -34,7 +36,8 @@ Oct 2 run, IoU 0.9 (tuned for dense whitefly cards in Yolo-pest) scored moth F1 
 --blank adds photos of a liner with nothing on it as training tiles with no boxes (hard negatives): the grid, glare,
 the trap's walls and clips, which is where a detector trained only on other people's cards makes things up.
 Cutouts of held-out photos' groups don't matter here (val and test are our liners, not web photos), and val and
-test tiles never get pasted on. Writes data/yolo/ (tiles + data.yaml) and models/yolo11/<run>/ (weights/best.pt, results).
+test tiles never get pasted on. Writes data/training/detector/yolo_real/ (tiles + data.yaml) and
+models/detector/yolo/<run>/ (weights/best.pt, results, summary.json, trained_on.json).
 """
 
 from __future__ import annotations
@@ -49,14 +52,16 @@ import statistics
 import sys
 from pathlib import Path
 
+import paths
+import trained_on
 from PIL import Image, ImageOps
 
 HERE = Path(__file__).parent
 CLASSES = ["moth", "other_insect", "debris"]
 # pass 2 of label_field_cards.py replaces `moth` with one of these; the detector still calls them moth
 SPECIES = {"CM", "OFM", "OBLR", "lookalike_RBLR", "lookalike_LAW", "other_tortricid", "other_moth"}
-SOURCES = [HERE / "data/field", HERE / "data/web_liners/label/ofm-ervins"]
-TEST_PHOTOS = ["om20180514_121032_1", "ap20210804_115441_3"]  # standalone OFM liners, fully labelled
+DATA = HERE / paths.DATA
+SOURCES = [DATA / paths.FIELD, DATA / paths.WEB_LINERS / "label/ofm-ervins"]
 SPLITS = ["train", "val", "test"]
 MERGE: dict[str, str] = {}  # --one-insect-class: {"moth": "insect", "other_insect": "insect"}
 NMS_IOUS = (0.5, 0.7, 0.9)
@@ -84,12 +89,9 @@ def liner_groups(data: Path) -> list[set[str]]:
 
 
 def held_out(data: Path, test_photos: list[str]) -> set[str]:
-    out = set()
-    test = data / "test_cards.txt"
-    if test.exists():
-        out |= {ln.strip() for ln in test.read_text().splitlines() if ln.strip() and not ln.startswith("#")}
+    """Photos in `data`'s inbox named (or name-prefixed) in `test_photos`, with their liner's other days."""
     names = [p.name for p in (data / "inbox").iterdir()]
-    out |= {n for n in names if any(n.startswith(v) for v in test_photos)}
+    out = {n for n in names if paths.is_listed(n, test_photos)}
     for group in liner_groups(data):
         if out & group:
             out |= group
@@ -108,7 +110,7 @@ def pick_val(data: Path, photos: list[str], frac: float) -> set[str]:
             groups.append(sorted(g & left))
             left -= g
     groups += [[p] for p in left]
-    groups.sort(key=lambda g: hashlib.sha1(g[0].encode()).hexdigest())
+    groups.sort(key=lambda g: hashlib.sha1(g[0].encode(), usedforsecurity=False).hexdigest())
     val: set[str] = set()
     for g in groups[:-1]:  # always leave something to train on
         if len(val) >= frac * len(photos):
@@ -227,18 +229,17 @@ def synth(out: Path, n: int, ppm: float, tile: int, seed: int = 0) -> dict:
     import random
 
     import numpy as np
+    from make_trap_style import LENGTH_MM, degrade, load_liners
     from PIL import ImageFilter
 
-    from make_trap_style import LENGTH_MM, degrade, load_liners
-
     rng = random.Random(seed)
-    with open(HERE / "data/cutouts/manifest.csv", newline="") as f:
+    with open(DATA / paths.CUTOUTS / "manifest.csv", newline="") as f:
         cut = [r for r in csv.DictReader(f) if r["status"] == "ok" and r["label"] in LENGTH_MM]
     by_cls: dict[str, list[dict]] = {}
     for r in cut:
         by_cls.setdefault(web_class(r["label"]), []).append(r)
     bases = sorted((out / "images/train").glob("*.jpg"))
-    liners = load_liners(HERE / "data/liners")
+    liners = load_liners(paths.trap_style(DATA) / "blank_liners")
     counts = {c: 0 for c in CLASSES}
     for k in range(n):
         if rng.random() < 0.8:
@@ -307,7 +308,8 @@ def synth(out: Path, n: int, ppm: float, tile: int, seed: int = 0) -> dict:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--model", default="yolo11s.pt", help="yolo11n/s/m.pt (COCO-pretrained, downloaded once)")
+    ap.add_argument("--model", default=str(HERE / paths.YOLO_START),
+                    help="yolo11n/s/m.pt (COCO-pretrained, downloaded once into models/detector/pretrained/)")
     ap.add_argument("--ppm", type=float, default=12, help="shrink photos to this px/mm (webcam ~7, Camera Module 3 ~15)")
     ap.add_argument("--tile", type=int, default=640)
     ap.add_argument("--imgsz", type=int, default=None, help="network input size; default: --tile (800 enlarges 640 px tiles)")
@@ -316,15 +318,16 @@ def main(argv=None) -> int:
     ap.add_argument("--blank", nargs="*", default=[], help="glob(s) of blank-liner photos to add as tiles with no boxes")
     ap.add_argument("--blank-ppm", type=float, default=15.3, help="px/mm of the --blank photos (IMX219 in the trap: 15.3)")
     ap.add_argument("--min-visible", type=float, default=0.4, help="keep a cut box if this much of it is in the tile")
-    ap.add_argument("--test-photos", nargs="*", default=TEST_PHOTOS,
-                    help="name prefixes of photos kept for the final score, on top of data/field/test_cards.txt")
+    ap.add_argument("--test-photos", nargs="*", default=paths.held_out_list(DATA, paths.WEB_LINER_TEST_DETECTOR),
+                    help="name prefixes of photos kept for the final score, on top of held_out/field_cards.txt "
+                         "(default: held_out/web_liners_detector.txt)")
     ap.add_argument("--val-frac", type=float, default=0.15,
                     help="share of the other photos used to stop training and pick the best epoch")
     ap.add_argument("--epochs", type=int, default=150)
     ap.add_argument("--batch", type=int, default=16)
     ap.add_argument("--device", default="mps")
-    ap.add_argument("--out", type=Path, default=HERE / "data/yolo")
-    ap.add_argument("--name", default=None, help="run name under models/yolo11/ (default: model + ppm)")
+    ap.add_argument("--out", type=Path, default=DATA / paths.DETECTOR / "yolo_real")
+    ap.add_argument("--name", default=None, help="run name under models/detector/yolo/ (default: model + ppm)")
     ap.add_argument("--synth", type=int, default=0, help="add this many tiles with AMI/iNat cutouts pasted on")
     ap.add_argument("--build-only", action="store_true")
     args = ap.parse_args(argv)
@@ -334,7 +337,8 @@ def main(argv=None) -> int:
     if args.one_insect_class:
         one_insect_class()
     imgsz = args.imgsz or args.tile
-    info = build(args.out, args.ppm, args.tile, args.overlap, args.test_photos, args.min_visible, args.val_frac)
+    test_photos = paths.held_out_list(DATA, paths.FIELD_TEST) + args.test_photos
+    info = build(args.out, args.ppm, args.tile, args.overlap, test_photos, args.min_visible, args.val_frac)
     if args.blank:
         info["blank"] = add_blanks(args.out, args.blank, args.blank_ppm, args.ppm, args.tile, args.overlap)
     if args.synth:
@@ -348,10 +352,10 @@ def main(argv=None) -> int:
     name = args.name or f"{Path(args.model).stem}-ppm{args.ppm:g}" + (f"-synth{args.synth}" if args.synth else "")
     model = YOLO(args.model)
     model.train(data=str(args.out / "data.yaml"), imgsz=imgsz, epochs=args.epochs, batch=args.batch,
-                device=args.device, project=str(HERE / "models/yolo11"), name=name, exist_ok=True,
+                device=args.device, project=str(HERE / paths.YOLO_RUNS), name=name, exist_ok=True,
                 patience=40, degrees=180, flipud=0.5, fliplr=0.5, mosaic=1.0, close_mosaic=15,
                 scale=0.3, hsv_h=0.02, hsv_s=0.5, hsv_v=0.4, plots=True, seed=0)
-    run = HERE / "models/yolo11" / name
+    run = HERE / paths.YOLO_RUNS / name
 
     def val(split: str, iou: float, name: str):
         return YOLO(run / "weights/best.pt").val(data=str(args.out / "data.yaml"), split=split, imgsz=imgsz,
@@ -375,6 +379,9 @@ def main(argv=None) -> int:
     summary = {**info, "model": args.model, "imgsz": imgsz, "classes": CLASSES, "predict": predict,
                "val": score("val"), "test": score("test")}
     (run / "summary.json").write_text(json.dumps(summary, indent=1))
+    trained_on.write(run, trained_on.summary(DATA, Path(args.model).name, test_photos=test_photos,
+                                             sources=[str(d.relative_to(HERE)) for d in SOURCES],
+                                             blank=args.blank, synth_tiles=args.synth))
     print(json.dumps({"test": summary["test"]}, indent=1))
     return 0
 

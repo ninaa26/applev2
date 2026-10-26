@@ -1,0 +1,4 @@
+# Fully labelled web liners (ofm-ervins) the YOLO detector is scored on, on top of field_cards.txt
+# (train_yolo.py --test-photos overrides this list). Photo-name prefixes.
+om20180514_121032_1
+ap20210804_115441_3

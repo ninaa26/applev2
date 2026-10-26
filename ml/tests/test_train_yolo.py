@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import train_yolo as ty  # noqa: E402
 
 
-def fake_source(root: Path, photos: list[str], liners: list[list[str]], test_cards: list[str]) -> Path:
+def fake_source(root: Path, photos: list[str], liners: list[list[str]]) -> Path:
     (root / "inbox").mkdir(parents=True)
     with open(root / "labels.csv", "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=["photo", "label", "x1", "y1", "x2", "y2", "ppm"])
@@ -22,7 +22,6 @@ def fake_source(root: Path, photos: list[str], liners: list[list[str]], test_car
             Image.new("RGB", (800, 700), "white").save(root / "inbox" / p)
             w.writerow({"photo": p, "label": "moth", "x1": 100, "y1": 100, "x2": 190, "y2": 140, "ppm": 12})
     (root / "liners.json").write_text(json.dumps(liners))
-    (root / "test_cards.txt").write_text("# held out\n" + "\n".join(test_cards))
     return root
 
 
@@ -32,9 +31,10 @@ class Splits(unittest.TestCase):
         root = Path(self.tmp.name)
         self.photos = [f"liner{i:02d}_day{d}.jpg" for i in range(12) for d in (1, 2)]
         self.liners = [[f"liner{i:02d}_day1.jpg", f"liner{i:02d}_day2.jpg"] for i in range(12)]
-        self.src = fake_source(root / "src", self.photos, self.liners, ["liner00_day1.jpg"])
+        self.src = fake_source(root / "src", self.photos, self.liners)
         self.out = root / "yolo"
-        self.info = ty.build(self.out, 12, 640, 160, ["liner01_day2"], 0.4, sources=[self.src])
+        # a full name (as in held_out/field_cards.txt) and a prefix (as in web_liners_detector.txt)
+        self.info = ty.build(self.out, 12, 640, 160, ["liner00_day1.jpg", "liner01_day2"], 0.4, sources=[self.src])
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -44,7 +44,7 @@ class Splits(unittest.TestCase):
 
     def test_three_splits_never_share_a_liner(self):
         train, val, test = (self.liners_in(s) for s in ty.SPLITS)
-        self.assertEqual(test, {"liner00", "liner01"})  # test_cards.txt and --test-photos, with their other days
+        self.assertEqual(test, {"liner00", "liner01"})  # both listed photos, with their other days
         self.assertTrue(val and train)
         self.assertFalse(train & val or train & test or val & test)
         self.assertEqual(len(train | val | test), 12)
@@ -86,7 +86,7 @@ class TilesAndBlanks(unittest.TestCase):
 
     def test_one_insect_class_folds_moths_and_bycatch(self):
         with tempfile.TemporaryDirectory() as tmp:
-            src = fake_source(Path(tmp) / "src", ["a.jpg", "b.jpg"], [], [])
+            src = fake_source(Path(tmp) / "src", ["a.jpg", "b.jpg"], [])
             classes, merge = list(ty.CLASSES), dict(ty.MERGE)
             try:
                 ty.one_insect_class()

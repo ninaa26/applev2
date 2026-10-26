@@ -6,7 +6,7 @@
 Pick a detector and (optionally) a species classifier, drop or paste a photo, and the boxes are drawn on it. Or
 Capture screen: share a screen or window, drag a box over part of it, and Run (or tick Live, which re-runs as soon
 as each run finishes, about once a second with YOLO alone) to detect whatever is under the box.
-Detectors: every YOLO run under models/yolo11/*/weights/best.pt (train_yolo.py; its held-out mAP50 is shown),
+Detectors: every YOLO run under models/detector/yolo/*/weights/best.pt (train_yolo.py; its held-out mAP50 is shown),
 the server's baseline, and flatbug. Classifiers: every models/*/head.npz (train_v1.py, BioCLIP 2 + linear head),
 run on the server's padded crop of each box. Models load on first use and stay loaded.
 
@@ -30,10 +30,12 @@ from urllib.parse import parse_qs, urlparse
 
 import cv2
 import numpy as np
+import paths
 from PIL import Image, ImageOps
 
 HERE = Path(__file__).parent
 from eval_detector_roboflow import Baseline, Flatbug, grid_px_per_mm  # noqa: E402  (puts server/ on sys.path)
+
 from sentinel_server.pipeline.detect import merge_tiles  # noqa: E402
 
 GRID_MM = 25.0
@@ -41,7 +43,7 @@ GRID_MM = 25.0
 
 def yolo_runs() -> dict[str, dict]:
     runs = {}
-    for best in sorted(HERE.glob("models/yolo11/*/weights/best.pt")):
+    for best in sorted((HERE / paths.YOLO_RUNS).glob("*/weights/best.pt")):
         run = best.parents[1]
         s = run / "summary.json"
         info = json.loads(s.read_text()) if s.exists() else {}
@@ -64,7 +66,7 @@ def detectors() -> dict[str, dict]:
 
 def classifiers() -> dict[str, dict]:
     out = {"none": {"name": "None", "info": "boxes only"}}
-    for head in sorted(HERE.glob("models/*/head.npz")):
+    for head in sorted((HERE / paths.BIOCLIP_HEAD).glob("**/head.npz")):
         out[f"v1:{head.parent.name}"] = {"name": f"BioCLIP {head.parent.name}", "info": "species per box", "path": head}
     return out
 
@@ -87,7 +89,7 @@ class Models:
             boxes = self.get(key, lambda: Baseline(GRID_MM))(bgr, Path("upload.jpg"))
             return [{"x1": b[0], "y1": b[1], "x2": b[2], "y2": b[3], "conf": b[4], "cls": "insect"} for b in boxes], meta
         if key == "flatbug":
-            fb = self.get(key, lambda: Flatbug(str(HERE / "flat_bug_M.pt")))
+            fb = self.get(key, lambda: Flatbug(str(HERE / paths.FLATBUG)))
             with tempfile.NamedTemporaryFile(suffix=".jpg") as f:
                 img.save(f.name, quality=95)
                 boxes = fb(bgr, Path(f.name))

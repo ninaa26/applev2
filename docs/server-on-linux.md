@@ -24,18 +24,17 @@ On Raspberry Pi OS (64-bit) or Ubuntu, logged in as the user that will run it (`
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh                  # uv, which brings Python 3.12
 git clone https://github.com/ninaa26/applev2.git ~/applev2
-cd ~/applev2/server && ~/.local/bin/uv venv --python 3.12 .venv
-~/.local/bin/uv pip install -p .venv/bin/python -e '.[bioclip]'  # torch + open_clip for the classifier
+cd ~/applev2/server && ~/.local/bin/uv sync --locked --python 3.12 --extra bioclip  # torch + open_clip for the classifier
 ```
 
 The classifier's head is not in git: copy it from the machine that trained it, for example
-`scp ml/models/v1/head.npz pi@apple-pi-server:applev2/ml/models/v1/`.
+`scp ml/models/classifier/bioclip_head/current/head.npz pi@apple-pi-server:applev2/ml/models/classifier/bioclip_head/current/`.
 
 `cp .env.example .env` and set:
 
 ```
 SENTINEL_CLASSIFIER=bioclip-v1
-SENTINEL_CLASSIFIER_HEAD=../ml/models/v1/head.npz
+SENTINEL_CLASSIFIER_HEAD=../ml/models/classifier/bioclip_head/current/head.npz
 SENTINEL_DASHBOARD_PASSWORD=<something>
 ```
 
@@ -63,6 +62,61 @@ journalctl -u sentinel-server -f        # "worker started (baseline-cv-0.4+biocl
 
 The first start downloads BioCLIP 2 (about 1.6 GB, to `~/.cache/huggingface`). After `git pull` or a
 change to `.env`: `sudo systemctl restart sentinel-server`.
+
+## Deploying a fix
+
+From the Mac, in the repo, on the commit to deploy (normally `master` after the pull request is merged):
+
+```bash
+server/deploy.sh                 # to pi@apple-pi-server; server/deploy.sh <user@host> for another
+server/deploy.sh --rollback      # put back the code and database from before the last deploy
+```
+
+It saves the server's code and a snapshot of its database to `~/deploy-backups/<time>/` (the last 10 are
+kept), copies `server/sentinel_server/` over, installs the versions in `uv.lock` if it or `pyproject.toml` changed, and
+restarts. If `/healthz` doesn't answer within 60 s it puts the old code and packages back and restarts again;
+if the new code had already migrated the database, it puts the snapshot back too, so the database matches the
+old code (anything saved in it between the snapshot and the failed start is lost; photo files stay). The
+deployed commit is in `~/applev2/server/DEPLOYED`. Hubs and cameras:
+[esp32-traps.md](esp32-traps.md#fixing-and-updating-in-the-field).
+
+## Changing the database
+
+The schema is versioned with [Alembic](https://alembic.sqlalchemy.org/). The revisions are in
+[server/sentinel_server/migrations/versions/](../server/sentinel_server/migrations/versions/), and the
+server runs the ones a database hasn't had every time it starts (`init_db()`, also `sentinel-server init` and
+every other command), so a deploy migrates the Pi 5's database by itself. `0001` is the baseline, the schema
+when Alembic came in: a database from before it gets only the tables, columns and indexes it lacks and is
+stamped `0001`, and one that already has them all (the Pi 5's) is only stamped. A migration runs in one
+transaction, also on SQLite, so one that fails leaves the database as it was and the server doesn't start
+(deploy.sh then puts the old code back).
+
+To change a table, on the Mac in `server/`:
+
+1. Change the model in `sentinel_server/models.py`.
+2. Write the revision against a scratch database at the current schema:
+
+   ```bash
+   export SENTINEL_DATA_DIR=$(mktemp -d)
+   .venv/bin/alembic upgrade head
+   .venv/bin/alembic revision --autogenerate --rev-id 0002 -m "add trap colour"
+   ```
+
+   Number revisions in order (`0002`, `0003`, …). Read the new file in `migrations/versions/` and fix it:
+   autogenerate misses renames (it writes a drop and an add) and server defaults it can't compare. A
+   new `NOT NULL` column needs a `server_default`, or old rows have no value; on SQLite, changing or dropping a
+   column goes in `with op.batch_alter_table(...)`, which autogenerate already writes.
+3. `.venv/bin/alembic check` should say "No new upgrade operations detected", and
+   `.venv/bin/python -m pytest -q tests/test_migrations.py` checks that a new database built from the
+   revisions matches the models.
+4. Commit the model and the revision together.
+
+Keep revisions additive (new tables, new nullable or defaulted columns, new indexes) where you can: older code
+then still runs on the newer database, so going back to an older commit doesn't need the database put back.
+An older checkout that finds a revision it doesn't know logs a warning and leaves the database alone. After
+a revision that drops or renames something, `server/deploy.sh --rollback` is the way back, since it restores
+the database snapshot too. With the `postgres` extra and `SENTINEL_DATABASE_URL`, the same revisions build a
+Postgres database.
 
 ## Back it up
 
