@@ -116,9 +116,6 @@ button.krow.on { background:var(--pink); border-color:transparent; color:#fff; f
 #guide h1 { font-family:var(--serif); font-weight:700; font-size:26px; color:var(--pink); margin:0 0 8px; }
 #guide h2 { font-size:17px; margin-top:20px; color:var(--green-ink); }
 #guide .close { position:absolute; right:12px; top:12px; }
-#examples { display:grid; grid-template-columns:repeat(auto-fill, minmax(120px, 1fr)); gap:8px; margin-top:8px; }
-#examples figure { margin:0; font-size:11px; color:var(--mute); text-align:center; font-weight:600; }
-#examples img { width:100%; aspect-ratio:1; object-fit:cover; border-radius:8px; background:var(--sky); border:1px solid var(--hair); }
 /* Liquid glass, only on the status tags in the photo list (reference, accepted, in review, ...): a clear tinted fill,
    a bright top rim, a faint glow along the bottom and a corner glint. Squoval corners rather than a full capsule. */
 .badge { position:relative; overflow:hidden; border-radius:6px; padding:1px 7px; font-weight:600; color:var(--ink);
@@ -292,3 +289,14 @@ body:not(.left-off) #leftToggle .fill { opacity:.9; } body.left-off #leftToggle 
 #guide .sp > span svg { width:40px; height:40px; fill:currentColor; }
 #guide .sp p { margin:0; }
 @media (max-width: 760px) { #guide .sheet { padding:20px 16px 24px; max-height:94dvh; } #guide .keys td { white-space:normal !important; } }
+
+/* real photos in the guide: a strip per label, click one to see it bigger */
+#guide .ex { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+#guide .ex img { width:84px; height:84px; object-fit:cover; border-radius:8px; border:1px solid var(--hair); background:var(--sky);
+                 cursor:zoom-in; transition:width .15s, height .15s; }
+#guide .ex img.big { width:min(300px, 100%); height:auto; cursor:zoom-out; }
+#guide .exrow { display:grid; grid-template-columns:92px 1fr; align-items:center; gap:10px; margin:6px 0; }
+#guide .exrow .ex { margin:0; }
+#guide .nophoto { font-size:12.5px; color:var(--mute); font-style:italic; margin-top:6px !important; }
+#guide .source { margin-top:24px; }
+@media (max-width: 760px) { #guide .exrow { grid-template-columns:1fr; gap:4px; } #guide .ex img { width:72px; height:72px; } }

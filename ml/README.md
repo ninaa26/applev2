@@ -372,6 +372,10 @@ label_site/deploy.sh pi@100.81.208.95      # code, photos, logins, a user servic
 label_site/deploy.sh pi@100.81.208.95 --fetch   # later: site.db and an export (labels.csv, COCO, YOLO) back here
 ```
 
+The guide's photos: `guide` on the Mac copies species examples from the web liner crops (`examples.json`); run on the Pi
+(`ssh pi@100.81.208.95 'cd ~/orchard-labels/ml && .venv/bin/python -m label_site guide'`) it also cuts pass-1 examples
+from the accepted reference photos (`reference.json`, `ref_*.jpg`). Re-run it there when more reference photos are accepted.
+
 `check_liner_photos.py` decides keep / flag / exclude per photo, by itself (`photo_checks.py` says why each check
 matters): no readable grid (no scale, so no trap-sized training insects), the whole shot out of focus or blown out,
 a copy instead of the original (our own phone photos only), and the same image saved twice. Tiny, blurred or worn

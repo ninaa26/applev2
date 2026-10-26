@@ -240,8 +240,46 @@ def cmd_guide(a) -> None:
         for i, f in enumerate(rng.sample(sorted(files), min(4, len(files)))):
             shutil.copy(f, out / f"{label}_{i}.jpg")
             picked.setdefault(label, []).append(f"{label}_{i}.jpg")
-    (out / "examples.json").write_text(json.dumps(picked))
-    print(f"guide examples: { {k: len(v) for k, v in picked.items()} } in {out}")
+    if picked:  # where the web liner crops aren't (the Pi), the list made on the Mac stays
+        (out / "examples.json").write_text(json.dumps(picked))
+        print(f"guide examples: { {k: len(v) for k, v in picked.items()} } in {out}")
+    else:
+        print("no web liner crops here: examples.json left as it is")
+    refs = reference_examples(a.site, out, rng)
+    print(f"guide reference examples: { {k: len(v) for k, v in refs.items()} } in {out}")
+
+
+def reference_examples(site: Path, out: Path, rng, per_label: int = 6) -> dict[str, list[str]]:
+    """Pass-1 examples cut from the accepted reference photos (labelled by the team's most careful people), so the
+    guide shows our own liners: a few boxes of each label, from as many different photos as possible. Written to
+    reference.json and ref_*.jpg, apart from examples.json, so a deploy from the Mac doesn't overwrite them."""
+    from PIL import Image
+    from .db import Store
+    store = Store(site)
+    refs = store.q("SELECT photo, copy FROM tasks WHERE kind='gold_truth' AND status='accepted' ORDER BY photo")
+    picked = {}
+    for label in ("moth", "other_insect", "debris"):
+        boxes = [b for r in refs for b in store.q("SELECT * FROM boxes WHERE photo=? AND copy=? AND label=?", r["photo"], r["copy"], label)
+                 if b["x2"] - b["x1"] >= 24 and b["y2"] - b["y1"] >= 24]
+        rng.shuffle(boxes)
+        by_photo: dict[str, list] = {}
+        for b in boxes:
+            by_photo.setdefault(b["photo"], []).append(b)
+        # one from each photo in turn, so the examples come from as many photos as possible
+        boxes = [b for k in range(max(map(len, by_photo.values()), default=0)) for g in by_photo.values() if k < len(g) for b in [g[k]]]
+        for i, b in enumerate(boxes[:per_label]):
+            with Image.open(site / "inbox" / b["photo"]) as im:
+                side = min(max(b["x2"] - b["x1"], b["y2"] - b["y1"]) * 1.5, *im.size)
+                # a square round the box, slid back inside the photo where it runs off an edge (no black bars)
+                x0 = min(max((b["x1"] + b["x2"] - side) / 2, 0), im.width - side)
+                y0 = min(max((b["y1"] + b["y2"] - side) / 2, 0), im.height - side)
+                crop = im.convert("RGB").crop((int(x0), int(y0), int(x0 + side), int(y0 + side)))
+                crop.thumbnail((360, 360))
+                name = f"ref_{label}_{i}.jpg"
+                crop.save(out / name, quality=88)
+            picked.setdefault(label, []).append(name)
+    (out / "reference.json").write_text(json.dumps(picked))
+    return picked
 
 
 def main(argv=None) -> int:
