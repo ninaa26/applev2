@@ -673,19 +673,61 @@ try { const p = JSON.parse(localStorage.getItem("panels")); if (p) { panels = p;
 addEventListener("resize", () => setPanels(...panels));
 setPanels(...panels);
 
-// ---------- start
-(async function start() {
-  me = await (await api("/api/me")).json();
-  $("me").innerHTML = `<span><b>${esc(me.user)}</b></span><span>${me.admin ? `<a href="/dashboard">Dashboard</a> · ` : ""}<button id="logout" class="small">Log out</button></span>`;
-  $("logout").onclick = async () => { await api("/logout", {}); location.href = "/login"; };
-  $("reviewTab").hidden = !me.admin;
-  if (me.panels) { [PANEL.l, PANEL.r] = me.panels; if (!ownPanels) { panels = [...me.panels]; setPanels(...panels); } }
-  $("panelDefault").hidden = !me.admin;
-  $("panelDefault").onclick = async () => {
+// ---------- account card and settings menu (top of the left panel)
+const COG = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M13.9 2.6a1 1 0 0 0-1-.8h-1.8a1 1 0 0 0-1 .8l-.3 2a7.6 7.6 0 0 0-1.6.9l-1.9-.8a1 1 0 0 0-1.2.4l-.9 1.6a1 1 0 0 0 .2 1.3l1.6 1.2a7.8 7.8 0 0 0 0 1.8l-1.6 1.2a1 1 0 0 0-.2 1.3l.9 1.6a1 1 0 0 0 1.2.4l1.9-.8c.5.4 1 .7 1.6.9l.3 2a1 1 0 0 0 1 .8h1.8a1 1 0 0 0 1-.8l.3-2c.6-.2 1.1-.5 1.6-.9l1.9.8a1 1 0 0 0 1.2-.4l.9-1.6a1 1 0 0 0-.2-1.3l-1.6-1.2a7.8 7.8 0 0 0 0-1.8l1.6-1.2a1 1 0 0 0 .2-1.3l-.9-1.6a1 1 0 0 0-1.2-.4l-1.9.8a7.6 7.6 0 0 0-1.6-.9ZM12 15.3a3.3 3.3 0 1 1 0-6.6 3.3 3.3 0 0 1 0 6.6Z" transform="translate(0 1.2)"/></svg>`;
+const MENU_ICON = {
+  dashboard: `<svg viewBox="0 0 20 20"><path fill="currentColor" d="M3 3h6v8H3zM11 3h6v5h-6zM11 10h6v7h-6zM3 13h6v4H3z"/></svg>`,
+  guide: `<svg viewBox="0 0 20 20"><path fill="currentColor" d="M10 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16Zm.9 12.6H9.1v-1.8h1.8Zm1.6-5.4c-.3.5-.8.9-1.2 1.2-.4.3-.5.5-.5 1v.4H9.1V11c0-.8.3-1.3.9-1.8.5-.4 1-.7 1-1.3 0-.6-.4-1-1-1s-1.1.4-1.2 1.1L7 7.6C7.3 6.2 8.4 5.3 10 5.3c1.7 0 2.9 1 2.9 2.5 0 .5-.1 1-.4 1.4Z"/></svg>`,
+  widths: `<svg viewBox="0 0 20 20"><path fill="currentColor" d="M2 4h16v12H2zm2 2v8h3V6zm5 0v8h2V6zm4 0v8h3V6z"/></svg>`,
+  share: `<svg viewBox="0 0 20 20"><path fill="currentColor" d="M10 2 5.5 6.5l1.4 1.4L9 5.8V13h2V5.8l2.1 2.1 1.4-1.4ZM4 12v4h12v-4h2v6H2v-6z"/></svg>`,
+  logout: `<svg viewBox="0 0 20 20"><path fill="currentColor" d="M4 3h7v2H6v10h5v2H4zm9.6 3.4L17.2 10l-3.6 3.6-1.4-1.4 1.2-1.2H8V9h5.4l-1.2-1.2Z"/></svg>`,
+};
+function renderAccount() {
+  const initial = (me.user || "?").slice(0, 1).toUpperCase();
+  const tones = ["#EE4A7F", "#2F5BB0", "#1E9A8A", "#7A5AE0", "#D46FA6", "#FF6A13", "#8DAA1E"];
+  const tone = tones[[...me.user].reduce((a, c) => a + c.charCodeAt(0), 0) % tones.length];
+  const item = (id, icon, text, extra = "") => `<button class="mitem${extra}" id="${id}" role="menuitem">${MENU_ICON[icon]}<span>${text}</span></button>`;
+  $("me").innerHTML = `<div class="account">
+      <button id="cog" class="cog" aria-label="Settings" aria-haspopup="menu" aria-expanded="false" title="Settings">${COG}</button>
+      <div class="avatar" style="background:${tone}" aria-hidden="true">${esc(initial)}</div>
+      <div class="who"><b>${esc(me.user)}</b><span>${me.admin ? "Admin" : "Labeller"}</span></div>
+    </div>
+    <div class="menu" id="cogMenu" role="menu" hidden>
+      ${me.admin ? item("mDash", "dashboard", "Dashboard") : ""}
+      ${item("mGuide", "guide", "Labelling guide")}
+      ${item("mWidths", "widths", "Reset panel widths")}
+      ${me.admin ? item("mShare", "share", "Set my widths as default") : ""}
+      <div class="msep"></div>
+      ${item("mLogout", "logout", "Log out", " danger")}
+    </div>`;
+  const menu = $("cogMenu"), cog = $("cog");
+  const show = on => { menu.hidden = !on; cog.setAttribute("aria-expanded", String(on)); cog.classList.toggle("open", on); };
+  cog.onclick = e => { e.stopPropagation(); show(menu.hidden); };
+  document.addEventListener("click", e => { if (!menu.hidden && !menu.contains(e.target)) show(false); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !menu.hidden) show(false); });
+  if (me.admin) $("mDash").onclick = () => { location.href = "/dashboard"; };
+  $("mGuide").onclick = () => { show(false); toggleGuide(); };
+  $("mWidths").onclick = () => { show(false); ownPanels = false; try { localStorage.removeItem("panels"); } catch (e) {}
+    panels = [PANEL.l, PANEL.r]; setPanels(...panels); setStatus("panel widths reset"); };
+  if (me.admin) $("mShare").onclick = async () => {
+    show(false);
     const r = await api("/api/admin/panels", {left: Math.round(panels[0]), right: Math.round(panels[1])});
     setStatus(r.ok ? (await r.json()).message : await r.text());
     if (r.ok) [PANEL.l, PANEL.r] = panels;
   };
+  $("mLogout").onclick = async () => {
+    if (!(await ensureSaved())) { show(false); blockedUnsaved("log out"); return; }
+    await api("/logout", {}); location.href = "/login";
+  };
+}
+
+// ---------- start
+(async function start() {
+  me = await (await api("/api/me")).json();
+  renderAccount();
+  $("reviewTab").hidden = !me.admin;
+  if (me.panels) { [PANEL.l, PANEL.r] = me.panels; if (!ownPanels) { panels = [...me.panels]; setPanels(...panels); } }
+
   setPass(pass); setDraw(false); renderKey();
   await loadQueue();
   const first = queue.tasks.find(t => t.status === "returned") || queue.tasks.find(t => t.status === "open") || queue.tasks[0];
