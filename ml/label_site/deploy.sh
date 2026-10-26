@@ -43,11 +43,12 @@ rsync -az "$HERE/server/sentinel_server/pipeline/__init__.py" "$HERE/server/sent
   "$HOST:$R/server/sentinel_server/pipeline/"
 
 echo "== photos and labels (site.db on the Pi is left alone)"
-rsync -azL --info=stats1 "$SITE/inbox/" "$HOST:$R/ml/data/review/labelling_site/inbox/"
+rsync -azL --stats "$SITE/inbox/" "$HOST:$R/ml/data/review/labelling_site/inbox/"
 rsync -az "$SITE/photo_checks.csv" "$SITE/labels.csv" "$HOST:$R/ml/data/review/labelling_site/"
 [ -d "$SITE/guide" ] && rsync -az "$SITE/guide/" "$HOST:$R/ml/data/review/labelling_site/guide/"
 ssh "$HOST" "mkdir -p $R/ml/data/review/labelling_site/auth && chmod 700 $R/ml/data/review/labelling_site/auth"
-rsync -az --chmod=F600 "$SITE/auth/users.json" "$SITE/auth/secret" "$HOST:$R/ml/data/review/labelling_site/auth/"  # never passwords.txt
+rsync -az "$SITE/auth/users.json" "$SITE/auth/secret" "$HOST:$R/ml/data/review/labelling_site/auth/"  # never passwords.txt
+ssh "$HOST" "chmod 600 $R/ml/data/review/labelling_site/auth/users.json $R/ml/data/review/labelling_site/auth/secret"
 
 echo "== venv, service, nightly backup"
 ssh "$HOST" bash -s -- "$PORT" <<'EOF'

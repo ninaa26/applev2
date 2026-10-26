@@ -191,13 +191,21 @@ def cmd_guide(a) -> None:
     rng = random.Random(1)
     out = a.site / "guide"
     out.mkdir(parents=True, exist_ok=True)
-    src = a.data / paths.WEB_LINERS / "species"
+    manifest = a.data / paths.WEB_LINERS / "species" / "manifest.csv"  # liner_crops.py: path,label,... per crop
+    by_label: dict[str, list[Path]] = {}
+    if manifest.exists():
+        with open(manifest, newline="") as f:
+            for r in csv.DictReader(f):
+                p = Path(r["path"])
+                p = p if p.is_absolute() else a.data.parent / p
+                if p.exists():
+                    by_label.setdefault(r["label"], []).append(p)
     picked = {}
     for label in ("CM", "OFM", "OBLR", "other_moth", "other_insect", "debris"):
-        files = sorted((src / label).glob("*.jpg")) if (src / label).exists() else []
-        if not files and label in ("other_insect", "debris"):  # from the site's own checked boxes, if any
-            files = [Path(b["crop"]) for b in Store(a.site).q("SELECT crop FROM boxes WHERE label=? AND by!='' AND crop!=''", label)]
-        for i, f in enumerate(rng.sample(files, min(4, len(files)))):
+        files = by_label.get(label, [])
+        full = [f for f in files if "/native/" in str(f)]  # full resolution where there is one, else 15 px/mm
+        files = full or [f for f in files if "/15/" in str(f)] or files
+        for i, f in enumerate(rng.sample(sorted(files), min(4, len(files)))):
             shutil.copy(f, out / f"{label}_{i}.jpg")
             picked.setdefault(label, []).append(f"{label}_{i}.jpg")
     (out / "examples.json").write_text(json.dumps(picked))
