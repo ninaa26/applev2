@@ -93,6 +93,12 @@ def import_site(con: sqlite3.Connection, site: Path) -> tuple[int, int]:
         by_photo.setdefault(r["photo"], []).append(r)
     added_p = added_b = 0
     con.execute("BEGIN")
+    # Every photo the checks kept and the pre-labeller linked, also those with no boxes at all: a person still has
+    # to look whether the liner really is empty.
+    linked = {p.name for p in (site / "inbox").iterdir()} if (site / "inbox").exists() else set()
+    for photo in checks:
+        if checks[photo]["decision"] != "exclude" and photo in linked:
+            by_photo.setdefault(photo, [])
     for photo, boxes in by_photo.items():
         if photo in have or photo not in checks:
             continue
