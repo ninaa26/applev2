@@ -78,6 +78,7 @@ function blockedUnsaved(what) {
 }
 async function openTask(id) {
   if (task && !(await ensureSaved())) { blockedUnsaved("open another photo"); return; }
+  setList(false);
   const d = await (await api(`/api/photo?task=${id}`)).json();
   task = d.task; photo = d.photo; boxes = d.boxes; version = d.version; issues = d.issues; tags = d.tags;
   warnUnchecked = false; $("finishAsk").hidden = true;
@@ -468,8 +469,21 @@ function walk(step) {
 function prevBox() { if (!walk(-1)) setStatus("this is the first box you looked at on this photo"); }
 function nextBox() { if (!walk(1)) jump(1); }
 $("prevBox").onclick = prevBox; $("nextBox").onclick = nextBox;
+// ---------- phones: the top bar, the photo-list drawer, the action row and "More settings"
+const setList = open => document.body.classList.toggle("list-open", open);
+$("mList").onclick = () => setList(!document.body.classList.contains("list-open"));
+$("mScrim").onclick = () => setList(false);
+$("mGuide").onclick = () => toggleGuide();
+$("mPrev").onclick = prevBox; $("mNext").onclick = nextBox;
+$("mConfirm").onclick = () => confirmSel(); $("mDelete").onclick = () => deleteSel();
+$("mMore").onclick = () => { const on = document.body.classList.toggle("more-open"); $("mMore").textContent = on ? "Fewer settings ▴" : "More settings ▾"; };
+function updateBar() {  // the top bar: which photo, how many boxes still to check
+  $("mPhoto").textContent = photo ? photo.name.replace(/\.RAW-01\.COVER/, "").replace(/__/, " · ") : "No photo open";
+  const n = photo ? boxes.filter(unchecked).length : 0;
+  $("mLeft").textContent = photo ? (n ? `${n} box${n === 1 ? "" : "es"} to check` : "every box checked") : "tap ☰ to pick one";
+}
 function showSel() {
-  remember(); renderKey();
+  remember(); renderKey(); updateBar();
   $("prevBox").disabled = trailPos <= 0;
   zc.fillStyle = "#111111"; zc.fillRect(0, 0, 256, 256);
   document.querySelectorAll("#attrs button").forEach(x => x.classList.remove("on"));
@@ -572,22 +586,21 @@ function renderIssues() {
 }
 document.querySelectorAll("[data-tag]").forEach(c => c.onchange = () => api("/api/tag", {task: task.id, tag: c.dataset.tag, on: c.checked}));
 
-cv.addEventListener("mousedown", e => {
+// Pointer handling shared by the mouse and a finger: press, move, release, in canvas pixels.
+function pressAt(mx, my, button = 0, shift = false) {
   if (!photo) return;
   $("issueMenu").hidden = true;
-  const mx = e.offsetX, my = e.offsetY;
-  if (e.button === 1 || space) { drag = {mode:"pan", mx, my, vx:view.x, vy:view.y, click:null}; return; }
-  if (e.button !== 0) return;
-  if (drawMode || e.shiftKey) { drag = {mode:"box", start:toImg(mx, my), end:toImg(mx, my)}; return; }
+  if (button === 1 || space) { drag = {mode:"pan", mx, my, vx:view.x, vy:view.y, click:null}; return; }
+  if (button !== 0) return;
+  if (drawMode || shift) { drag = {mode:"box", start:toImg(mx, my), end:toImg(mx, my)}; return; }
   const edges = grabAt(mx, my);
   if (edges) { const b = boxes[sel]; drag = {mode:"edit", edges, start:toImg(mx, my), orig:{...b}, before:snap(), moved:false}; return; }
   const [x, y] = toImg(mx, my);
   drag = {mode:"pan", mx, my, vx:view.x, vy:view.y, click:hit(x, y), moved:false};
   cv.style.cursor = "grabbing";
-});
-window.addEventListener("mousemove", e => {
+}
+function moveTo(mx, my) {
   if (!drag) return;
-  const r = cv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
   if (drag.mode === "pan") {
     if (Math.abs(mx - drag.mx) + Math.abs(my - drag.my) > 3) drag.moved = true;
     view.x = drag.vx + mx - drag.mx; view.y = drag.vy + my - drag.my;
@@ -600,8 +613,8 @@ window.addEventListener("mousemove", e => {
     drag.moved = Math.abs(dx) * view.s > 1 || Math.abs(dy) * view.s > 1; showSel();
   }
   draw();
-});
-window.addEventListener("mouseup", () => {
+}
+function release() {
   if (!drag) return;
   cv.style.cursor = drawMode ? "crosshair" : "grab";
   if (drag.mode === "pan" && !drag.moved && drag.click !== null) { sel = drag.click; showSel(); }
@@ -621,7 +634,39 @@ window.addEventListener("mouseup", () => {
     if (drag.moved) { record(drag.before); touch(b); changed(); }
   }
   drag = null; draw();
-});
+}
+cv.addEventListener("mousedown", e => pressAt(e.offsetX, e.offsetY, e.button, e.shiftKey));
+window.addEventListener("mousemove", e => { const r = cv.getBoundingClientRect(); moveTo(e.clientX - r.left, e.clientY - r.top); });
+window.addEventListener("mouseup", release);
+// Touch: one finger does what the mouse does (pan, tap a box, drag a box in draw mode), two fingers pinch to zoom and
+// pan, a double tap zooms in.
+let pinch = null, lastTap = 0;
+const touchAt = t => { const r = cv.getBoundingClientRect(); return [t.clientX - r.left, t.clientY - r.top]; };
+const pinchOf = ts => { const [a, b] = [touchAt(ts[0]), touchAt(ts[1])];
+  return {d: Math.hypot(a[0] - b[0], a[1] - b[1]), mx: (a[0] + b[0]) / 2, my: (a[1] + b[1]) / 2}; };
+cv.addEventListener("touchstart", e => {
+  e.preventDefault();
+  if (e.touches.length >= 2) { drag = null; pinch = pinchOf(e.touches); return; }
+  if (!pinch) { const [x, y] = touchAt(e.touches[0]); pressAt(x, y); }
+}, {passive:false});
+cv.addEventListener("touchmove", e => {
+  e.preventDefault();
+  if (pinch && e.touches.length >= 2) {
+    const p = pinchOf(e.touches);
+    view.x += p.mx - pinch.mx; view.y += p.my - pinch.my;
+    zoomAt(p.mx, p.my, p.d / pinch.d); pinch = p; return;
+  }
+  if (!pinch && drag) { const [x, y] = touchAt(e.touches[0]); moveTo(x, y); }
+}, {passive:false});
+cv.addEventListener("touchend", e => {
+  e.preventDefault();
+  if (pinch) { if (!e.touches.length) pinch = null; return; }
+  if (!drag) return;
+  const tap = drag.mode === "pan" && !drag.moved, {mx, my} = drag;
+  release();
+  if (tap) { const now = Date.now(); if (now - lastTap < 320) { zoomAt(mx, my, 2); lastTap = 0; } else lastTap = now; }
+}, {passive:false});
+cv.addEventListener("touchcancel", () => { pinch = null; drag = null; draw(); });
 cv.addEventListener("wheel", e => {
   e.preventDefault();
   const wheel = e.deltaMode !== 0 || (e.deltaX === 0 && Math.abs(e.deltaY) >= 40 && Number.isInteger(e.deltaY));
