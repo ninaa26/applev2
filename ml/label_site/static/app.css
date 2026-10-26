@@ -220,12 +220,13 @@ body:not(.left-off) #leftToggle .fill { opacity:.9; } body.left-off #leftToggle 
   #mTitle b { font-size:13.5px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   #mTitle span { font-size:12px; color:var(--mute); }
   /* the photo: one finger pans, a tap picks a box, two fingers zoom */
-  #mStrip { display:flex; order:2; flex:none; align-items:center; justify-content:center; min-height:52px; box-sizing:border-box; padding:6px 10px;
+  #mStrip { display:flex; order:2; flex:none; align-items:center; min-height:52px; box-sizing:border-box; padding:6px 10px;
             background:var(--panel); border-bottom:1px solid var(--hair); }
   #mStrip { gap:8px; }
-  #mUndo, #mRedo { flex:none; min-height:40px; padding:0 14px; border-radius:12px; font-size:13.5px; font-weight:600; }
+  /* Draw box on the left, the undo and redo arrows on the right */
+  #mUndo, #mRedo { flex:none; width:44px; min-height:40px; padding:0; border-radius:12px; font-size:19px; font-weight:700; }
   #secTools > .row:first-child { display:none; }  /* undo and redo are in the strip */
-  #mDraw { flex:none; min-height:40px; padding:0 22px; border-radius:12px; font-size:13.5px; font-weight:600; }
+  #mDraw { flex:none; margin-right:auto; min-height:40px; padding:0 16px; border-radius:12px; font-size:13.5px; font-weight:600; }
   #mDraw.on { background:var(--pink); border-color:transparent; color:#fff; }
   main { order:3; flex:0 0 42dvh; position:relative; }
   #cv { touch-action:none; }
