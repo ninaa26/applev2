@@ -12,7 +12,7 @@ form { background:var(--panel); border:3px solid var(--outline); border-radius:1
 h1 { font-family:var(--serif); font-weight:700; font-size:28px; color:var(--pink); margin:0 0 4px; }
 p { color:var(--mute); margin:0 0 16px; font-size:13px; }
 label { display:block; font-size:13px; font-weight:600; margin:12px 0 4px; }
-input { width:100%; box-sizing:border-box; font:inherit; padding:9px; border:2px solid var(--outline); border-radius:10px; background:var(--field); color:var(--ink); }
+input { width:100%; box-sizing:border-box; font:inherit; padding:9px; border:1px solid rgba(26,26,26,.3); border-radius:10px; background:var(--field); color:var(--ink); }
 input:focus { outline:3px solid var(--sky); outline-offset:1px; }
 button { margin-top:18px; width:100%; font:inherit; font-weight:700; padding:10px; border:2px solid var(--outline); border-radius:10px;
          background:var(--pink); color:#fff; cursor:pointer; box-shadow:3px 3px 0 var(--outline); }
