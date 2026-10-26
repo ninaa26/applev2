@@ -12,7 +12,9 @@ flattened, tilted, touching. For each photo:
      patches of several sizes around each insect, not the whole photo, because a card shot at an
      angle has smaller squares at the far end. The value most patches agree on is the photo's
      scale; each insect keeps its own estimate nearest that. That gives each insect's real length
-     (blank when the photo shows no grid);
+     (blank when the photo shows no grid): length_mm over flatbug's whole outline and body_mm with
+     legs and antennae trimmed off (field_lengths.py). A warning is printed when a photo's insects
+     come out implausibly small or big for its scale;
   3. each insect is saved as a server-style crop (pad 0.35, data/field/crops/) and as an RGBA
      cutout (data/field/cutouts/) that make_trap_style.py can paste onto our own liner;
   4. data/field/boxes/<photo>.jpg shows the photo with every insect numbered.
@@ -26,6 +28,12 @@ the box becomes its cutout. Where flatbug sees nothing (debris isn't an arthropo
 insects), the object is separated from the white card by colour instead (contrast_mask). A cutout
 of `-` means "checked, no usable cutout" (e.g. the grid stuck to it) and is left alone. Stop
 label_field_cards.py first: it holds labels.csv in memory.
+
+The same pass measures rows from before the `length_from` column (Oct 25 2026): a drawn or resized
+box gets its length from a GrabCut outline inside the box instead of the box's long side (short for
+a slim diagonal insect, long for a loosely drawn box), or keeps the box's with length_from `box` when GrabCut finds
+no usable outline; flatbug's rows keep their length_mm and get body_mm. The labeller does the same on
+save, so this only matters once. It then warns about photos whose labelled moths look mis-scaled.
 """
 
 from __future__ import annotations
@@ -37,13 +45,15 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+from field_lengths import body_px, measure, scale_warning
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "server"))
 from sentinel_server.pipeline.detect import find_grid, line_opening  # noqa: E402
 
 PAD = 0.35  # server crop padding (server/sentinel_server/pipeline/classify.py: crop)
-FIELDS = ["photo", "n", "label", "source", "crop", "cutout", "x1", "y1", "x2", "y2", "conf", "ppm", "length_mm"]
+FIELDS = ["photo", "n", "label", "source", "crop", "cutout", "x1", "y1", "x2", "y2", "conf", "ppm", "length_mm",
+          "body_mm", "length_from"]
 
 
 def server_crop(img: Image.Image, box) -> Image.Image:
@@ -153,6 +163,81 @@ def contrast_mask(img: Image.Image, box, drop_lines: bool = True) -> np.ndarray 
     return keep if 0.03 < frac < 0.9 else None
 
 
+def grabcut_mask(img: Image.Image, box, side: int = 300) -> np.ndarray | None:
+    """Outline of the insect a person boxed: GrabCut seeded with the box (everything outside it is
+    card), the biggest piece. Box-sized bool mask, or None. Worked out at most `side` px (~0.1 s), so
+    the labeller can do it on save. On the 63 drawn or resized boxes of Oct 2026 it found the whole
+    insect where contrast_mask often kept a fragment (the insect fills its box, so the box's border
+    colour isn't the card's)."""
+    x1, y1, x2, y2 = max(0, box[0]), max(0, box[1]), min(img.width, box[2]), min(img.height, box[3])
+    if x2 - x1 < 4 or y2 - y1 < 4:
+        return None
+    m = max(x2 - x1, y2 - y1) // 3  # some card around the box for GrabCut's background colours
+    rx, ry = max(0, x1 - m), max(0, y1 - m)
+    region = np.asarray(img.crop((rx, ry, min(img.width, x2 + m), min(img.height, y2 + m))))
+    s = min(1.0, side / max(region.shape[:2]))
+    small = cv2.resize(region, None, fx=s, fy=s, interpolation=cv2.INTER_AREA) if s < 1 else region
+    rect = (int((x1 - rx) * s), int((y1 - ry) * s), max(2, int((x2 - x1) * s)), max(2, int((y2 - y1) * s)))
+    gc = np.zeros(small.shape[:2], np.uint8)
+    cv2.grabCut(cv2.cvtColor(small, cv2.COLOR_RGB2BGR), gc, rect, np.zeros((1, 65)), np.zeros((1, 65)), 5,
+                cv2.GC_INIT_WITH_RECT)
+    n, lab, stats, _ = cv2.connectedComponentsWithStats(((gc == cv2.GC_FGD) | (gc == cv2.GC_PR_FGD)).astype(np.uint8))
+    if n < 2:
+        return None
+    keep = (lab == 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))).astype(np.uint8)
+    keep = cv2.resize(keep, (region.shape[1], region.shape[0]), interpolation=cv2.INTER_NEAREST)
+    return keep[y1 - ry:y2 - ry, x1 - rx:x2 - rx].astype(bool)
+
+
+def contour_mask(contour: np.ndarray, box) -> np.ndarray:
+    """A flatbug outline (N×2 photo x,y) as a bool mask the size of its box."""
+    mask = Image.new("L", (box[2] - box[0], box[3] - box[1]), 0)
+    ImageDraw.Draw(mask).polygon([(float(x) - box[0], float(y) - box[1]) for x, y in contour], fill=255)
+    return np.asarray(mask) > 127
+
+
+def box_lengths(img: Image.Image, r: dict) -> dict:
+    """{length_mm, body_mm, length_from} for a drawn or resized box (see field_lengths)."""
+    box = tuple(int(r[k]) for k in ("x1", "y1", "x2", "y2"))
+    return measure(grabcut_mask(img, box), box, float(r["ppm"]) if r.get("ppm") else None)
+
+
+def fill_lengths(data: Path, rows: list[dict]) -> int:
+    """Measure the rows from before length_from existed: drawn or resized boxes from GrabCut (their
+    old length_mm was the box's long side), flatbug's from its cutout (length_mm kept, body_mm added)."""
+    todo = [r for r in rows if not r.get("length_from") and r["label"] != "skip"]
+    images: dict[str, Image.Image] = {}
+    changed = 0
+    for r in todo:
+        ppm = float(r["ppm"]) if r.get("ppm") else None
+        if r["source"] == "flatbug":
+            if r["cutout"] in ("", "-"):
+                continue
+            with Image.open(r["cutout"]) as c:
+                mask = np.asarray(c.getchannel("A")) > 127
+            # length_mm is the contour's already
+            r.update({"body_mm": f"{body_px(mask) / ppm:.1f}" if ppm else "", "length_from": "outline"})
+            continue
+        if r["photo"] not in images:
+            with Image.open(data / "inbox" / r["photo"]) as im:
+                images = {r["photo"]: ImageOps.exif_transpose(im).convert("RGB")}  # one photo in memory
+        got = box_lengths(images[r["photo"]], r)
+        changed += got["length_mm"] != r.get("length_mm")
+        r.update(got)
+    return changed
+
+
+def report_scale(rows: list[dict]) -> None:
+    """scale_warning for each photo's labelled moths."""
+    by: dict[str, list[float]] = {}
+    for r in rows:
+        if r["label"] not in ("", "skip", "debris", "other_insect") and r.get("length_mm"):
+            by.setdefault(r["photo"], []).append(float(r["body_mm"] or r["length_mm"]))
+    for photo, lengths in sorted(by.items()):
+        if warn := scale_warning(lengths):
+            print(f"  {photo}: {warn}")
+
+
 def fill_cutouts(predictor, data: Path, rows: list[dict]) -> int:
     """Give every kept box without a cutout one: flatbug on the box's neighbourhood, best-matching outline."""
     import torch
@@ -234,17 +319,21 @@ def main(argv=None) -> int:
     labels = args.data / "labels.csv"
     old = list(csv.DictReader(open(labels, newline=""))) if labels.exists() else []
     if args.cutouts:
-        import torch
-        from flat_bug.predictor import Predictor
+        n = 0
+        if any(r["label"] not in ("", "skip") and not r["cutout"] for r in old):
+            import torch
+            from flat_bug.predictor import Predictor
 
-        predictor = Predictor(model=args.weights, device="mps:0" if torch.backends.mps.is_available() else "cpu",
-                              dtype="float32")
-        n = fill_cutouts(predictor, args.data, old)
+            predictor = Predictor(model=args.weights, device="mps:0" if torch.backends.mps.is_available() else "cpu",
+                                  dtype="float32")
+            n = fill_cutouts(predictor, args.data, old)
+        k = fill_lengths(args.data, old)
         with open(labels, "w", newline="") as f:
             w = csv.DictWriter(f, fieldnames=FIELDS, restval="")
             w.writeheader()
             w.writerows(old)
-        print(f"Wrote {n} cutouts")
+        print(f"Wrote {n} cutouts, re-measured {k} lengths")
+        report_scale(old)
         return 0
     done = {r["photo"] for r in old}
     photos = [p for p in sorted((args.data / "inbox").iterdir())
@@ -283,16 +372,18 @@ def main(argv=None) -> int:
             long_px = max(cv2.minAreaRect(c)[1])
             rows.append({"photo": p.name, "n": str(n), "label": "", "source": "flatbug", "crop": str(crop_path), "cutout": str(cut_path),
                          "x1": box[0], "y1": box[1], "x2": box[2], "y2": box[3], "conf": f"{conf:.2f}",
-                         "ppm": f"{ppm:.2f}" if ppm else "", "length_mm": f"{long_px / ppm:.1f}" if ppm else ""})
+                         "ppm": f"{ppm:.2f}" if ppm else "", "length_mm": f"{long_px / ppm:.1f}" if ppm else "",
+                         "body_mm": f"{body_px(contour_mask(c, box)) / ppm:.1f}" if ppm else "", "length_from": "outline"})
         (args.data / "boxes").mkdir(parents=True, exist_ok=True)
         draw_boxes(img, rows, args.data / "boxes" / f"{p.stem}.jpg")
         ppms = sorted(float(r["ppm"]) for r in rows if r["ppm"])
         scale = f"{photo_ppm:.1f} px/mm (insects {ppms[0]:.1f}-{ppms[-1]:.1f})" if ppms else "no grid found"
-        print(f"  {p.name}: {len(rows)} insects, {scale}", flush=True)
+        warn = scale_warning([float(r["length_mm"]) for r in rows if r["length_mm"]])
+        print(f"  {p.name}: {len(rows)} insects, {scale}" + (f"; WARNING {warn}" if warn else ""), flush=True)
         new += rows
         # after every photo, so a stopped run keeps what it did (full-size photos take minutes each)
         with open(labels, "w", newline="") as f:
-            w = csv.DictWriter(f, fieldnames=FIELDS)
+            w = csv.DictWriter(f, fieldnames=FIELDS, restval="")
             w.writeheader()
             w.writerows(old + new)
 
