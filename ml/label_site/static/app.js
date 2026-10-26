@@ -595,6 +595,33 @@ async function toggleGuide() {
 }
 $("help").onclick = toggleGuide; $("guideClose").onclick = toggleGuide;
 
+// ---------- resizable side panels (widths kept in this browser only)
+const PANEL = {l: 250, r: 280, min: 170, max: 640};
+function setPanels(l, r) {
+  const room = innerWidth - 320;  // always leave the photo at least this much
+  l = Math.max(PANEL.min, Math.min(l, PANEL.max, room - PANEL.min));
+  r = Math.max(PANEL.min, Math.min(r, PANEL.max, room - l));
+  document.body.style.setProperty("--lw", l + "px"); document.body.style.setProperty("--rw", r + "px");
+  $("gripL").style.left = l + "px"; $("gripR").style.left = (innerWidth - r) + "px";
+  try { localStorage.setItem("panels", JSON.stringify([l, r])); } catch (e) {}
+  if (img.complete && img.width) { fit(); draw(); }
+}
+let panels = [PANEL.l, PANEL.r];
+try { panels = JSON.parse(localStorage.getItem("panels")) || panels; } catch (e) {}
+["gripL", "gripR"].forEach(id => {
+  const g = $(id), left = id === "gripL";
+  g.addEventListener("mousedown", e => {
+    e.preventDefault(); g.classList.add("dragging"); document.body.classList.add("resizing");
+    const move = ev => { panels = left ? [ev.clientX, panels[1]] : [panels[0], innerWidth - ev.clientX]; setPanels(...panels); };
+    const up = () => { g.classList.remove("dragging"); document.body.classList.remove("resizing");
+      removeEventListener("mousemove", move); removeEventListener("mouseup", up); };
+    addEventListener("mousemove", move); addEventListener("mouseup", up);
+  });
+  g.addEventListener("dblclick", () => { panels = left ? [PANEL.l, panels[1]] : [panels[0], PANEL.r]; setPanels(...panels); });
+});
+addEventListener("resize", () => setPanels(...panels));
+setPanels(...panels);
+
 // ---------- start
 (async function start() {
   me = await (await api("/api/me")).json();
