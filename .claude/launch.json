@@ -38,6 +38,15 @@
       "port": 8010
     },
     {
+      "name": "label-site",
+      "runtimeExecutable": "/bin/sh",
+      "runtimeArgs": [
+        "-c",
+        "cd ml && exec .venv/bin/python -m label_site --data \"${LABEL_SITE_DATA:-data}\" serve --port 8775"
+      ],
+      "port": 8775
+    },
+    {
       "name": "schematics",
       "runtimeExecutable": "/bin/sh",
       "runtimeArgs": [

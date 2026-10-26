@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Labelling dashboard</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,500;0,700;1,500&display=swap">
+<link rel="stylesheet" href="/static/dashboard.css"></head><body>
+<header><h1>Labelling dashboard</h1><nav><a href="/">← Back to labelling</a> · <a href="/api/export/coco.json">COCO</a> · <a href="/api/export/yolo.zip">YOLO</a></nav></header>
+<section id="totals" class="tiles"></section>
+<h2>People</h2>
+<p class="mute">Hidden test photos are scored once the reference labels are finished: <b>found</b> = share of the reference's insects they boxed;
+<b>right</b> = share of those with the reference's label; <b>kept wrong guess</b> = of the boxes where the model was wrong, how often they kept its label
+(pressing Enter without looking); <b>species right</b> = of the moths both they and the reference named a species for, how many
+match. Speed is the median time between box changes.</p>
+<div class="scroll"><table id="people"></table></div>
+<h2>Assignments</h2>
+<p class="mute">Who has which photo. <b>Move</b> gives an open photo to someone else: on a normal photo what was done stays with the
+photo; a two-person or hidden-test copy starts fresh for the new person, so it can only move before its owner starts it.
+<b>Pause</b> stops someone getting new photos and hands their open ones to whoever has least left.</p>
+<div class="row"><label>Person <select id="fUser"><option value="">everyone</option></select></label>
+<label>Status <select id="fStatus"><option value="open">to do</option><option value="">all</option><option value="done">in review</option><option value="accepted">accepted</option></select></label>
+<span id="aMsg" class="mute"></span></div>
+<div class="scroll"><table id="tasks"></table></div>
+<h2>Photos labelled by two people</h2>
+<div class="scroll"><table id="merges"></table></div>
+<script src="/static/dashboard.js"></script>
+</body></html>

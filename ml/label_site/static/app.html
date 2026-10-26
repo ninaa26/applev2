@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Liner labels</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@500&family=Lora:ital,wght@0,500;0,700;1,500&family=Space+Grotesk:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="/static/app.css"></head><body>
+<aside class="left">
+  <div class="brand">SORT-A-BUG</div>
+  <div id="me"></div>
+  <div class="tabs"><button data-tab="mine" class="on">My photos</button><button data-tab="review" id="reviewTab" hidden>Review</button></div>
+  <div id="queueInfo" class="mute"></div>
+  <div id="queue"></div>
+</aside>
+<main id="main"><canvas id="cv"></canvas>
+  <button id="leftToggle" title="Hide the photo list (\)" aria-label="Hide the photo list" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true">
+    <rect x="2.5" y="3.5" width="15" height="13" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M7.5 4v12" stroke="currentColor" stroke-width="1.6"/>
+    <path class="fill" d="M4 5h2.7v10H4z" fill="currentColor"/></svg></button><div id="status"></div><div id="banner" hidden></div>
+  <div id="finishAsk" hidden><span id="finishAskText"></span>
+    <div class="row"><button id="finishShow" class="primary">Show me them</button><button id="finishYes">Yes, finish anyway</button><button id="finishCancel">Cancel</button></div>
+  </div>
+  <div id="issueMenu" hidden>
+    <b>Comment on this spot</b>
+    <select id="issueKind">
+      <option value="wrong_label">Wrong label</option><option value="missed_insect">Missed insect here</option>
+      <option value="loose_box">Box too loose / tight</option><option value="not_insect">Not an insect</option>
+      <option value="species">Species question</option><option value="other">Other</option>
+    </select>
+    <textarea id="issueText" rows="3" placeholder="What should change (optional)"></textarea>
+    <div class="row"><button id="issueSave">Pin comment</button><button id="issueCancel">Cancel</button></div>
+  </div>
+</main>
+<aside class="right">
+  <div class="row"><button id="undo" title="⌘Z">↶ Undo</button><button id="redo" title="⇧⌘Z">↷ Redo</button><button id="help" title="?">? Guide</button></div>
+  <button id="draw" class="wide" title="B">▭ Draw box: off (B)</button>
+  <div id="passBox"><h2>Pass</h2><div class="row modes"><button data-m="1">1 · moth / insect / debris</button><button data-m="2">2 · species</button></div></div>
+  <h2>Selected</h2><canvas id="zoom" width="256" height="256"></canvas>
+  <div class="row nav"><button id="prevBox" title="Back to the box you were on before (,)">◀ Previous</button><button id="nextBox" title="Forward, then the next box to check (.)">Next ▶</button></div>
+  <div id="info">Nothing selected</div>
+  <div id="taskActions"></div>
+  <h2>Show</h2>
+  <label class="line">Boxes <select id="filter">
+    <option value="all">all</option><option value="unchecked">not checked yet</option>
+    <option value="unsure">model under 0.8 first</option><option value="missed">missed by the detector</option>
+    <option value="disputed">disputed</option></select></label>
+  <label class="line slider">Hide detector boxes under <input id="thr" type="range" min="0" max="0.9" step="0.05" value="0"> <span id="thrv">0</span></label>
+  <label class="line"><input type="checkbox" id="hideAll"> Hide all boxes (H)</label>
+  <div class="row"><button id="lock" title="L">🔒 Lock box (L)</button></div>
+  <label class="line"><input type="checkbox" id="lockChecked" checked> Checked boxes can't be dragged</label>
+  <h2>Label</h2><div class="key" id="labelKeys"></div>
+  <div class="row attrs" id="attrs">
+    <button data-a="cut_off" title="E">E cut off</button>
+    <button data-a="decayed" title="W">W worn</button><button data-a="unsure" title="U">U unsure</button>
+  </div>
+  <h2>This photo</h2>
+  <label class="line"><input type="checkbox" data-tag="unusable"> Unusable (can't label it)</label>
+  <label class="line"><input type="checkbox" data-tag="wrong_scale"> Wrong scale (sizes look off)</label>
+  <label class="line"><input type="checkbox" data-tag="not_gridded"> Not a gridded liner</label>
+  <div id="issues"></div>
+  <h2>Image</h2>
+  <label class="line slider">Brightness <input id="bri" type="range" min="50" max="200" value="100"></label>
+  <label class="line slider">Contrast <input id="con" type="range" min="50" max="250" value="100"></label>
+  <label class="line slider">Colour <input id="sat" type="range" min="0" max="250" value="100"></label>
+  <button id="resetImg" class="small">reset</button>
+  <h2>Keys</h2><div class="key" id="key"></div>
+
+</aside>
+<div id="guide" hidden><div class="sheet">
+  <button id="guideClose" class="close">✕</button>
+  <h1>How to label</h1>
+  <p><b>Dashed boxes</b> are the models' guesses that nobody has checked. Every box counts as done only when a person
+  has looked at it: press <b>Enter</b> if the guess is right (it moves on to the next one), or press the right number.</p>
+  <h2>Pass 1: what is it?</h2>
+  <ul>
+    <li><b>1 moth</b>: any moth, even worn, flattened or half under another insect.</li>
+    <li><b>2 other insect</b>: flies, wasps, beetles, lacewings, spiders… anything alive-ish that isn't a moth.</li>
+    <li><b>3 debris</b>: on the card but not an insect: loose legs, wing bits, scales, leaf pieces, glue blobs. Keep
+      these, don't delete them: the trap sees them too.</li>
+    <li><b>Delete</b>: only for boxes on nothing at all, or off the card.</li>
+  </ul>
+  <h2>Box every insect</h2>
+  <p>Tiny, blurred, half-hidden, overlapping and decayed ones too. A detector trained on photos where they were left out
+  learns to miss them. Press <b>B</b> and drag to draw a box, or in draw mode just <b>click</b> an insect and the site
+  draws the box for you. One box over two insects: shrink it to one and draw the other.</p>
+  <h2>Tags on a box</h2>
+  <p><b>O</b> (overlapping another insect) is added by itself whenever two boxes share part of their area. Yours to set:
+  <b>E</b> cut off by the photo edge · <b>W</b> worn or decayed · <b>U</b> unsure
+  (you labelled it but aren't confident). Use <b>U</b> rather than guessing.</p>
+  <h2>Pass 2: species (anyone, when you're sure)</h2>
+  <p>Switch to pass 2 on the right. <b>Tab</b> jumps to the moths that have no species yet. CM, OFM, OBLR, the look-alikes
+  (redbanded leafroller, lesser appleworm), other tortricids, other moths. <b>0</b> = moth, species unsure. When in doubt,
+  use 0: a wrong species is worse than none, and the examples below show what each looks like on glue.</p>
+  <div id="examples"></div>
+  <h2>Comments</h2>
+  <p>Right-click anywhere on the photo to pin a comment (a reviewer uses this to ask for a fix; you can use it to ask a
+  question). Fix what it says, then press <b>Resolve</b> on it.</p>
+  <h2>When you're done</h2>
+  <p>Press <b>Done with this photo</b>. A reviewer accepts it or sends it back with comments.</p>
+</div></div>
+<div class="grip" id="gripL" title="Drag to resize · double-click to reset"></div>
+<div class="grip" id="gripR" title="Drag to resize · double-click to reset"></div>
+<script src="/static/app.js"></script>
+</body></html>

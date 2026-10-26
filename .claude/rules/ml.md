@@ -29,7 +29,7 @@ paths:
 - Classes: `CM`, `OFM`, `OBLR`, `other_moth`, `other_insect`, `debris`.
 - Leg clumps, wing bits and leaf fragments on a card are `debris`, not deleted: the trap sees them too. Delete only what is not on the card.
 - Box every insect on a photo, also the tiny, blurred, half-hidden, overlapping and decayed ones. A detector trained on photos where they were left out learns to miss them, and its counts become biased towards big insects.
-- Labelling is two passes: pass 1 (anyone) moth / other insect / debris and box fixes; pass 2 (a trained eye) the species of each moth.
+- Labelling is two passes: pass 1 (anyone) moth / other insect / debris and box fixes; pass 2 the species of each moth. On the team labelling site anyone may do pass 2 (decided Oct 25 2026); `0` (moth, unsure) beats a guess, and each person's species calls are scored on the hidden test photos (dashboard) so you know whose to trust.
 - Trap-camera sets photograph one liner on several days. Label the latest photo of each liner, stop the labeller, then run `carry_liner_labels.py --write` to copy labels to the earlier photos.
 - Labels Claude adds go where a person can check them and never silently into a labelled file: a list beside it (`labelled_by_claude.csv`, `species.csv` with a `by` column), the contact sheets it looked at, a backup of the file first, and anything it was unsure of marked unsure or left blank, never passed off as sure.
 - `labels.csv` also records how flatbug did (`skip`, `flatbug-edited`, `manual`); keep those values intact when editing it by script.

@@ -1,0 +1,38 @@
+/* The poster's colours (see app.css). */
+:root { --pink:#EE4A7F; --sky:#111111; --orange:#FF9E1B; --red:#D40000; --mauve:#D46FA6; --denim:#2F4470; --outline:#1A1A1A;
+        --bg:#DCD6CF; --panel:#ECE8E4; --ink:#1A1A1A; --mute:#5B5560; --field:#FFFFFF;
+        --sans:-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif; --serif:"Lora", Georgia, serif; }
+@media (prefers-color-scheme: dark) { :root { --denim:#3A5590; --bg:#16273A; --panel:#192643; --ink:#FFF4F7; --mute:#C9BCCB; --field:#162536; } }
+body { margin:0; min-height:100vh; display:grid; place-items:center; color:var(--ink); font:15px/1.4 var(--sans); background:var(--bg); overflow:hidden; }
+/* paint splotches behind the form */
+.blobs { position:fixed; inset:0; pointer-events:none; overflow:hidden; }
+.blob { position:absolute; }
+.b1 { width:min(62vmax, 900px); left:-17vmax; top:-22vmax; fill:var(--pink); transform:rotate(-8deg); }
+.b2 { width:min(34vmax, 520px); right:-9vmax; top:-11vmax; fill:var(--mauve); transform:rotate(25deg); }
+.b3 { width:min(48vmax, 700px); right:-14vmax; bottom:-17vmax; fill:var(--orange); transform:rotate(160deg); }
+/* the moth that flies in and lands on the card's corner (login.js); hidden until it starts */
+#moth { position:fixed; left:0; top:0; width:58px; height:58px; pointer-events:none; z-index:2; visibility:hidden;
+        filter:drop-shadow(3px 4px 0 rgba(26,26,26,.28)); will-change:transform; }
+#moth .wing { transform-box:view-box; transform-origin:32px 32px; }
+#moth .fore { fill:#F4E7D3; stroke:var(--outline); stroke-width:1.6; stroke-linejoin:round; }
+#moth .spot { fill:#B98B5C; }
+#moth .vein { fill:none; stroke:#B98B5C; stroke-width:1; stroke-linecap:round; }
+#moth .body { fill:#3A2F2A; }
+#moth .ant { fill:none; stroke:#3A2F2A; stroke-width:1.4; stroke-linecap:round; }
+#moth.flying .wing { animation:flap .18s ease-in-out infinite alternate; }
+#moth.flap2 .wing { animation:flap2 .6s ease-in-out 2; }
+@keyframes flap { from { transform:scaleX(1); } to { transform:scaleX(.18); } }
+@keyframes flap2 { 50% { transform:scaleX(.15); } }
+form { position:relative; z-index:1; background:var(--panel); border:3px solid var(--outline); border-radius:16px; padding:30px 28px 26px; width:min(360px, 100vw - 32px);
+       box-sizing:border-box; box-shadow:6px 6px 0 var(--outline); }
+/* the same title as the labelling page: Space Grotesk bold, spaced out */
+h1 { font:700 30px/1.1 "Space Grotesk", -apple-system, system-ui, sans-serif; letter-spacing:.06em; color:var(--ink); margin:0 0 10px; }
+h1 span { display:block; font-size:17px; letter-spacing:.04em; color:var(--pink); margin-bottom:2px; }
+p { color:var(--mute); margin:0 0 6px; font-size:13px; line-height:1.5; }
+label { display:block; font-size:13px; font-weight:600; margin:20px 0 8px; }
+input { width:100%; box-sizing:border-box; font:inherit; padding:11px 12px; border:1px solid rgba(26,26,26,.3); border-radius:10px; background:var(--field); color:var(--ink); }
+input:focus { outline:3px solid var(--denim); outline-offset:1px; }
+button { margin-top:28px; width:100%; font:inherit; font-weight:700; padding:10px; border:2px solid var(--outline); border-radius:10px;
+         background:var(--pink); color:#fff; cursor:pointer; box-shadow:3px 3px 0 var(--outline); }
+button:hover { background:var(--mauve); }
+.msg { color:var(--red); font-size:13px; font-weight:600; min-height:1.2em; margin-top:12px; }
