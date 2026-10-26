@@ -1,8 +1,8 @@
 /* The poster's colours (see app.css). */
-:root { --pink:#EE4A7F; --sky:#8FC9D9; --orange:#FF9E1B; --red:#D40000; --mauve:#D46FA6; --denim:#4A7DB0; --outline:#1A1A1A;
-        --bg:#8FC9D9; --panel:#ECE8E4; --ink:#1A1A1A; --mute:#5B5560; --field:#FFFFFF; --hover:#FFE0EA;
+:root { --pink:#EE4A7F; --sky:#111111; --orange:#FF9E1B; --red:#D40000; --mauve:#D46FA6; --denim:#2F4470; --outline:#1A1A1A;
+        --bg:#DCD6CF; --panel:#ECE8E4; --ink:#1A1A1A; --mute:#5B5560; --field:#FFFFFF; --hover:#FFE0EA;
         --sans:-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif; --serif:"Lora", Georgia, serif; }
-@media (prefers-color-scheme: dark) { :root { --bg:#16273A; --panel:#192643; --ink:#FFF4F7; --mute:#C9BCCB; --field:#162536; --hover:#2A4260; } }
+@media (prefers-color-scheme: dark) { :root { --denim:#3A5590; --bg:#16273A; --panel:#192643; --ink:#FFF4F7; --mute:#C9BCCB; --field:#162536; --hover:#2A4260; } }
 body { margin:0; padding:22px max(16px, calc(50vw - 580px)); background:var(--bg); color:var(--ink); font:14px/1.45 var(--sans); }
 header { display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:8px; }
 h1 { font-family:var(--serif); font-weight:700; font-size:30px; margin:0; color:var(--outline); }
@@ -11,7 +11,7 @@ h2 { font-family:var(--serif); font-weight:700; font-size:19px; color:var(--pink
 @media (prefers-color-scheme: light) { h2 { color:var(--outline); } h2::before { content:""; display:inline-block; width:12px; height:12px;
        border-radius:50%; background:var(--pink); border:1px solid rgba(26,26,26,.32); margin-right:8px; vertical-align:1px; } }
 a { color:var(--outline); font-weight:700; text-decoration-color:var(--pink); text-decoration-thickness:2px; }
-@media (prefers-color-scheme: dark) { a { color:var(--sky); } }
+@media (prefers-color-scheme: dark) { a { color:var(--pink); } }
 .mute { color:var(--mute); font-size:12px; max-width:75ch; } .mute b { color:var(--ink); }
 .tiles { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:12px; margin-top:18px; }
 .tile { background:var(--panel); border:2px solid var(--outline); border-radius:12px; padding:12px 14px; box-shadow:3px 3px 0 var(--outline); }

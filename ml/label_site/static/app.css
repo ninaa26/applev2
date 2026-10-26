@@ -1,16 +1,16 @@
 /* Colours from the team's poster: hot pink, sky blue, orange, red, mauve pink, denim blue, with black cartoon outlines.
    Red is kept for trouble (not saved, unchecked boxes at Done). Fonts: San Francisco for the interface, Lora for titles. */
 :root {
-  --pink:#EE4A7F; --sky:#8FC9D9; --orange:#FF9E1B; --red:#D40000; --mauve:#D46FA6; --denim:#4A7DB0; --outline:#1A1A1A;
+  --pink:#EE4A7F; --sky:#111111; --orange:#FF9E1B; --red:#D40000; --mauve:#D46FA6; --denim:#2F4470; --outline:#1A1A1A;
   --green:#57764D; --green-ink:#57764D;  /* sage accent: saved, finished, accepted, complete */
-  --bg:#8FC9D9; --panel:#ECE8E4; --ink:#1A1A1A; --mute:#5B5560; --hover:#E0DAD3;
+  --bg:#DCD6CF; --panel:#ECE8E4; --ink:#1A1A1A; --mute:#5B5560; --hover:#E0DAD3;
   --stage:#111111; --field:#FFFFFF;
   --hair:rgba(26,26,26,.16); --hair-strong:rgba(26,26,26,.32);  /* thin lines; the heavy outline is only for shadowed boxes */
   --sans:-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro", "Helvetica Neue", system-ui, sans-serif;
   --serif:"Lora", Georgia, "Times New Roman", serif;
 }
 @media (prefers-color-scheme: dark) {
-  :root { --bg:#16273A; --panel:#192643; --ink:#FFF4F7; --mute:#C9BCCB; --hover:#22335A; --stage:#111111; --field:#13203A; --green-ink:#8DB57F;
+  :root { --denim:#3A5590; --bg:#16273A; --panel:#192643; --ink:#FFF4F7; --mute:#C9BCCB; --hover:#22335A; --stage:#111111; --field:#13203A; --green-ink:#8DB57F;
           --hair:rgba(255,244,247,.12); --hair-strong:rgba(255,244,247,.26); }
 }
 * { box-sizing:border-box; }

@@ -1,8 +1,8 @@
 /* The poster's colours (see app.css). */
-:root { --pink:#EE4A7F; --sky:#8FC9D9; --orange:#FF9E1B; --red:#D40000; --mauve:#D46FA6; --denim:#4A7DB0; --outline:#1A1A1A;
-        --bg:#8FC9D9; --panel:#ECE8E4; --ink:#1A1A1A; --mute:#5B5560; --field:#FFFFFF;
+:root { --pink:#EE4A7F; --sky:#111111; --orange:#FF9E1B; --red:#D40000; --mauve:#D46FA6; --denim:#2F4470; --outline:#1A1A1A;
+        --bg:#DCD6CF; --panel:#ECE8E4; --ink:#1A1A1A; --mute:#5B5560; --field:#FFFFFF;
         --sans:-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif; --serif:"Lora", Georgia, serif; }
-@media (prefers-color-scheme: dark) { :root { --bg:#16273A; --panel:#192643; --ink:#FFF4F7; --mute:#C9BCCB; --field:#162536; } }
+@media (prefers-color-scheme: dark) { :root { --denim:#3A5590; --bg:#16273A; --panel:#192643; --ink:#FFF4F7; --mute:#C9BCCB; --field:#162536; } }
 body { margin:0; min-height:100vh; display:grid; place-items:center; color:var(--ink); font:15px/1.4 var(--sans);
        background:radial-gradient(circle at 12% 18%, var(--pink) 0 18%, transparent 18.2%),
                   radial-gradient(circle at 88% 82%, var(--orange) 0 14%, transparent 14.2%),
@@ -15,7 +15,7 @@ h1 span { display:block; font-size:17px; letter-spacing:.04em; color:var(--pink)
 p { color:var(--mute); margin:0 0 16px; font-size:13px; }
 label { display:block; font-size:13px; font-weight:600; margin:12px 0 4px; }
 input { width:100%; box-sizing:border-box; font:inherit; padding:9px; border:1px solid rgba(26,26,26,.3); border-radius:10px; background:var(--field); color:var(--ink); }
-input:focus { outline:3px solid var(--sky); outline-offset:1px; }
+input:focus { outline:3px solid var(--denim); outline-offset:1px; }
 button { margin-top:18px; width:100%; font:inherit; font-weight:700; padding:10px; border:2px solid var(--outline); border-radius:10px;
          background:var(--pink); color:#fff; cursor:pointer; box-shadow:3px 3px 0 var(--outline); }
 button:hover { background:var(--mauve); }

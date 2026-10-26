@@ -247,9 +247,9 @@ $("thr").oninput = () => { $("thrv").textContent = thr().toFixed(2); draw(); };
 $("resetImg").onclick = () => { $("bri").value = 100; $("con").value = 100; $("sat").value = 100; draw(); };
 function colorOf(b) {
   const l = b.label;
-  // the poster's colours: moth orange, other insect denim, debris mauve, a named species hot pink, unlabelled sky
-  if (!l) return "#8FC9D9";
-  if (l === "other_insect") return "#4A7DB0";
+  // moth orange, other insect deep navy, debris mauve, a named species hot pink, unlabelled near-black
+  if (!l) return "#111111";
+  if (l === "other_insect") return "#2F4470";
   if (l === "debris") return "#D46FA6";
   if (l === "skip") return "#ffffff55";
   return l === "moth" ? "#FF9E1B" : "#EE4A7F";
@@ -344,7 +344,7 @@ function draw() {
       + (b.source === "manual" ? " ✎" : "") + (a ? " " + a : "") + (b.locked ? " 🔒" : "");
     ctx.font = `600 ${12*lw}px -apple-system, system-ui, sans-serif`; const w = ctx.measureText(t).width + 6*lw;
     ctx.fillStyle = colorOf(b); ctx.fillRect(b.x1, b.y1 - 16*lw, w, 16*lw);
-    ctx.fillStyle = (!b.label || b.label === "moth") ? "#1A1A1A" : "#fff"; ctx.fillText(t, b.x1 + 3*lw, b.y1 - 4*lw);
+    ctx.fillStyle = b.label === "moth" ? "#1A1A1A" : "#fff"; ctx.fillText(t, b.x1 + 3*lw, b.y1 - 4*lw);
     ctx.globalAlpha = 1;
   });
   if (warnUnchecked) {  // after Done with dashed boxes left: a red ring around each, drawn in screen-sized pixels
@@ -393,7 +393,7 @@ $("prevBox").onclick = prevBox; $("nextBox").onclick = nextBox;
 function showSel() {
   remember(); renderKey();
   $("prevBox").disabled = trailPos <= 0;
-  zc.fillStyle = "#8FC9D9"; zc.fillRect(0, 0, 256, 256);
+  zc.fillStyle = "#111111"; zc.fillRect(0, 0, 256, 256);
   document.querySelectorAll("#attrs button").forEach(x => x.classList.remove("on"));
   if (sel < 0 || !boxes[sel]) { $("info").textContent = "Nothing selected"; $("lock").textContent = "🔒 Lock box (L)"; return; }
   const b = boxes[sel], side = Math.max(b.x2 - b.x1, b.y2 - b.y1) * 1.7, cx = (b.x1 + b.x2) / 2, cy = (b.y1 + b.y2) / 2;
