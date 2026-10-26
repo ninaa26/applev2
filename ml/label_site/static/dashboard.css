@@ -12,7 +12,7 @@ h2 { font-family:var(--serif); font-weight:700; font-size:19px; color:var(--pink
        border-radius:50%; background:var(--pink); border:1px solid rgba(26,26,26,.32); margin-right:8px; vertical-align:1px; } }
 a { color:var(--outline); font-weight:700; text-decoration-color:var(--pink); text-decoration-thickness:2px; }
 @media (prefers-color-scheme: dark) { a { color:var(--pink); } }
-.mute { color:var(--mute); font-size:12px; max-width:75ch; } .mute b { color:var(--ink); }
+.mute { color:var(--mute); font-size:12px; }  /* notes run the full width */ .mute b { color:var(--ink); }
 .tiles { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:12px; margin-top:18px; }
 .tile { background:var(--panel); border:2px solid var(--outline); border-radius:12px; padding:12px 14px; box-shadow:3px 3px 0 var(--outline); }
 .tile:nth-child(5n+1) { background:var(--pink); color:#fff; } .tile:nth-child(5n+2) { background:var(--orange); color:var(--outline); }
@@ -32,3 +32,7 @@ button { cursor:pointer; font-weight:700; } button:hover { background:var(--pink
 
 /* Resume and Hand out side by side */
 td.acts { white-space:nowrap; } td.acts button + button { margin-left:6px; }
+
+/* a person's name pauses or resumes them */
+.who-btn { font:inherit; font-weight:600; color:var(--ink); background:none; border:0; padding:2px 4px; margin:-2px -4px; border-radius:6px; cursor:pointer; }
+.who-btn:hover { background:var(--hover, rgba(127,127,127,.15)); text-decoration:underline; }
