@@ -61,6 +61,18 @@ class TestScoring(unittest.TestCase):
         self.assertIsNone(scoring.seconds_per_box([5]))
 
 
+class TestCleanBoxes(unittest.TestCase):
+    def test_off_photo_box_is_pulled_back(self):
+        from label_site.server import clean_boxes
+
+        got = clean_boxes([{"x1": -12.5, "y1": 40, "x2": 30, "y2": 2000, "label": "moth"},
+                           {"x1": 50, "y1": 50, "x2": 50, "y2": 60, "label": "debris"}], (1000, 800))
+        self.assertEqual((got[0]["x1"], got[0]["y2"]), (0.0, 800))
+        self.assertGreater(got[1]["x2"], got[1]["x1"])  # zero width becomes one pixel, not a refused save
+        with self.assertRaises(ValueError):
+            clean_boxes([{"x1": 0, "y1": 0, "x2": 1, "y2": 1, "label": "dog"}])
+
+
 class TestAuth(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())

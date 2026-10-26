@@ -29,16 +29,22 @@ PUBLIC_KIND = {"label": "label", "double": "label", "gold_check": "label", "tieb
                "gold_truth": "reference", "species": "species"}  # what the labeller is told
 
 
-def clean_boxes(boxes) -> list[dict]:
+def clean_boxes(boxes, size: tuple[int, int] | None = None) -> list[dict]:
+    """The page's boxes, checked. A box dragged partly off the photo is pulled back onto it (one bad corner must
+    never stop a whole photo from saving, which it did on Oct 26 2026); only garbage raises ValueError."""
     if not isinstance(boxes, list) or len(boxes) > 5000:
         raise ValueError("boxes")
+    W, H = size or (1e5, 1e5)
     out = []
     for b in boxes:
         if not isinstance(b, dict) or b.get("label", "") not in LABELS:
             raise ValueError("label")
         c = {k: float(b[k]) for k in ("x1", "y1", "x2", "y2")}
-        if not all(0 <= v < 1e5 for v in c.values()) or c["x2"] <= c["x1"] or c["y2"] <= c["y1"]:
+        if not all(abs(v) < 1e6 for v in c.values()):
             raise ValueError("box")
+        x1, x2 = sorted((min(max(c["x1"], 0.0), W - 1), min(max(c["x2"], 0.0), W)))
+        y1, y2 = sorted((min(max(c["y1"], 0.0), H - 1), min(max(c["y2"], 0.0), H)))
+        c = {"x1": x1, "y1": y1, "x2": max(x2, x1 + 1), "y2": max(y2, y1 + 1)}
         attrs = sorted(a for a in str(b.get("attrs", "")).split(",") if a)
         if not set(attrs) <= ATTRS:
             raise ValueError("attrs")
@@ -47,6 +53,22 @@ def clean_boxes(boxes) -> list[dict]:
                     "attrs": ",".join(attrs), "locked": 1 if b.get("locked") else 0,
                     "confirm": bool(b.get("confirm")), "unlock": bool(b.get("unlock"))})
     return out
+
+
+_sizes: dict[str, tuple[int, int]] = {}
+
+
+def photo_size(site: Path, photo: str) -> tuple[int, int]:
+    """Width, height as the page shows the photo (EXIF rotation applied), read from the header only."""
+    if photo not in _sizes:
+        from PIL import Image
+
+        with Image.open(site / "inbox" / photo) as im:
+            w, h = im.size
+            if im.getexif().get(274) in (5, 6, 7, 8):  # rotated 90 or 270 degrees
+                w, h = h, w
+        _sizes[photo] = (w, h)
+    return _sizes[photo]
 
 
 class Images:
@@ -329,9 +351,9 @@ def handler(store: Store, auth: Auth, secure: bool, species_experts: list[str]):
                 if t["status"] == "accepted" and not admin:
                     return self.send(b"this photo was accepted; ask a reviewer to reopen it", "text/plain", 409)
                 try:
-                    boxes = clean_boxes(body.get("boxes"))
-                except (ValueError, KeyError, TypeError):
-                    return self.send(b"bad save", "text/plain", 400)
+                    boxes = clean_boxes(body.get("boxes"), photo_size(store.site, t["photo"]))
+                except (ValueError, KeyError, TypeError) as e:
+                    return self.send(f"bad save ({e}): reload the page".encode(), "text/plain", 400)
                 try:
                     rows = store.save(t["photo"], t["copy"], boxes, user, body.get("base"), remeasure)
                 except Conflict:

@@ -335,6 +335,11 @@ function jump(step) {
 
 // ---------- editing
 function touch(b) { b.by = me.user; }
+function clampBox(b) {  // keep a box on the photo: a corner dragged past the edge stops at the edge
+  const W = img.width, H = img.height;
+  b.x1 = Math.max(0, Math.min(b.x1, W - 1)); b.x2 = Math.max(b.x1 + 1, Math.min(b.x2, W));
+  b.y1 = Math.max(0, Math.min(b.y1, H - 1)); b.y2 = Math.max(b.y1 + 1, Math.min(b.y2, H));
+}
 function setLabel(l) {
   const b = boxes[sel];
   if (b.label !== l || unchecked(b)) { record(); b.label = l; b.confirm = true; touch(b); changed(); }
@@ -435,12 +440,14 @@ window.addEventListener("mouseup", () => {
     const x1 = Math.min(a[0], b[0]), x2 = Math.max(a[0], b[0]), y1 = Math.min(a[1], b[1]), y2 = Math.max(a[1], b[1]);
     if ((x2 - x1) * view.s > 6 && (y2 - y1) * view.s > 6) {
       record();
-      boxes.push({id:null, label: pass === 1 ? "" : "moth", source:"manual", x1, y1, x2, y2, by:me.user, attrs:"", locked:false});
+      const nb = {id:null, label: pass === 1 ? "" : "moth", source:"manual", x1, y1, x2, y2, by:me.user, attrs:"", locked:false};
+      clampBox(nb); boxes.push(nb);
       sel = boxes.length - 1; changed();
     } else { drag = null; grabAtPoint(a[0], a[1]); return; }  // a click: box the insect under it
   } else if (drag.mode === "edit") {
     const b = boxes[sel];
     [b.x1, b.x2] = [Math.min(b.x1, b.x2), Math.max(b.x1, b.x2)]; [b.y1, b.y2] = [Math.min(b.y1, b.y2), Math.max(b.y1, b.y2)];
+    clampBox(b);
     if (drag.moved) { record(drag.before); touch(b); changed(); }
   }
   drag = null; draw();
