@@ -3,6 +3,9 @@
 <title>Liner labels</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@500&family=Lora:ital,wght@0,500;0,700;1,500&family=Space+Grotesk:wght@400;500;700&display=swap">
 <link rel="stylesheet" href="/static/app.css"></head><body>
+<header id="mbar"><button id="mList" aria-label="Photo list"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+  <div id="mTitle"><b id="mPhoto">No photo open</b><span id="mLeft"></span></div><button id="mGuide" aria-label="Guide">?</button></header>
+<div id="mScrim"></div>
 <aside class="left">
   <div class="brand">SORT-A-BUG</div>
   <div id="me"></div>
@@ -29,13 +32,20 @@
   </div>
 </main>
 <aside class="right">
+  <div id="mActions"><button id="mPrev" aria-label="Previous box">◀</button><button id="mConfirm" class="primary">✓ Right</button>
+    <button id="mDelete">Delete</button><button id="mNext" aria-label="Next box">▶</button></div>
+  <div class="sec" id="secTools">
   <div class="row"><button id="undo" title="⌘Z">↶ Undo</button><button id="redo" title="⇧⌘Z">↷ Redo</button><button id="help" title="?">? Guide</button></div>
   <button id="draw" class="wide" title="B">▭ Draw box: off (B)</button>
   <div id="passBox"><h2>Pass</h2><div class="row modes"><button data-m="1">1 · moth / insect / debris</button><button data-m="2">2 · species</button></div></div>
+  </div>
+  <div class="sec" id="secSel">
   <h2>Selected</h2><canvas id="zoom" width="256" height="256"></canvas>
   <div class="row nav"><button id="prevBox" title="Back to the box you were on before (,)">◀ Previous</button><button id="nextBox" title="Forward, then the next box to check (.)">Next ▶</button></div>
   <div id="info">Nothing selected</div>
-  <div id="taskActions"></div>
+  </div>
+  <div class="sec" id="secTask"><div id="taskActions"></div></div>
+  <div class="sec" id="secShow">
   <h2>Show</h2>
   <label class="line">Boxes <select id="filter">
     <option value="all">all</option><option value="unchecked">not checked yet</option>
@@ -45,11 +55,16 @@
   <label class="line"><input type="checkbox" id="hideAll"> Hide all boxes (H)</label>
   <div class="row"><button id="lock" title="L">🔒 Lock box (L)</button></div>
   <label class="line"><input type="checkbox" id="lockChecked" checked> Checked boxes can't be dragged</label>
+  </div>
+  <div class="sec" id="secLabel">
   <h2>Label</h2><div class="key" id="labelKeys"></div>
   <div class="row attrs" id="attrs">
     <button data-a="cut_off" title="E">E cut off</button>
     <button data-a="decayed" title="W">W worn</button><button data-a="unsure" title="U">U unsure</button>
   </div>
+  </div>
+  <button id="mMore">More settings ▾</button>
+  <div class="sec" id="secPhoto">
   <h2>This photo</h2>
   <label class="line"><input type="checkbox" data-tag="unusable"> Unusable (can't label it)</label>
   <label class="line"><input type="checkbox" data-tag="wrong_scale"> Wrong scale (sizes look off)</label>
@@ -60,8 +75,8 @@
   <label class="line slider">Contrast <input id="con" type="range" min="50" max="250" value="100"></label>
   <label class="line slider">Colour <input id="sat" type="range" min="0" max="250" value="100"></label>
   <button id="resetImg" class="small">reset</button>
-  <h2>Keys</h2><div class="key" id="key"></div>
-
+  <div id="secKeys"><h2>Keys</h2><div class="key" id="key"></div></div>
+  </div>
 </aside>
 <div id="guide" hidden><div class="sheet">
   <button id="guideClose" class="close">✕</button>

@@ -170,7 +170,7 @@ button.krow.on { background:var(--pink); border-color:transparent; color:#fff; f
 
 /* the right panel, spaced out: room under each heading, between rows of buttons and between settings */
 aside.right h2 { margin:24px 0 10px; }
-aside.right > .row + .wide, aside.right > .row + .row { margin-top:8px; }
+aside.right .sec > .row + .wide, aside.right .sec > .row + .row { margin-top:8px; }
 aside.right .row { gap:6px; }
 aside.right #zoom { margin-bottom:8px; }
 aside.right #info { margin-top:10px; line-height:1.45; }
@@ -178,7 +178,7 @@ aside.right #taskActions { margin-top:14px; gap:10px; }
 aside.right .photo-meta { line-height:1.45; margin-top:2px; }
 aside.right .line { margin:9px 0; gap:8px; }
 aside.right .line select { padding:5px 6px; }
-aside.right > .row:has(#lock) { margin:10px 0; }
+aside.right .row:has(#lock) { margin:10px 0; }
 aside.right .slider { display:grid; grid-template-columns:76px 1fr; gap:10px; }
 aside.right .slider:has(#thrv) { grid-template-columns:auto 1fr 24px; }
 aside.right #resetImg { margin-top:10px; }
@@ -206,3 +206,50 @@ body.left-off aside.left, body.left-off #gripL { display:none; }
 #leftToggle:hover { color:var(--ink); background:var(--panel); }
 #leftToggle svg { width:18px; height:18px; }
 body:not(.left-off) #leftToggle .fill { opacity:.9; } body.left-off #leftToggle .fill { opacity:0; }
+
+/* ---------- phones: the photo on top, a sheet of big buttons under it, the photo list in a drawer ---------- */
+#mbar, #mActions, #mMore, #mScrim { display:none; }
+@media (max-width: 760px) {
+  body { display:block; height:100dvh; }
+  #mbar { display:flex; position:fixed; z-index:15; top:0; left:0; right:0; height:52px; box-sizing:border-box; align-items:center;
+          gap:8px; padding:0 8px; background:var(--panel); border-bottom:1px solid var(--hair); }
+  #mbar button { width:42px; height:42px; padding:0; display:grid; place-items:center; border-radius:12px; font-size:17px; font-weight:700; flex:none; }
+  #mbar svg { width:22px; height:22px; }
+  #mTitle { flex:1; min-width:0; display:flex; flex-direction:column; line-height:1.25; text-align:center; }
+  #mTitle b { font-size:13.5px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #mTitle span { font-size:12px; color:var(--mute); }
+  /* the photo: one finger pans, a tap picks a box, two fingers zoom */
+  main { position:fixed; top:52px; left:0; right:0; height:46dvh; }
+  #cv { touch-action:none; }
+  #leftToggle, .grip { display:none; }
+  /* the photo list slides in from the left */
+  aside.left { position:fixed; z-index:30; top:0; bottom:0; left:0; width:min(86vw, 340px); box-sizing:border-box;
+               padding:14px 14px calc(14px + env(safe-area-inset-bottom)); transform:translateX(-102%); transition:transform .22s ease;
+               box-shadow:8px 0 30px rgba(0,0,0,.35); }
+  body.list-open aside.left { transform:none; }
+  body.list-open #mScrim { display:block; position:fixed; inset:0; z-index:25; background:rgba(0,0,0,.45); }
+  body.left-off aside.left { display:block; }  /* the desktop hide button doesn't apply here */
+  aside.left .item { padding:12px 12px; }
+  /* the sheet under the photo */
+  aside.right { position:fixed; left:0; right:0; bottom:0; top:calc(52px + 46dvh); display:flex; flex-direction:column; box-sizing:border-box;
+                padding:0 12px calc(16px + env(safe-area-inset-bottom)); border:0; border-top:1px solid var(--hair); overflow:auto;
+                overscroll-behavior:contain; }
+  #mActions { display:grid; order:1; grid-template-columns:54px 1fr 1fr 54px; gap:8px; position:sticky; top:0; z-index:2;
+              padding:10px 0 8px; background:var(--panel); }
+  #mActions button { height:50px; padding:0; font-size:16px; font-weight:700; border-radius:14px; }
+  #mDelete { color:var(--pink); }
+  #secSel { order:2; } #secSel h2, #zoom, #secSel .nav { display:none; }
+  aside.right #info { min-height:0; margin:2px 0 4px; font-size:12.5px; }
+  #secLabel { order:3; } #secLabel h2 { display:none; }
+  aside.right .lcards { gap:8px; } aside.right .lcards.many { gap:6px; }
+  .lcard { min-height:70px; } .lcard svg { width:36px; height:36px; }
+  .lcards.many .lcard { min-height:66px; padding:18px 2px 6px; font-size:11px; } .lcards.many .lcard svg { width:32px; height:32px; }
+  #attrs button { min-height:42px; }
+  #secTask { order:4; } aside.right #taskActions { margin-top:16px; } #taskActions button { min-height:46px; font-size:14px; }
+  #secTools { order:5; margin-top:6px; } #help { display:none; }
+  #secTools .row button, #draw { min-height:42px; }
+  #mMore { display:block; order:6; margin-top:16px; min-height:42px; }
+  #secShow { order:7; } #secPhoto { order:8; } #secKeys { display:none; }
+  body:not(.more-open) #secShow, body:not(.more-open) #secPhoto { display:none; }
+  aside.right .line { min-height:32px; }
+}
