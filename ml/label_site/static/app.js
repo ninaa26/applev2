@@ -252,7 +252,7 @@ function colorOf(b) {
   if (l === "other_insect") return "#2F4470";
   if (l === "debris") return "#D46FA6";
   if (l === "skip") return "#ffffff55";
-  return l === "moth" ? "#FF9E1B" : "#EE4A7F";
+  return l === "moth" || l === "OFM" ? "#FF9E1B" : "#EE4A7F";  // OFM orange, the other species hot pink
 }
 // Little drawings for the label cards, in the label's colour (currentColor): a moth with spread wings, a beetle for
 // "other insect", and scattered bits for debris. Every moth species uses the moth.
@@ -269,7 +269,30 @@ const ICONS = {
     <path d="M13 19.5l3.6-1.6 1.6 3.4-4.2 1.4Z"/><circle cx="24.5" cy="19" r="1.8"/><circle cx="8" cy="22.5" r="1.3"/><circle cx="20" cy="26" r="1.1"/>
     <path d="M17 12.5c2.2 1 4.2 1.3 6.4 1" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
 };
-const iconFor = l => l === "debris" ? ICONS.debris : l === "other_insect" ? ICONS.insect : ICONS.moth;
+// Pass 2: each species drawn as it rests on the glue, seen from above: a tortricid "bell" of folded wings, with the
+// species' own shape and markings (dark marks are the colour darkened, pale marks lightened).
+const ANT = `<path d="M15 6.4c-1.6-1.7-3.3-2.4-5-2.4M17 6.4c1.6-1.7 3.3-2.4 5-2.4" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>`;
+const bell = (w, top, bot, sh = 0) =>  // a resting tortricid seen from above: narrow at the head, widest near the rear, rounded
+  // tail; half-width w, from y=top to y=bot; sh pushes the width forward (square shoulders, like OBLR)
+  `M16 ${top}c-1.5 0-2.4 1-2.7 2.3C${16 - w * (0.45 + sh)} ${top + 6} ${16 - w} ${top + 11 - sh * 6} ${16 - w} ${bot - 5}c0 3 2.8 5 ${w} 5s${w}-2 ${w}-5C${16 + w} ${top + 11 - sh * 6} ${16 + w * (0.45 + sh)} ${top + 6} 18.7 ${top + 2.3}C18.4 ${top + 1} 17.5 ${top} 16 ${top}Z`;
+const svg = body => `<svg viewBox="0 0 32 32" aria-hidden="true">${body}</svg>`;
+const DARK = 'fill="#1A1A1A" fill-opacity=".38"', PALE = 'fill="#fff" fill-opacity=".55"';
+Object.assign(ICONS, {
+  CM: svg(`${ANT}<path d="${bell(8.2, 5, 28)}"/><path d="M8.2 22.4c2 1.8 4.7 2.7 7.8 2.7s5.8-.9 7.8-2.7c0 3-3.2 5.6-7.8 5.6s-7.8-2.6-7.8-5.6Z" ${DARK}/>
+     <path d="M11 24.9c1.6.8 3.3 1.2 5 1.2s3.4-.4 5-1.2" fill="none" stroke="#FFD9A0" stroke-opacity=".95" stroke-width="1.1"/>
+     <path d="M11.3 12.5h9.4M10 15.8h12M9.2 19h13.6" stroke="#1A1A1A" stroke-opacity=".2" stroke-width=".8"/>`),
+  OFM: svg(`${ANT}<path d="${bell(5.8, 6, 27.5)}"/><path d="M12.4 13l3.6 1.8 3.6-1.8M11.3 17l4.7 2.2 4.7-2.2M10.8 21l5.2 2.2 5.2-2.2" fill="none" stroke="#1A1A1A" stroke-opacity=".3" stroke-width=".9"/>`),
+  OBLR: svg(`${ANT}<path d="${bell(9, 5, 28, 0.2)}"/><path d="M8 12.6l3.6-1.6L16 16.6v4.6Z M24 12.6l-3.6-1.6L16 16.6v4.6Z" ${DARK}/>
+     <path d="M8.2 22.8l2.8-1 1.6 3.4-2.8 1.1ZM23.8 22.8l-2.8-1-1.6 3.4 2.8 1.1Z" ${DARK}/>`),
+  lookalike_RBLR: svg(`${ANT}<path d="${bell(8, 5.5, 28)}"/><path d="M8.8 15.2l2.4-1.3L16 18.4v3Z M23.2 15.2l-2.4-1.3L16 18.4v3Z" fill="#8E1B1B" fill-opacity=".7"/>`),
+  lookalike_LAW: svg(`${ANT}<path d="${bell(5.6, 8, 27)}"/><path d="M10.6 15.6c3.6.9 7.2.9 10.8 0v3.4c-3.6.9-7.2.9-10.8 0Z" ${DARK}/>
+     <circle cx="13.6" cy="23.2" r="1.3" ${PALE}/><circle cx="18.4" cy="23.2" r="1.3" ${PALE}/>`),
+  other_tortricid: svg(`${ANT}<path d="${bell(7.4, 5.5, 28)}"/><path d="M16 8.4v19" stroke="#1A1A1A" stroke-opacity=".25" stroke-width=".9"/>`),
+  unsure: svg(`${ANT}<path d="${bell(7.4, 5.5, 28)}" fill="none" stroke="currentColor" stroke-width="1.4"/>
+     <text x="16" y="21.5" text-anchor="middle" font-size="11" font-weight="700" font-family="-apple-system, system-ui, sans-serif" fill="currentColor">?</text>`),
+});
+const iconFor = (l, unsure = false) => l === "debris" ? ICONS.debris : l === "other_insect" ? ICONS.insect
+  : unsure ? ICONS.unsure : ICONS[l] || ICONS.moth;
 const SHORT = {lookalike_RBLR: "RBLR", lookalike_LAW: "LAW", other_tortricid: "tortricid", other_moth: "other moth",
                other_insect: "other insect", debris: "debris"};
 function confirmSel() {  // Enter, or the ⏎ row: the guess is right, on to the next
@@ -298,7 +321,7 @@ function renderKey() {  // the key doubles as buttons: a row does what its key d
     const name = pass === 1 ? NAMES[l] : (k === "0" ? "moth?" : SHORT[l] || l);
     const full = pass === 1 ? NAMES[l] : (k === "0" ? "moth, species unsure" : l);
     return `<button class="lcard${cur === l ? " on" : ""}" data-act="label:${esc(l)}" title="${esc(full)} (${k})" ${sel < 0 ? "disabled" : ""}
-      style="--c:${l === "other_insect" ? "var(--insect-ui)" : colorOf({label:l})}"><kbd>${k}</kbd>${iconFor(l)}<span class="lname">${esc(name)}</span><span class="n">${counts[l] || 0}</span></button>`;
+      style="--c:${l === "other_insect" ? "var(--insect-ui)" : colorOf({label:l})}"><kbd>${k}</kbd>${iconFor(l, pass === 2 && k === "0")}<span class="lname">${esc(name)}</span><span class="n">${counts[l] || 0}</span></button>`;
   }).join("");
   $("key").innerHTML = row("⏎", "the guess is right, next", `${boxes.filter(unchecked).length} left`, "confirm")
     + row("⌫", "delete (not on the card)", counts.skip || 0, "delete")

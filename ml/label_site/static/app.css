@@ -129,11 +129,16 @@ button.krow.on { background:var(--pink); border-color:transparent; color:#fff; f
 :root { --insect-ui:#2F4470; }  /* the insect drawing: the box colour, lighter on dark panels so it shows */
 @media (prefers-color-scheme: dark) { :root { --insect-ui:#8AA2DC; } }
 .lcards { display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; }
-.lcards.many { grid-template-columns:repeat(auto-fill, minmax(76px, 1fr)); }
+.lcards.many { grid-template-columns:repeat(5, minmax(0, 1fr)); gap:4px; }  /* species: keys 1-5, then 6-9 and 0 */
+.lcards.many .lcard { padding:16px 2px 5px; font-size:10.5px; }
+.lcards.many .lcard.on { padding:15px 1px 4px; }
+.lcards.many .lcard kbd { top:3px; left:3px; font-size:9px; padding:0 3px; }
+.lcards.many .lcard .n { top:3px; right:4px; font-size:9.5px; }
+.lcards.many .lcard .lname { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; }
 .lcard { position:relative; display:flex; flex-direction:column; align-items:center; gap:2px; padding:8px 4px 6px; border-radius:10px;
          border:1px solid var(--hair); background:var(--field); color:var(--ink); font-family:var(--data); font-weight:400; font-size:12px; }
 .lcard svg { width:34px; height:34px; color:var(--c); fill:currentColor; }
-.lcards.many .lcard svg { width:26px; height:26px; }
+.lcards.many .lcard svg { width:30px; height:30px; }
 .lcard kbd { position:absolute; top:5px; left:5px; font:500 10px ui-monospace, "SF Mono", monospace; color:var(--mute);
              border:1px solid var(--hair-strong); border-radius:4px; padding:0 4px; background:var(--panel); }
 .lcard .n { position:absolute; top:5px; right:7px; font-size:11px; color:var(--mute); font-variant-numeric:tabular-nums; }
