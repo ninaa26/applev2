@@ -188,6 +188,48 @@ right, which it got wrong (`skip`), which needed fixing (`flatbug-edited`) and w
 (`manual`), which is also flatbug's score on field cards. Oct 2 2026 labels, 11 cards, phone
 resolution: 60 of 94 moths found (64%), worst on pale OBLR on a white card; 7 of 81 boxes were not
 insects (leg clumps, a leaf bud, the lure).
+
+Each insect in `labels.csv` has two lengths ([field_lengths.py](field_lengths.py)). `length_mm` is the
+long side of the smallest rotated rectangle around its whole outline, with legs, antennae and spread
+wings. It is the length `make_trap_style.py --field` gives the cutout. `body_mm` is the same insect
+with the slices narrower than a quarter of its widest part trimmed off along its long axis, so legs,
+antennae and a grid line the outline ran into are dropped. Compare `body_mm` with the resting lengths
+in `LENGTH_MM`. `length_from` is `outline`, or `box` when no usable outline was found and `length_mm`
+is the box's long side; treat a `box` length as rough. flatbug's boxes are measured on its outline.
+A box drawn or resized in the labeller is measured on save, on the outline GrabCut finds inside the
+box (`crop_field_cards.grabcut_mask`, ~0.1 s). Before Oct 25 2026 such a box got the box's long side,
+which comes out short for a slim insect lying diagonally (0.71x at 45°) and long for a loosely drawn
+box. `crop_field_cards.py --cutouts` re-measures rows from before the column existed. It also prints
+a warning for any photo whose labelled moths come out implausibly small or big for its grid scale
+(the median of the larger half outside 6–25 mm).
+
+Oct 25 2026, 11 cards, phone resolution (old values in `data/field/labels.backup-before-lengths.csv`).
+Re-measuring changed `length_mm` on 41 of the 58 drawn or resized boxes with a grid scale. Drawn
+boxes became 0.88x their box length in the median (0.62–1.08x), resized ones 0.96x (0.73–1.12x).
+Mostly they got shorter: the boxes were drawn loose and around legs. 8 drawn boxes kept the box
+length (`box`). They are insects partly off the photo or hidden, and small insects in loose boxes.
+Lengths by species (Claude's reading in `species.csv`):
+
+| species (n) | resting length (`LENGTH_MM`) | before: median (IQR) | `length_mm` | `body_mm` |
+|---|---|---|---|---|
+| CM (13) | 9–11 mm | 13.8 (12.8–15.5) | 13.3 (12.8–15.1) | 12.9 (12.3–13.5) |
+| OFM (19) | 6–7.5 mm | 9.1 (8.5–10.0) | 9.0 (8.5–9.5) | 8.6 (8.3–9.3) |
+| OBLR (35) | 10–14 mm | 16.6 (13.6–19.0) | 14.9 (13.2–17.2) | 14.1 (13.1–16.2) |
+
+`body_mm` has the smallest spread within each species (sd of log length 0.10 / 0.11 / 0.17, against
+0.12 / 0.12 / 0.19 for `length_mm`). Every species still measures ~1.2–1.35x its resting length on
+every card. That points at the scale, not the outlines. The cards' grid may be smaller than the
+25 mm `--grid-mm` assumes: one published delta-trap liner is 20.3 × 17.8 cm, and these cards fit a
+9 × 9 grid plus a margin. At 20 mm all three species would land inside their ranges. Measure a
+card's grid with a ruler before relying on absolute field lengths. Until then, `length_mm` is right
+relative to its cutout but probably ~25% too big in mm. Also checked and not changed:
+- **Tilt**: one px/mm per insect is enough. On the most tilted card (June 2025, OBLR), the px/mm at
+  an insect's two ends differs by at most 1.6%. Measuring at the centre cancels that to first order,
+  leaving a length error under 0.01%. The per-insect px/mm on that card scatters ±5% (sd)
+  around a smooth fit across the card, which is bigger than the tilt effect.
+- **Wrong grid spacing**: none of the 10 cards with a grid locked onto a wrong spacing. Each species
+  measures the same ~1.3x on every card, and a wrong lock is 2–5x. The new warning catches a lock 2x
+  or more off on a card of small moths, and 3x or more on most cards.
 Leg clumps and wing bits on the card are `debris`, not deleted: the trap sees them too.
 These are real moths on glue but not our liner or camera, so they stay apart from `data/own/`.
 Insects and debris with species-free labels train the classifier through `make_trap_style.py
