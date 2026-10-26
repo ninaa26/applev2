@@ -21,6 +21,12 @@ from .auth import COOKIE, Auth, read_cookie
 from .db import ATTRS, TAGS, Conflict, Store
 
 STATIC = Path(__file__).parent / "static"
+STATIC_TYPES = {".js": "text/javascript", ".css": "text/css", ".html": "text/html; charset=utf-8", ".woff2": "font/woff2"}
+
+
+def static_files() -> dict[str, Path]:
+    """The files the site serves under /static/, by name (read each time, so a font dropped in shows up)."""
+    return {f.name: f for f in STATIC.iterdir() if f.is_file() and f.suffix in STATIC_TYPES}
 LABELS = {"", "moth", "other_insect", "debris", "skip", "CM", "OFM", "OBLR", "lookalike_RBLR", "lookalike_LAW",
           "other_tortricid", "other_moth"}
 MAX_BODY = 2_000_000
@@ -289,14 +295,13 @@ def handler(store: Store, auth: Auth, secure: bool, species_experts: list[str]):
             if path == "/dashboard" and admin:
                 return self.send((STATIC / "dashboard.html").read_bytes(), "text/html; charset=utf-8")
             if path.startswith("/static/"):
-                name = Path(unquote(path[8:])).name
-                types = {".js": "text/javascript", ".css": "text/css", ".html": "text/html; charset=utf-8", ".woff2": "font/woff2"}
-                f = STATIC / name
-                if f.is_file() and f.suffix in types:
-                    return self.send(f.read_bytes(), types[f.suffix])
+                f = static_files().get(unquote(path[8:]))  # looked up by name: the URL never becomes a path
+                if f:
+                    return self.send(f.read_bytes(), STATIC_TYPES[f.suffix])
             if path.startswith("/guide/"):
-                f = store.site / "guide" / Path(unquote(path[7:])).name
-                if f.is_file() and f.suffix.lower() in (".jpg", ".png"):
+                guide = (store.site / "guide").resolve()
+                f = (guide / Path(unquote(path[7:])).name).resolve()
+                if f.parent == guide and f.is_file() and f.suffix.lower() in (".jpg", ".png"):
                     return self.send(f.read_bytes(), "image/jpeg" if f.suffix.lower() == ".jpg" else "image/png")
             if path == "/api/me":
                 return self.json({"user": user, "admin": admin, "species": user in species_experts,
