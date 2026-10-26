@@ -320,7 +320,7 @@ function hit(x, y) {
   return best;
 }
 function draw() {
-  ctx.setTransform(1,0,0,1,0,0); ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--stage").trim() || "#4A7DB0";
+  ctx.setTransform(1,0,0,1,0,0); ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--stage").trim() || "#111111";
   ctx.fillRect(0, 0, cv.width, cv.height);
   if (!img.complete || !img.width || !photo) return;
   ctx.setTransform(view.s, 0, 0, view.s, view.x, view.y);

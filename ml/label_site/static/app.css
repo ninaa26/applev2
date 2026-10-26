@@ -3,12 +3,12 @@
 :root {
   --pink:#EE4A7F; --sky:#8FC9D9; --orange:#FF9E1B; --red:#D40000; --mauve:#D46FA6; --denim:#4A7DB0; --outline:#1A1A1A;
   --bg:#8FC9D9; --panel:#FFF4F7; --ink:#1A1A1A; --mute:#5B5560; --hover:#FFE0EA;
-  --stage:#4A7DB0; --field:#FFFFFF;
+  --stage:#111111; --field:#FFFFFF;
   --sans:-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro", "Helvetica Neue", system-ui, sans-serif;
   --serif:"Lora", Georgia, "Times New Roman", serif;
 }
 @media (prefers-color-scheme: dark) {
-  :root { --bg:#16273A; --panel:#1E3148; --ink:#FFF4F7; --mute:#C9BCCB; --hover:#2A4260; --stage:#16273A; --field:#162536; }
+  :root { --bg:#16273A; --panel:#1E3148; --ink:#FFF4F7; --mute:#C9BCCB; --hover:#2A4260; --stage:#111111; --field:#162536; }
 }
 * { box-sizing:border-box; }
 body { margin:0; font:14px/1.4 var(--sans); color:var(--ink); background:var(--bg);
