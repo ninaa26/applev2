@@ -21,7 +21,8 @@ function renderPeople() {
   document.getElementById("people").innerHTML =
     "<tr><th>Person</th><th>To do</th><th>Boxes left</th><th>Sent back</th><th>In review</th><th>Accepted</th><th>Box changes</th><th>s / box</th>" +
     "<th>Test photos</th><th>Found</th><th>Right</th><th>Kept wrong guess</th><th>Species right</th><th>Extra boxes</th><th></th></tr>" +
-    d.people.map(p => `<tr><td>${esc(p.user)}${p.paused ? ` <span class="paused">paused</span>` : ""}</td><td>${p.open}</td><td>${p.unchecked_open}</td><td>${p.returned}</td><td>${p.done}</td><td>${p.accepted}</td>` +
+    d.people.map(p => `<tr><td>${d.admins.includes(p.user) && !p.paused ? esc(p.user)
+        : `<button class="who-btn" data-toggle="${esc(p.user)}" data-on="${p.paused ? "" : "1"}" title="${p.paused ? "Resume: new photos can come again" : "Pause: no new photos; they keep theirs"}">${esc(p.user)}</button>`}${p.paused ? ` <span class="paused">paused</span>` : ""}</td><td>${p.open}</td><td>${p.unchecked_open}</td><td>${p.returned}</td><td>${p.done}</td><td>${p.accepted}</td>` +
       `<td>${p.box_changes}</td><td>${p.sec_per_box == null ? "–" : p.sec_per_box.toFixed(1)}</td><td>${p.gold_photos}</td>` +
       `<td>${pct(p.gold_found, p.gold_gold)}</td><td>${pct(p.gold_label_right, p.gold_found)}</td>` +
       `<td>${pct(p.gold_took_wrong, p.gold_model_wrong)}${p.gold_model_wrong ? ` (${p.gold_took_wrong}/${p.gold_model_wrong})` : ""}</td>` +
@@ -30,6 +31,7 @@ function renderPeople() {
         ? `<button data-resume="${esc(p.user)}" title="New photos can come to them again">Resume</button>` +
           (p.open ? `<button data-release="${esc(p.user)}" title="Give their open photos to whoever has least left">Hand out their photos</button>` : "")
         : `<button data-pause="${esc(p.user)}" title="No new photos for them; they keep and can finish the ones they have">Pause</button>`}</td></tr>`).join("");
+  document.querySelectorAll("[data-toggle]").forEach(b => b.onclick = () => post("/api/admin/pause", {user: b.dataset.toggle, on: !!b.dataset.on}));
   document.querySelectorAll("[data-pause]").forEach(b => b.onclick = () => post("/api/admin/pause", {user: b.dataset.pause, on: true}));
   document.querySelectorAll("[data-release]").forEach(b => b.onclick = () => {  // asks once more: it moves their work
     if (b.dataset.armed) post("/api/admin/pause", {user: b.dataset.release, on: true, release: true});

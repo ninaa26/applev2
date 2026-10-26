@@ -497,11 +497,13 @@ function showSel() {
     zc.drawImage(img, cx - side/2, cy - side/2, side, side, 0, 0, 256, 256); zc.filter = "none";
   }
   const lab = b.label === "skip" ? "deleted (press a number to bring back)" : (b.label || "unlabelled");
-  $("info").innerHTML = `<b>${esc(lab)}</b>${unchecked(b) ? " · not checked yet" : ` · checked by ${esc(b.by)}`}<br>`
-    + `${esc(b.source)}${b.conf ? " · detector " + esc(b.conf) : ""}${b.detector_label ? " (" + esc(b.detector_label) + ")" : ""}`
-    + (b.model_label ? `<br>classifier: ${esc(b.model_label)} ${esc(b.model_conf)}` : "")
-    + (b.old_label ? `<br>earlier: ${esc(b.old_label)}` : "")
-    + (b.length_mm ? `<br>~${esc(b.length_mm)} mm${b.body_mm ? " (body " + esc(b.body_mm) + ")" : ""}${b.length_from === "box" ? " from the box" : ""}` : "");
+  // one line that wraps, rather than a line per fact
+  $("info").innerHTML = [`<b>${esc(lab)}</b>`, unchecked(b) ? "not checked yet" : `checked by ${esc(b.by)}`,
+    `${esc(b.source)}${b.conf ? " · detector " + esc(b.conf) : ""}${b.detector_label ? " (" + esc(b.detector_label) + ")" : ""}`,
+    b.model_label ? `classifier: ${esc(b.model_label)} ${esc(b.model_conf)}` : "",
+    b.old_label ? `earlier: ${esc(b.old_label)}` : "",
+    b.length_mm ? `~${esc(b.length_mm)} mm${b.body_mm ? " (body " + esc(b.body_mm) + ")" : ""}${b.length_from === "box" ? " from the box" : ""}` : "",
+  ].filter(Boolean).join(" · ");
   attrsOf(b).forEach(a => { const x = document.querySelector(`#attrs [data-a="${a}"]`); if (x) x.classList.add("on"); });
   $("lock").textContent = b.locked ? "🔓 Unlock box (L)" : "🔒 Lock box (L)";
 }
