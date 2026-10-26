@@ -385,7 +385,7 @@ def handler(store: Store, auth: Auth, secure: bool, species_experts: list[str]):
                 try:
                     boxes = clean_boxes(body.get("boxes"), photo_size(store.site, t["photo"]))
                 except (ValueError, KeyError, TypeError) as e:
-                    return self.send(f"bad save ({e}): reload the page".encode(), "text/plain", 400)
+                    return self.send(f"the server refused this save ({e}); tell nina".encode(), "text/plain", 400)
                 try:
                     rows = store.save(t["photo"], t["copy"], boxes, user, body.get("base"), remeasure)
                 except Conflict:

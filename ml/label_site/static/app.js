@@ -133,7 +133,7 @@ function changed() {
   if (warnUnchecked && !boxes.some(unchecked)) { hideFinishAsk(); setStatus("all boxes checked: press Done"); }
   else if (warnUnchecked) $("finishAskText").textContent = `${boxes.filter(unchecked).length} still not checked (outlined in red). Are you sure you're done?`;
   undoButtons(); draw(); showSel(); renderKey();
-  dirty = true; setStatus("saving…");
+  dirty = true; setSave("saving");
   clearTimeout(saveTimer); saveTimer = setTimeout(flush, 300);
 }
 async function flush() {
@@ -144,10 +144,11 @@ async function flush() {
     const r = await api("/api/save", {task: t.id, base: version,
       boxes: sent.map(b => ({id:b.id, x1:b.x1, y1:b.y1, x2:b.x2, y2:b.y2, label:b.label, attrs:b.attrs || "", locked:b.locked, confirm:!!b.confirm, unlock:!!b.unlock}))});
     if (r.status === 409) {
-      const cur = await r.json();
-      if (cur.boxes) { if (t === task) { boxes = cur.boxes; version = cur.version; sel = -1; undoStack = []; redoStack = []; draw(); }
-        setStatus("someone else changed this photo just now: their version is shown; redo your last change"); }
-      else setStatus(await r.text());
+      const text = await r.text();
+      let cur = null; try { cur = JSON.parse(text); } catch (e) {}
+      if (cur && cur.boxes) { if (t === task) { boxes = cur.boxes; version = cur.version; sel = -1; undoStack = []; redoStack = []; draw(); }
+        setSave("saved", "someone else changed this photo just now: their version is shown; redo your last change"); }
+      else throw new Error(text);
     } else if (!r.ok) { throw new Error(await r.text()); }
     else {
       const res = await r.json();
@@ -156,9 +157,9 @@ async function flush() {
         if (boxes === sent && !dirty && sent.length === res.boxes.length) { boxes = res.boxes; if (sel >= boxes.length) sel = -1; }
         else sent.forEach(b => { delete b.confirm; delete b.unlock; });
       }
-      setStatus("saved");
+      setSave(dirty ? "saving" : "saved");
     }
-  } catch (e) { dirty = true; setStatus("NOT SAVED: " + e.message); }
+  } catch (e) { dirty = true; setSave("error", e.message); }
   saving = false;
   if (dirty) { clearTimeout(saveTimer); saveTimer = setTimeout(flush, 300); }
   draw(); showSel(); renderKey(); updateCount();
@@ -168,7 +169,25 @@ function updateCount() {
   if (q) { q.n = boxes.filter(b => b.label !== "skip").length; q.unchecked = boxes.filter(unchecked).length; renderQueue(); }
 }
 window.addEventListener("beforeunload", e => { if (dirty) { flush(); e.preventDefault(); } });
-function setStatus(t) { $("status").textContent = t; }
+function setStatus(t) {
+  if ($("status").className === "save-error" && dirty) return;  // never cover up unsaved work
+  $("status").className = ""; $("status").textContent = t;
+}
+// The save state, hard to miss: amber while saving, green when saved, big pulsing red (and the tab title) when not.
+let savedFade = null;
+function setSave(state, msg = "") {
+  const el = $("status");
+  clearTimeout(savedFade);
+  el.className = "save-" + state;
+  document.title = state === "error" ? "⚠ Not saved · Liner labels" : "Liner labels";
+  if (state === "saving") el.textContent = "Saving…";
+  else if (state === "saved") { el.textContent = msg || "✓ Saved"; if (!msg) savedFade = setTimeout(() => el.classList.add("faded"), 2500); }
+  else {
+    el.innerHTML = `<b>⚠ NOT SAVED</b><span>${esc(msg).slice(0, 200)}</span><span>Don't reload or close this tab.</span>` +
+      `<button id="retrySave">Retry now</button>`;
+    $("retrySave").onclick = () => { dirty = true; flush(); };
+  }
+}
 
 // ---------- undo
 const snap = () => ({task: task && task.id, boxes: JSON.parse(JSON.stringify(boxes)), sel});
