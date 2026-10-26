@@ -44,13 +44,12 @@ select, textarea, input[type=text] { font:inherit; font-size:12px; background:va
 @font-face { font-family:"Naru Mono"; font-weight:400 700; font-display:swap;
              src:local("Naru Mono"), local("NaruMono-Regular"), url("/static/NaruMono.woff2") format("woff2"); }
 #me { position:relative; margin-bottom:12px; }
-.account { display:flex; align-items:center; gap:6px; padding:8px 6px 8px 10px; border-radius:14px; background:var(--field);
+.account { display:flex; align-items:center; gap:6px; padding:8px 10px 8px 6px; border-radius:14px; background:var(--field);
            border:1px solid var(--hair); }
 .who { flex:1; min-width:0; display:flex; align-items:center; justify-content:center; gap:5px; color:var(--tone); }
-.who b { font:500 22px/1.1 "Naru Mono", "DM Mono", ui-monospace, monospace; letter-spacing:.01em; color:var(--tone);
+.who b { font:500 18px/1.1 "Naru Mono", "DM Mono", ui-monospace, monospace; letter-spacing:.01em; color:var(--tone);
          overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
 .mmark { width:20px; height:20px; flex:none; fill:currentColor; }
-.who .mmark:first-child { transform:rotate(-24deg); } .who .mmark:last-child { transform:rotate(24deg); }
 .cog { width:30px; height:30px; padding:0; display:grid; place-items:center; border:0; background:none; color:var(--mute); flex:none;
        border-radius:8px; cursor:pointer; }
 .cog svg { width:19px; height:19px; transition:transform .35s ease; }

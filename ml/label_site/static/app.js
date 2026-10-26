@@ -688,12 +688,12 @@ function setPanels(l, r) {
   if (img.complete && img.width) { fit(); draw(); }
   fitName();
 }
-// The name is as big as the panel allows (22 px at most, 13 px at least), never cut short when there is room.
+// The name is as big as the panel allows (18 px at most, 12 px at least), never cut short when there is room.
 function fitName() {
   const b = document.querySelector(".who b");
   if (!b) return;
   b.style.fontSize = "";
-  for (let px = 22; px > 13 && b.scrollWidth > b.clientWidth; px--) b.style.fontSize = px - 1 + "px";
+  for (let px = 18; px > 12 && b.scrollWidth > b.clientWidth; px--) b.style.fontSize = px - 1 + "px";
 }
 let panels = [PANEL.l, PANEL.r], ownPanels = false;  // ownPanels: this browser was resized by hand
 try { const p = JSON.parse(localStorage.getItem("panels")); if (p) { panels = p; ownPanels = true; } } catch (e) {}
@@ -730,8 +730,8 @@ function renderAccount() {
   const tone = tones[[...me.user].reduce((a, c) => a + c.charCodeAt(0), 0) % tones.length];
   const item = (id, icon, text, extra = "") => `<button class="mitem${extra}" id="${id}" role="menuitem">${MENU_ICON[icon]}<span>${text}</span></button>`;
   $("me").innerHTML = `<div class="account" style="--tone:${tone}">
-      <div class="who">${MOTH_MARK}<b title="${esc(me.user)}">${esc(me.user)}</b>${MOTH_MARK}</div>
       <button id="cog" class="cog" aria-label="Settings" aria-haspopup="menu" aria-expanded="false" title="Settings">${COG}</button>
+      <div class="who">${MOTH_MARK}<b title="${esc(me.user)}">${esc(me.user)}</b>${MOTH_MARK}</div>
     </div>
     <div class="menu" id="cogMenu" role="menu" hidden>
       <div class="mrole">Signed in as <b>${me.admin ? "Admin" : "Labeller"}</b></div>
