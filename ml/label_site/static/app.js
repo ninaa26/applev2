@@ -245,14 +245,15 @@ function order() {  // Tab order: the filter's, least sure first when asked
 $("thr").oninput = () => { $("thrv").textContent = thr().toFixed(2); draw(); };
 ["bri", "con", "sat"].forEach(id => $(id).oninput = () => draw());
 $("resetImg").onclick = () => { $("bri").value = 100; $("con").value = 100; $("sat").value = 100; draw(); };
+// One bold colour per label, from the site's palette (pink, orange, mauve, navy, sage family); red is kept for warnings.
+const LABEL_COLOURS = {
+  "": "#111111", moth: "#E0A100", CM: "#EE4A7F", OFM: "#FF6A13", OBLR: "#1E9A8A", lookalike_RBLR: "#A3284F",
+  lookalike_LAW: "#8DAA1E", other_tortricid: "#7A5AE0", other_moth: "#D46FA6", other_insect: "#2F5BB0", debris: "#8C7A68",
+};
+const LIGHT_LABELS = new Set(["moth", "OFM", "lookalike_LAW"]);  // dark text on these, white on the rest
 function colorOf(b) {
-  const l = b.label;
-  // moth orange, other insect deep navy, debris mauve, a named species hot pink, unlabelled near-black
-  if (!l) return "#111111";
-  if (l === "other_insect") return "#2F4470";
-  if (l === "debris") return "#D46FA6";
-  if (l === "skip") return "#ffffff55";
-  return l === "moth" || l === "OFM" ? "#FF9E1B" : "#EE4A7F";  // OFM orange, the other species hot pink
+  if (b.label === "skip") return "#ffffff55";
+  return LABEL_COLOURS[b.label || ""] || "#EE4A7F";
 }
 // Little drawings for the label cards, in the label's colour (currentColor): a moth with spread wings, a beetle for
 // "other insect", and scattered bits for debris. Every moth species uses the moth.
@@ -321,7 +322,7 @@ function renderKey() {  // the key doubles as buttons: a row does what its key d
     const name = pass === 1 ? NAMES[l] : (k === "0" ? "moth?" : SHORT[l] || l);
     const full = pass === 1 ? NAMES[l] : (k === "0" ? "moth, species unsure" : l);
     return `<button class="lcard${cur === l ? " on" : ""}" data-act="label:${esc(l)}" title="${esc(full)} (${k})" ${sel < 0 ? "disabled" : ""}
-      style="--c:${l === "other_insect" ? "var(--insect-ui)" : colorOf({label:l})}"><kbd>${k}</kbd>${iconFor(l, pass === 2 && k === "0")}<span class="lname">${esc(name)}</span><span class="n">${counts[l] || 0}</span></button>`;
+      style="--c:${colorOf({label:l})}"><kbd>${k}</kbd>${iconFor(l, pass === 2 && k === "0")}<span class="lname">${esc(name)}</span><span class="n">${counts[l] || 0}</span></button>`;
   }).join("");
   $("key").innerHTML = row("⏎", "the guess is right, next", `${boxes.filter(unchecked).length} left`, "confirm")
     + row("⌫", "delete (not on the card)", counts.skip || 0, "delete")
@@ -390,7 +391,7 @@ function draw() {
       + (b.source === "manual" ? " ✎" : "") + (a ? " " + a : "") + (b.locked ? " 🔒" : "");
     ctx.font = `600 ${12*lw}px -apple-system, system-ui, sans-serif`; const w = ctx.measureText(t).width + 6*lw;
     ctx.fillStyle = colorOf(b); ctx.fillRect(b.x1, b.y1 - 16*lw, w, 16*lw);
-    ctx.fillStyle = b.label === "moth" ? "#1A1A1A" : "#fff"; ctx.fillText(t, b.x1 + 3*lw, b.y1 - 4*lw);
+    ctx.fillStyle = LIGHT_LABELS.has(b.label) ? "#1A1A1A" : "#fff"; ctx.fillText(t, b.x1 + 3*lw, b.y1 - 4*lw);
     ctx.globalAlpha = 1;
   });
   if (warnUnchecked) {  // after Done with dashed boxes left: a red ring around each, drawn in screen-sized pixels

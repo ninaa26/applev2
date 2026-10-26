@@ -126,8 +126,9 @@ button.krow.on { background:var(--pink); border-color:transparent; color:#fff; f
   font-family:var(--data); font-weight:400; letter-spacing:.005em; }
 #info b, .item.on .name, button.krow.on { font-weight:500; }
 /* the label cards: side by side, each with its drawing in the label's colour (--c) */
-:root { --insect-ui:#2F4470; }  /* the insect drawing: the box colour, lighter on dark panels so it shows */
-@media (prefers-color-scheme: dark) { :root { --insect-ui:#8AA2DC; } }
+@media (prefers-color-scheme: dark) {  /* the drawings a touch brighter on the navy panels, so deep colours still show */
+  .lcard svg { color:color-mix(in srgb, var(--c) 72%, white); }
+}
 .lcards { display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; }
 .lcards.many { grid-template-columns:repeat(5, minmax(0, 1fr)); gap:4px; }  /* species: keys 1-5, then 6-9 and 0 */
 .lcards.many .lcard { padding:16px 2px 5px; font-size:10.5px; }
