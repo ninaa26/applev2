@@ -14,13 +14,12 @@ body { margin:0; min-height:100vh; display:grid; place-items:center; color:var(-
 #moth { position:fixed; left:0; top:0; width:58px; height:58px; pointer-events:none; z-index:2; visibility:hidden;
         filter:drop-shadow(3px 4px 0 rgba(26,26,26,.28)); will-change:transform; }
 #moth .wing { transform-box:view-box; transform-origin:32px 32px; }
-#moth .fore, #moth .hind { fill:#F4E7D3; stroke:var(--outline); stroke-width:1.6; stroke-linejoin:round; }
-#moth .hind { fill:#E6D2B5; }
+#moth .fore { fill:#F4E7D3; stroke:var(--outline); stroke-width:1.6; stroke-linejoin:round; }
 #moth .spot { fill:#B98B5C; }
 #moth .vein { fill:none; stroke:#B98B5C; stroke-width:1; stroke-linecap:round; }
 #moth .body { fill:#3A2F2A; }
 #moth .ant { fill:none; stroke:#3A2F2A; stroke-width:1.4; stroke-linecap:round; }
-#moth.flying .wing { animation:flap .12s ease-in-out infinite alternate; }
+#moth.flying .wing { animation:flap .18s ease-in-out infinite alternate; }
 #moth.flap2 .wing { animation:flap2 .6s ease-in-out 2; }
 @keyframes flap { from { transform:scaleX(1); } to { transform:scaleX(.18); } }
 @keyframes flap2 { 50% { transform:scaleX(.15); } }

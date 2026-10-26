@@ -1,4 +1,4 @@
-// The login page's moth: it flies in from off screen, wanders about for a few seconds, lands on the corner
+// The login page's moth: it flies in from off screen on a short easy curve, lands on the corner
 // of the login card and flaps its wings twice. With reduced motion it is simply sitting there.
 (() => {
   const moth = document.getElementById("moth"), SIZE = 58;
@@ -12,17 +12,15 @@
   }
 
   const place = (x, y, deg) => { moth.style.transform = `translate(${x - SIZE / 2}px, ${y - SIZE / 2}px) rotate(${deg}deg)`; };
-  const REST = -45;  // heading once it has landed: facing out of the corner
+  const REST = 135;  // heading once it has landed: facing into the card, wings fanned out to the top left
 
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
     const [x, y] = landing(); place(x, y, REST); moth.style.visibility = "visible"; return;
   }
 
-  // Waypoints as shares of the screen: in from the left edge, a loop round the page, then the landing spot.
+  // A short, gentle route: in from the left edge, one easy curve, down onto the corner from above and to the left.
   const [lx, ly] = landing();
-  const pts = [[-0.1, 0.78], [0.18, 0.6], [0.36, 0.2], [0.62, 0.12], [0.84, 0.38], [0.7, 0.72], [0.42, 0.88], [0.2, 0.62]]
-    .map(([x, y]) => [x * W(), y * H()]);
-  pts.push([lx - 70, ly - 60], [lx, ly]);  // comes in to the corner from above and to the left
+  const pts = [[-0.06 * W(), ly + 0.28 * H()], [Math.max(40, lx - 0.22 * W()), ly + 0.06 * H()], [lx - 70, ly - 60], [lx, ly]];
   const P = [pts[0], ...pts, pts[pts.length - 1]];  // Catmull-Rom needs a point beyond each end
   const at = (u) => {  // u in 0..1 along the whole route
     const n = pts.length - 1, s = Math.min(n - 1e-9, u * n), i = Math.floor(s), t = s - i;
@@ -32,18 +30,18 @@
     return [c(0), c(1)];
   };
 
-  const DUR = 7000, t0 = performance.now() + 600;
-  let heading = 90, last = at(0);
+  const DUR = 4500, t0 = performance.now() + 400;
+  let heading = 70, last = at(0);
   moth.classList.add("flying");
   function frame(now) {
     const k = Math.max(0, (now - t0) / DUR);
     if (k >= 1) return land();
-    const u = 1 - Math.pow(1 - k, 1.8);  // slows down as it comes in to land
-    const [x, y] = at(u), bob = Math.sin(now / 90) * 3 * (1 - k);  // flutter, settling as it lands
+    const u = k < 0.5 ? 2 * k * k * 0.9 + k * 0.1 : 1 - Math.pow(1 - k, 2) * 2 * 0.9 - (1 - k) * 0.1;  // eases in and out
+    const [x, y] = at(u), bob = Math.sin(now / 160) * 1.5 * (1 - k);  // flutter, settling as it lands
     const dir = Math.atan2(y - last[1], x - last[0]) * 180 / Math.PI + 90;  // the drawing faces up
-    if (Math.hypot(x - last[0], y - last[1]) > 0.3) heading += ((((dir - heading) % 360) + 540) % 360 - 180) * 0.15;
+    if (Math.hypot(x - last[0], y - last[1]) > 0.3) heading += ((((dir - heading) % 360) + 540) % 360 - 180) * 0.08;
     last = [x, y];
-    place(x, y + bob, k > 0.92 ? heading + (REST - heading) * (k - 0.92) / 0.08 : heading);
+    place(x, y + bob, k > 0.85 ? heading + ((((REST - heading) % 360) + 540) % 360 - 180) * (k - 0.85) / 0.15 : heading);
     moth.style.visibility = "visible";
     requestAnimationFrame(frame);
   }
