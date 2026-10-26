@@ -629,7 +629,7 @@ setPanels(...panels);
 // ---------- start
 (async function start() {
   me = await (await api("/api/me")).json();
-  $("me").innerHTML = `<span>Signed in as <b>${esc(me.user)}</b></span><span>${me.admin ? `<a href="/dashboard">Dashboard</a> · ` : ""}<button id="logout" class="small">Log out</button></span>`;
+  $("me").innerHTML = `<span><b>${esc(me.user)}</b></span><span>${me.admin ? `<a href="/dashboard">Dashboard</a> · ` : ""}<button id="logout" class="small">Log out</button></span>`;
   $("logout").onclick = async () => { await api("/logout", {}); location.href = "/login"; };
   $("reviewTab").hidden = !me.admin;
   if (me.panels) { [PANEL.l, PANEL.r] = me.panels; if (!ownPanels) { panels = [...me.panels]; setPanels(...panels); } }
