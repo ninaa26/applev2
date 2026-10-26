@@ -255,40 +255,71 @@ function colorOf(b) {
   if (b.label === "skip") return "#ffffff55";
   return LABEL_COLOURS[b.label || ""] || "#EE4A7F";
 }
-// Little drawings for the label cards, in the label's colour (currentColor): a moth with spread wings, a beetle for
-// "other insect", and scattered bits for debris. Every moth species uses the moth.
+// Little drawings for the label cards, monochrome in the label's colour: every mark is the colour itself (currentColor),
+// a darker shade of it (DARK) or a paler one (PALE), never another hue. A moth with spread wings for "moth" and
+// "other moth", a beetle for "other insect", scattered bits for debris.
+const DARK = 'style="fill:color-mix(in srgb, currentColor 52%, #000)"', PALE = 'style="fill:color-mix(in srgb, currentColor 38%, #fff)"';
+const DARK_LINE = 'style="stroke:color-mix(in srgb, currentColor 52%, #000)" fill="none"', PALE_LINE = 'style="stroke:color-mix(in srgb, currentColor 38%, #fff)" fill="none"';
 const ICONS = {
   moth: `<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 9.8C12.2 7 5.4 6.4 3.2 9c.4 4.3 6 9.6 12.8 10.3Z"/>
-    <path d="M16 9.8c3.8-2.8 10.6-3.4 12.8-.8-.4 4.3-6 9.6-12.8 10.3Z"/><path d="M16 17.4c-2.9.9-5.6 2.7-5 4.6.7 1.6 3.2.9 5-2Z" opacity=".75"/>
-    <path d="M16 17.4c2.9.9 5.6 2.7 5 4.6-.7 1.6-3.2.9-5-2Z" opacity=".75"/><ellipse cx="16" cy="15.6" rx="1.7" ry="7"/>
+    <path d="M16 9.8c3.8-2.8 10.6-3.4 12.8-.8-.4 4.3-6 9.6-12.8 10.3Z"/><path d="M16 17.4c-2.9.9-5.6 2.7-5 4.6.7 1.6 3.2.9 5-2Z" ${PALE}/>
+    <path d="M16 17.4c2.9.9 5.6 2.7 5 4.6-.7 1.6-3.2.9-5-2Z" ${PALE}/>
+    <path d="M15 11.5C12 10 8 9.4 5 9.8M15 13.5c-3 .2-6 1.4-8.2 3.4M17 11.5c3-1.5 7-2.1 10-1.7M17 13.5c3 .2 6 1.4 8.2 3.4" ${PALE_LINE} stroke-width=".8" stroke-linecap="round"/>
+    <circle cx="10" cy="12" r="1.2" ${DARK}/><circle cx="22" cy="12" r="1.2" ${DARK}/><ellipse cx="16" cy="15.6" rx="1.7" ry="7" ${DARK}/>
     <path d="M15.2 9.3c-1.2-2.4-3-4-5.2-4.6M16.8 9.3c1.2-2.4 3-4 5.2-4.6" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`,
   insect: `<svg viewBox="0 0 32 32" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
     <path d="M11.5 13 7 10.5M11 17H6M11.5 21 7 24M20.5 13l4.5-2.5M21 17h5M20.5 21l4.5 3M14.5 8.5 12.5 4.5M17.5 8.5l2-4"/></g>
-    <circle cx="16" cy="10" r="2.8"/><ellipse cx="16" cy="19" rx="5.6" ry="7.6"/>
-    <path d="M16 12.2v14.2" style="stroke:var(--field)" stroke-width="1.1"/></svg>`,
-  debris: `<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 9.5 10.5 7l2 3.6-3.4 2.6Z"/><path d="M19.5 6.5l4.2.8-.9 3.9-3.8-.6Z"/>
-    <path d="M13 19.5l3.6-1.6 1.6 3.4-4.2 1.4Z"/><circle cx="24.5" cy="19" r="1.8"/><circle cx="8" cy="22.5" r="1.3"/><circle cx="20" cy="26" r="1.1"/>
+    <circle cx="16" cy="10" r="2.8" ${DARK}/><ellipse cx="16" cy="19" rx="5.6" ry="7.6"/>
+    <path d="M16 12.2v14.2" style="stroke:var(--field)" stroke-width="1.1"/><circle cx="13.6" cy="17" r=".9" ${PALE}/><circle cx="18.4" cy="17" r=".9" ${PALE}/></svg>`,
+  debris: `<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 9.5 10.5 7l2 3.6-3.4 2.6Z"/><path d="M19.5 6.5l4.2.8-.9 3.9-3.8-.6Z" ${DARK}/>
+    <path d="M13 19.5l3.6-1.6 1.6 3.4-4.2 1.4Z"/><circle cx="24.5" cy="19" r="1.8" ${DARK}/><circle cx="8" cy="22.5" r="1.3"/><circle cx="20" cy="26" r="1.1"/>
     <path d="M17 12.5c2.2 1 4.2 1.3 6.4 1" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
 };
-// Pass 2: each species drawn as it rests on the glue, seen from above: a tortricid "bell" of folded wings, with the
-// species' own shape and markings (dark marks are the colour darkened, pale marks lightened).
+// Pass 2: each species drawn as it rests on the glue, seen from above: a tortricid "bell" of folded wings, the wing
+// tips at the rear, with the species' own size, shape and field marks.
+//   CM: grey bell with fine wavy cross-lines and the shiny eyespot at each wing tip.
+//   OFM: small and narrow, dark chevrons, a row of short pale dashes down each outer edge.
+//   OBLR: broad square shoulders, dark basal patch, the oblique band meeting in a V, a spot near each tip.
+//   RBLR: pale base, one narrow bold band running obliquely back, dark tips.
+//   LAW: smallest, dark, a pale band across the middle and pale spots near the tips.
+//   tortricid: plain bell, wing seam and faint mottling.
 const ANT = `<path d="M15 6.4c-1.6-1.7-3.3-2.4-5-2.4M17 6.4c1.6-1.7 3.3-2.4 5-2.4" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>`;
 const bell = (w, top, bot, sh = 0) =>  // a resting tortricid seen from above: narrow at the head, widest near the rear, rounded
   // tail; half-width w, from y=top to y=bot; sh pushes the width forward (square shoulders, like OBLR)
   `M16 ${top}c-1.5 0-2.4 1-2.7 2.3C${16 - w * (0.45 + sh)} ${top + 6} ${16 - w} ${top + 11 - sh * 6} ${16 - w} ${bot - 5}c0 3 2.8 5 ${w} 5s${w}-2 ${w}-5C${16 + w} ${top + 11 - sh * 6} ${16 + w * (0.45 + sh)} ${top + 6} 18.7 ${top + 2.3}C18.4 ${top + 1} 17.5 ${top} 16 ${top}Z`;
 const svg = body => `<svg viewBox="0 0 32 32" aria-hidden="true">${body}</svg>`;
-const DARK = 'fill="#1A1A1A" fill-opacity=".38"', PALE = 'fill="#fff" fill-opacity=".55"';
+// A bell with its markings clipped to the wings, so marks can run off the edges.
+let clipN = 0;
+const wings = (outline, marks) => { const id = `lw${++clipN}`;
+  return `<defs><clipPath id="${id}"><path d="${outline}"/></clipPath></defs><path d="${outline}"/><g clip-path="url(#${id})">${marks}</g>`
+    + `<path d="M16 ${outline.match(/M16 ([\d.]+)/)[1] * 1 + 3}V27.6" ${DARK_LINE} stroke-width=".55" opacity=".7"/>`; };
 Object.assign(ICONS, {
-  CM: svg(`${ANT}<path d="${bell(8.2, 5, 28)}"/><path d="M8.2 22.4c2 1.8 4.7 2.7 7.8 2.7s5.8-.9 7.8-2.7c0 3-3.2 5.6-7.8 5.6s-7.8-2.6-7.8-5.6Z" ${DARK}/>
-     <path d="M11 24.9c1.6.8 3.3 1.2 5 1.2s3.4-.4 5-1.2" fill="none" stroke="#FFD9A0" stroke-opacity=".95" stroke-width="1.1"/>
-     <path d="M11.3 12.5h9.4M10 15.8h12M9.2 19h13.6" stroke="#1A1A1A" stroke-opacity=".2" stroke-width=".8"/>`),
-  OFM: svg(`${ANT}<path d="${bell(5.8, 6, 27.5)}"/><path d="M12.4 13l3.6 1.8 3.6-1.8M11.3 17l4.7 2.2 4.7-2.2M10.8 21l5.2 2.2 5.2-2.2" fill="none" stroke="#1A1A1A" stroke-opacity=".3" stroke-width=".9"/>`),
-  OBLR: svg(`${ANT}<path d="${bell(9, 5, 28, 0.2)}"/><path d="M8 12.6l3.6-1.6L16 16.6v4.6Z M24 12.6l-3.6-1.6L16 16.6v4.6Z" ${DARK}/>
-     <path d="M8.2 22.8l2.8-1 1.6 3.4-2.8 1.1ZM23.8 22.8l-2.8-1-1.6 3.4 2.8 1.1Z" ${DARK}/>`),
-  lookalike_RBLR: svg(`${ANT}<path d="${bell(8, 5.5, 28)}"/><path d="M8.8 15.2l2.4-1.3L16 18.4v3Z M23.2 15.2l-2.4-1.3L16 18.4v3Z" fill="#8E1B1B" fill-opacity=".7"/>`),
-  lookalike_LAW: svg(`${ANT}<path d="${bell(5.6, 8, 27)}"/><path d="M10.6 15.6c3.6.9 7.2.9 10.8 0v3.4c-3.6.9-7.2.9-10.8 0Z" ${DARK}/>
-     <circle cx="13.6" cy="23.2" r="1.3" ${PALE}/><circle cx="18.4" cy="23.2" r="1.3" ${PALE}/>`),
-  other_tortricid: svg(`${ANT}<path d="${bell(7.4, 5.5, 28)}"/><path d="M16 8.4v19" stroke="#1A1A1A" stroke-opacity=".25" stroke-width=".9"/>`),
+  CM: svg(`${ANT}${wings(bell(8.2, 5, 28), `
+     <path d="M8 11.6q2 -1 4 0t4 0 4 0 4 0M7.6 14.6q2.1 -1 4.2 0t4.2 0 4.2 0 4.2 0M7.4 17.6q2.15 -1 4.3 0t4.3 0 4.3 0 4.3 0" ${DARK_LINE} stroke-width=".7" opacity=".75"/>
+     <path d="M7 20.2c3 1 6 1.4 9 1.4s6-.4 9-1.4v2.2c-3 1-6 1.4-9 1.4s-6-.4-9-1.4Z" ${DARK} opacity=".55"/>
+     <ellipse cx="11.6" cy="25.2" rx="3" ry="2" transform="rotate(-18 11.6 25.2)" ${DARK}/><ellipse cx="20.4" cy="25.2" rx="3" ry="2" transform="rotate(18 20.4 25.2)" ${DARK}/>
+     <path d="M9.6 25.6l3.6-1.1M18.8 24.5l3.6 1.1M10.2 26.6l3-.9M18.8 25.7l3 .9" ${PALE_LINE} stroke-width=".7" stroke-linecap="round"/>`)}`),
+  OFM: svg(`${ANT}${wings(bell(5.8, 6, 27.5), `
+     <path d="M12.4 13l3.6 1.8 3.6-1.8M11.3 17l4.7 2.2 4.7-2.2M10.8 21l5.2 2.2 5.2-2.2" ${DARK_LINE} stroke-width="1"/>
+     <path d="M10.6 11.6l1.6.8M10.2 14.6l1.7.6M10 17.6l1.8.5M10 20.6l1.8.4M10.2 23.4l1.7.3M21.4 11.6l-1.6.8M21.8 14.6l-1.7.6M22 17.6l-1.8.5M22 20.6l-1.8.4M21.8 23.4l-1.7.3" ${PALE_LINE} stroke-width=".9" stroke-linecap="round"/>
+     <circle cx="13.4" cy="25.4" r=".8" ${DARK}/><circle cx="18.6" cy="25.4" r=".8" ${DARK}/>`)}`),
+  OBLR: svg(`${ANT}${wings(bell(9, 5, 28, 0.2), `
+     <path d="M6 7h20v4.6c-3.3 1-6.7 1.5-10 1.5S9.3 12.6 6 11.6Z" ${DARK} opacity=".75"/>
+     <path d="M6 14.6l3.2-1.4L16 18.4l6.8-5.2 3.2 1.4L16 22.6Z" ${DARK}/>
+     <path d="M6.8 22.4l3.4-1.2 1.4 3.6-3.4 1.1ZM25.2 22.4l-3.4-1.2-1.4 3.6 3.4 1.1Z" ${DARK}/>
+     <path d="M9.8 16.8l1.6 1.2M22.2 16.8l-1.6 1.2" ${PALE_LINE} stroke-width=".6"/>`)}`),
+  lookalike_RBLR: svg(`${ANT}${wings(bell(8, 5.5, 28), `
+     <path d="M6 6h20v8.6H6Z" ${PALE} opacity=".8"/>
+     <path d="M7 14.4l2-1.6L16 19.8l7-7 2 1.6L16 23.2Z" ${DARK}/>
+     <path d="M7 25.4c2-1 3.6-.8 5 .4l-1 3H7ZM25 25.4c-2-1-3.6-.8-5 .4l1 3h4Z" ${DARK} opacity=".7"/>`)}`),
+  lookalike_LAW: svg(`${ANT}${wings(bell(5.6, 8, 27), `
+     <path d="M8 8h16v20H8Z" ${DARK} opacity=".55"/>
+     <path d="M10.4 15.6c3.7.9 7.5.9 11.2 0v2.6c-3.7.9-7.5.9-11.2 0Z" ${PALE}/>
+     <circle cx="13.6" cy="23.2" r="1.3" ${PALE}/><circle cx="18.4" cy="23.2" r="1.3" ${PALE}/>`)}`),
+  other_tortricid: svg(`${ANT}${wings(bell(7.4, 5.5, 28), `
+     <circle cx="12" cy="13" r="1" ${DARK} opacity=".6"/><circle cx="20" cy="13" r="1" ${DARK} opacity=".6"/>
+     <circle cx="11" cy="19" r="1.2" ${DARK} opacity=".5"/><circle cx="21" cy="19" r="1.2" ${DARK} opacity=".5"/>
+     <circle cx="13.6" cy="23.8" r=".9" ${PALE}/><circle cx="18.4" cy="23.8" r=".9" ${PALE}/>`)}`),
   unsure: svg(`${ANT}<path d="${bell(7.4, 5.5, 28)}" fill="none" stroke="currentColor" stroke-width="1.4"/>
      <text x="16" y="21.5" text-anchor="middle" font-size="11" font-weight="700" font-family="-apple-system, system-ui, sans-serif" fill="currentColor">?</text>`),
 });
