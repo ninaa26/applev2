@@ -550,7 +550,7 @@ $("lock").onclick = toggleLock;
 function setDraw(on) {
   drawMode = on; const b = $("draw");
   b.classList.toggle("on", on); b.textContent = on ? "▭ Draw box: ON (B) · click or drag" : "▭ Draw box: off (B)";
-  $("mDraw").classList.toggle("on", on); $("mDraw").textContent = on ? "▭ Drawing" : "▭ Draw";
+  $("mDraw").classList.toggle("on", on); $("mDraw").textContent = on ? "▭ Draw box: on" : "▭ Draw box: off";
   cv.style.cursor = on ? "crosshair" : "grab";
 }
 $("draw").onclick = $("mDraw").onclick = () => setDraw(!drawMode);
