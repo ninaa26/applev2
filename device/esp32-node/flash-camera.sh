@@ -2,8 +2,9 @@
 # Flash an ESP32 camera over USB. The hub's Wi-Fi, HUB_URL and pins come from include/node_config.h, filled
 # in once; every camera after that is one command.
 #   device/esp32-node/flash-camera.sh              # a new camera for pairing: it has no trap id or key, and asks
-#                                                  # to be added when switched on near a hub. Prints the code
-#                                                  # for its sticker.
+#                                                  # to be added when switched on near a hub. Prints its code and
+#                                                  # secret for its sticker (it reads the secret, which the camera
+#                                                  # makes on its first boot, off the serial port).
 #   device/esp32-node/flash-camera.sh T3 <key>     # a camera already added on the dashboard (Set up traps):
 #                                                  # puts its trap id and key in node_config.h and flashes it
 set -euo pipefail
@@ -34,13 +35,36 @@ if [[ $# -eq 0 ]]; then
   pio run -e release -t erase   # a board that was another trap forgets its trap id, key and photos
   pio run -e release -t upload | tee "$log"
   mac=$(sed -n 's/^MAC: *\([0-9a-fA-F:]*\).*/\1/p' "$log" | head -1 | tr -d : | tr a-f A-F)
+  port=$(sed -n 's/^Serial port \(.*\)$/\1/p' "$log" | head -1)
   rm -f "$log"
+  # The camera makes its secret on its first boot and prints it on the serial port while it pairs. pio's own
+  # Python has pyserial.
+  py=$(head -1 "$(command -v pio)" | sed 's/^#!//')
+  secret=$("$py" - "$port" <<'PY' || true
+import re, sys, time
+import serial
+with serial.Serial(sys.argv[1], 115200, timeout=1) as s:
+    end = time.time() + 60
+    while time.time() < end:
+        m = re.search(rb"pairing secret ([0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4})", s.readline())
+        if m:
+            print(m.group(1).decode())
+            break
+PY
+)
+  if [[ -z $secret ]]; then
+    secret="(not read: run 'pio device monitor' and copy it from the line 'pairing secret ...')"
+  fi
   cat <<MSG
 
-Flashed for pairing. Write this code on the camera's sticker:  ${mac: -6}
+Flashed for pairing. Write these on the camera's sticker:
+  code    ${mac: -6}
+  secret  $secret
 
 Switched on near its hub, the camera asks to be added. It shows on the dashboard (Set up traps → New cameras
-waiting) under that code within a minute; add it there and it gets its trap id and key by itself.
+waiting) under its code within a minute; add it there with the secret, and it gets its trap id and key by
+itself, sealed with that secret so only this camera can use it. The secret never leaves the camera otherwise:
+keep the sticker on it, and don't post a photo of it.
 MSG
   exit 0
 fi

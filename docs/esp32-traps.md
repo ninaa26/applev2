@@ -150,20 +150,23 @@ or a second hub.
 
 ## Adding and removing ESP32 traps
 
-**A new camera (pairing, no laptop for the grower).** Firmware 0.3.0 keeps the trap id and key in the
-board's flash, not in the firmware, so a camera can leave the bench with none and be added in the orchard:
+**A new camera (pairing, no laptop for the grower).** The camera keeps its trap id and key in the board's
+flash, not in the firmware, so it can leave the bench with none and be added in the orchard:
 
 1. The team, once per board: plug it in and run `device/esp32-node/flash-camera.sh` with no arguments.
-   It wipes the board, flashes the release build and prints the camera's **pairing code** (the last 6
-   hex digits of its MAC, e.g. `7F3A2C`): write it on a sticker on the camera. The first time on a
+   It wipes the board, flashes the release build and prints what goes on the camera's sticker: its
+   **code** (the last 6 hex digits of its MAC, e.g. `7F3A2C`) and its **secret** (16 letters and digits,
+   e.g. `K7QM-3XTP-9RWA-B2CD`), which the camera makes on its first boot and never sends. The first time on a
    computer it makes `include/node_config.h` from the example and stops: fill in the hub's Wi-Fi name and
    password, `HUB_URL` and the LED pin, and run it again. Later cameras reuse them. All hubs a camera may
    join need that same Wi-Fi name and password.
 2. The grower: hang it and switch it on near the hub. It asks the hub to be added every 30 s for 15 min
    (then every 10 min), and within a minute the dashboard's **Set up traps** shows it under **New cameras
-   waiting**, with its code and signal strength. Fill in the trap id, name, block and lure, and press
-   **Add this camera**. At its next try the hub hands the camera its key, and it starts as if just
-   switched on: setup mode (below), then its first photo.
+   waiting**, with its code and signal strength. Type in the **secret** from its sticker, fill in the trap
+   id, name, block and lure, and press **Add this camera** (a wrong secret is refused). At its next try
+   the hub hands the camera its key, sealed with that secret so only this camera can use it, and it starts
+   as if just switched on: setup mode (below), then its first photo. A camera stays with the hub it first
+   asked at while that hub still hears it.
 3. Setup mode: for 2 min it streams a live preview, with the LED on, so it can be aimed. On a phone on
    the hub's Wi-Fi, open the hub's page, `http://10.42.0.1:8080/` (or `http://<hub's address>:8080/` on
    other Wi-Fi), and follow the camera's **live preview** link. It has a full-size photo for checking
@@ -172,7 +175,13 @@ board's flash, not in the firmware, so a camera can leave the bench with none an
    liner on the server. A short press skips the preview and just starts the fresh liner.
 
 **Holding BOOT for 10 s** makes a camera forget its trap id, key and queued photos and pair again: for
-moving it to another orchard, or after it was removed on the dashboard.
+moving it to another orchard. A camera whose key the hub refuses for 24 wakes in a row (it, or its hub, was
+removed or given a new key on the dashboard) forgets its key and pairs again by itself, keeping its photos.
+Either way it shows under **New cameras waiting**; add it with its old trap id to keep its photos and counts
+(it gets a new key, and moves to the hub it is near now).
+
+Cameras on firmware 0.3.x pair without a secret, which the server no longer accepts: flash them once with
+`flash-camera.sh` (a camera that is already added can take 0.4.0 over the air instead).
 
 **Set up by hand (a dev build).** Dashboard → **Set up traps** → Add: ESP32 camera, its hub, trap id,
 name, block and lure. The page shows the key once, in `device/esp32-node/flash-camera.sh T3 <key>`, which
@@ -183,7 +192,9 @@ dashboard. It comes at the camera's next check-in (within `checkin_min`, see Tim
 
 To take a camera out, press **Remove** on the same page. The hub stops taking its photos within a
 minute. Photos already queued on the hub still go up, and the server keeps all of them. A lost or
-reflashed board can get a **New key**.
+reflashed board can get a **New key**. Removing a **hub** (lost, stolen or replaced) also stops the keys of
+the cameras that went through it, because the hub held them: each pairs again with the hub it is near, and
+is added again as above.
 
 Cameras can also be listed by hand in the hub's config (`[hub.nodes.T2] api_key = "..."`), for a
 bench hub that has no server to ask.
@@ -201,14 +212,25 @@ one doesn't come up.
 
 **Camera firmware (0.3.0 and later).** Raise `FW_VERSION` in `src/main.cpp`, run
 `device/esp32-node/release.sh`, and upload the `.bin` it names under **Camera firmware**. The server reads
-the version from the file and refuses a dev build (that has one camera's key compiled in). **Send update**
+the version from the file and refuses a dev build (that has one camera's key compiled in) and an unsigned
+one. `release.sh` signs the build with the team's firmware key, and from 0.4.0 a camera installs only
+firmware whose signature checks out against the public key built into it (`include/firmware_key.h`), and
+only a newer version than it runs. **Send update**
 to one camera first; once its row on Set up traps shows the new `fw` (after its next photo), send it to
 all. The hub fetches the file from the server, checks its size and md5, and offers it in its replies; each
 camera downloads it at its next contact (a check-in, within `checkin_min`), writes it to the app slot it
 isn't running, and restarts into it. That first boot only uploads and asks the hub for the schedule: if
 the hub answers, the camera keeps the new firmware; if it can't reach the hub, or crashes before then,
 the bootloader starts the old firmware again. A version that failed twice on a camera isn't tried there
-again (its status to the hub says `fw_failed`). To go back on purpose, send the older version.
+again (its status to the hub says `fw_failed`). To go back on purpose, release the old code under a new,
+higher version: a camera never installs a lower one.
+
+**The firmware signing key.** The private key is at `~/.config/orchard-sentinel/firmware-signing.pem` on
+the computer that builds releases (`SENTINEL_FW_SIGNING_KEY` for another path); `release.sh` refuses a key
+that isn't the one in `include/firmware_key.h`. Keep a copy in the team's password manager and give it only
+to whoever builds releases. Without it no camera can be updated over the air; a new key (made with
+`make-signing-key.sh`) reaches the cameras only by flashing each one over USB. Cameras on 0.3.x don't check
+signatures yet: 0.4.0 is the update that brings the check.
 
 **The one USB flash.** Boards on firmware 0.2.x have a single app slot (the old `partitions.csv`), so
 they can't update over the air. Flash each one once over USB with 0.3.0 (`flash-camera.sh`): that brings
