@@ -237,9 +237,49 @@ def test_live_preview_is_listed_on_the_hub_page_while_it_lasts(tmp_path: Path):
     assert gw.preview("Bearer key2", json.dumps({"url": "javascript:alert(1)", "seconds": 300}))[0] == 422
     assert gw.preview("Bearer key2", json.dumps({"url": "http://10.42.0.23/", "seconds": 300}))[0] == 200
     page = gw.status_page()
-    assert 'href="http://10.42.0.23/"' in page and "<b>T3</b>" in page
+    assert 'href="/preview/T2/"' in page and "<b>T3</b>" in page
+    assert gw.preview_source("T2", "stream") == "http://10.42.0.23:81/stream"
+    assert gw.preview_source("T2", "still") == "http://10.42.0.23/still"
+    assert gw.preview_source("T3", "stream") is None and gw.preview_page("T3") is None
     now[0] += 301
-    assert "10.42.0.23" not in gw.status_page()
+    assert "/preview/T2/" not in gw.status_page()
+    assert gw.preview_source("T2", "stream") is None and gw.preview_page("T2") is None
+
+
+def test_live_preview_opens_by_the_hub_name(tmp_path: Path, monkeypatch):
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    class Camera(BaseHTTPRequestHandler):
+        def do_GET(self):
+            body = b"frames" if self.path == "/stream" else JPEG
+            self.send_response(200)
+            self.send_header("Content-Type", "multipart/x-mixed-replace" if self.path == "/stream" else "image/jpeg")
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):
+            pass
+
+    camera = ThreadingHTTPServer(("127.0.0.1", 0), Camera)
+    monkeypatch.setattr(gateway, "PREVIEW_STREAM_PORT", camera.server_address[1])
+    gw = _gw(tmp_path)
+    server = gateway.make_server(gw, "127.0.0.1", 0, socket_timeout=5)
+    for s in (camera, server):
+        threading.Thread(target=s.serve_forever, daemon=True).start()
+    hub = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        assert requests.get(f"{hub}/preview/T2/", timeout=5).status_code == 404
+        gw.preview("Bearer key2", json.dumps({"url": f"http://127.0.0.1:{camera.server_address[1]}/", "seconds": 300}))
+        page = requests.get(f"{hub}/preview/T2/", timeout=5)
+        assert page.status_code == 200 and "src='/preview/T2/stream'" in page.text
+        stream = requests.get(f"{hub}/preview/T2/stream", timeout=5)
+        assert stream.content == b"frames" and stream.headers["Content-Type"] == "multipart/x-mixed-replace"
+        assert requests.get(f"{hub}/preview/T2/still", timeout=5).content == JPEG
+        assert requests.get(f"{hub}/preview/T3/stream", timeout=5).status_code == 404
+    finally:
+        for s in (camera, server):
+            s.shutdown()
+            s.server_close()
 
 
 def test_end_of_wake_status_is_kept_for_power_and_signal_logs(tmp_path: Path):
