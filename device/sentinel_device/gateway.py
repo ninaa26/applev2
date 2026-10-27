@@ -20,6 +20,8 @@ Node protocol (all requests carry "Authorization: Bearer <that trap's server API
     GET  /node/v1/schedule   last call of a wake; marks the node done for this window
     POST /node/v1/preview    header X-Sentinel-Meta: {"url": "http://<node ip>/", "seconds": n}: the node is
                              streaming a live preview for setting it up, listed on the hub's page (GET /)
+                             and passed on at /preview/<trap id>/, so it opens by the hub's name (its
+                             Tailscale name included) instead of the camera's own IP
     GET  /node/v1/firmware   the firmware the dashboard sent this node (the "firmware" in a reply), as a file
 
 All reply with {"now": unix seconds, "sleep_s": seconds until the node's next wake, "wakes": the next
@@ -54,6 +56,7 @@ import time
 from datetime import UTC, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import requests
 
@@ -66,6 +69,8 @@ log = logging.getLogger(__name__)
 NODE_ID = re.compile(r"[0-9a-fA-F]{8,32}")
 PREVIEW_URL = re.compile(r"http://[0-9.]{7,15}(:[0-9]{1,5})?/")
 TRAP_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,31}")
+PREVIEW_STREAM_PORT = 81  # a camera streams its preview here, beside the page on its PREVIEW_URL
+PREVIEW_PATH = re.compile(r"/preview/([A-Za-z0-9][A-Za-z0-9_-]{0,31})(/|/stream|/still)?")
 CAMERA_CODE = re.compile(r"[0-9A-F]{6}")
 FW_VERSION = re.compile(r"[0-9A-Za-z._-]{1,32}")
 WAITING_FOR = 600  # a pairing camera not heard from for this long is no longer reported as waiting
@@ -420,6 +425,28 @@ class Gateway:
         log.info("node %s: live preview at %s for %.0f s", trap_id, url, seconds)
         return 200, self.schedule_reply(trap_id)
 
+    def preview_source(self, trap_id: str, part: str) -> str | None:
+        """Where a camera's live preview comes from while it lasts: its "stream" (port 81, beside the page)
+        or its full-size "still". Only cameras that announced a preview with their key, so it's no open proxy."""
+        with self.lock:
+            url, until = self.previews.get(trap_id, ("", 0.0))
+        if until <= self.clock():
+            return None
+        at = urlsplit(url)
+        return f"http://{at.hostname}:{PREVIEW_STREAM_PORT}/stream" if part == "stream" else f"http://{at.netloc}/still"
+
+    def preview_page(self, trap_id: str) -> str | None:
+        """The camera's preview page, served by the hub: the camera's own page points at its IP."""
+        if self.preview_source(trap_id, "stream") is None:
+            return None
+        t = html.escape(trap_id)
+        return ("<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width'>"
+                f"<title>{t} live preview</title><body style='font:16px system-ui;margin:16px;background:#111;color:#eee'>"
+                f"<h1>{t} live preview</h1><p>Aim the camera at the liner. The preview stops after a few minutes, "
+                f"when the camera takes its photo. <a style='color:#9cf' href='/preview/{t}/still' target=_blank>"
+                "Full-size photo</a> to check focus. <a style='color:#9cf' href='/'>All cameras</a></p>"
+                f"<img style='width:100%;max-width:800px' src='/preview/{t}/stream' alt='live preview'>")
+
     def status_page(self) -> str:
         """The hub's own page (GET /): each camera, and a link to any live preview. Open it on a phone on
         the hub's Wi-Fi while setting a camera up."""
@@ -435,7 +462,7 @@ class Gateway:
         for t in sorted(set(self.hashes) | set(previews)):
             cells = [f"<b>{html.escape(t)}</b>"]
             if t in previews:
-                cells.append(f'<a href="{html.escape(previews[t])}">live preview</a>')
+                cells.append(f'<a href="/preview/{html.escape(t)}/">live preview</a>')
             if t in asked:
                 cells.append("photo asked for")
             if t in updating:
@@ -508,6 +535,8 @@ def make_server(gw: Gateway, host: str, port: int, socket_timeout: float = 60) -
                 self.send_header("Content-Length", str(len(data)))
                 self.end_headers()
                 return self.wfile.write(data)
+            if m := PREVIEW_PATH.fullmatch(self.path):
+                return self._preview(m[1], (m[2] or "/").strip("/"))
             if self.path == "/node/v1/firmware":
                 status, got = gw.firmware_file(self.headers.get("Authorization", ""))
                 if status != 200:
@@ -521,6 +550,39 @@ def make_server(gw: Gateway, host: str, port: int, socket_timeout: float = 60) -
             if self.path != "/node/v1/schedule":
                 return self._reply(404, {"error": "not found"})
             self._reply(*gw.schedule(self.headers.get("Authorization", ""), self.headers.get("X-Sentinel-Meta", "")))
+
+        def _preview(self, trap_id: str, part: str) -> None:
+            """A camera's live preview by the hub's name: the page, or its stream or still passed through."""
+            if not part:
+                page = gw.preview_page(trap_id)
+                if page is None:
+                    return self._reply(404, {"error": f"no live preview from {trap_id} now"})
+                data = page.encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
+            source = gw.preview_source(trap_id, part)
+            if source is None:
+                return self._reply(404, {"error": f"no live preview from {trap_id} now"})
+            try:
+                got = requests.get(source, stream=True, timeout=(5, 30))
+            except requests.RequestException as e:
+                return self._reply(502, {"error": f"camera {trap_id} did not answer: {e}"})
+            with got:
+                self.send_response(got.status_code)
+                for name in ("Content-Type", "Content-Length"):
+                    if name in got.headers:
+                        self.send_header(name, got.headers[name])
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                try:
+                    for chunk in got.iter_content(16384):
+                        self.wfile.write(chunk)
+                except (OSError, requests.RequestException):
+                    pass  # the viewer closed the page, or the camera ended its preview
 
         def log_message(self, fmt, *args):
             log.debug("%s %s", self.address_string(), fmt % args)

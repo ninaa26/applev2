@@ -32,7 +32,8 @@ if [[ -n $(git status --porcelain -- .) ]]; then echo "device/ has uncommitted c
 
 echo "copying $sha to $host"
 uv export --locked --no-dev --no-emit-project --no-hashes --no-header --no-annotate -q -o constraints.txt.new
-rsync -a --delete --exclude .venv --exclude __pycache__ --exclude esp32-node/.pio --exclude tests \
+rsync -a --delete --exclude .venv --exclude __pycache__ --exclude esp32-node/.pio --exclude esp32-node/releases \
+  --exclude esp32-node/include/node_config.h --exclude tests \
   --exclude constraints.txt.new ./ "$host:sentinel-src.new/"
 rsync -a constraints.txt.new "$host:sentinel-src.new/constraints.txt" && rm constraints.txt.new
 remote bash -s "$sha" "$check" <<'EOF'
