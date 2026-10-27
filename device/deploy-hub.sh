@@ -36,7 +36,7 @@ rsync -a --delete --exclude .venv --exclude __pycache__ --exclude esp32-node/.pi
   --exclude esp32-node/include/node_config.h --exclude tests \
   --exclude constraints.txt.new ./ "$host:sentinel-src.new/"
 rsync -a constraints.txt.new "$host:sentinel-src.new/constraints.txt" && rm constraints.txt.new
-remote bash -s "$sha" "$check" <<'EOF'
+remote "bash -s $(printf '%q ' "$sha" "$check")" <<'EOF'  # ssh joins its arguments: quote them for the hub's shell
 set -euo pipefail
 sha=$1; check=$2
 sudo /opt/sentinel/venv/bin/pip install -q -c ~/sentinel-src.new/constraints.txt ~/sentinel-src.new
