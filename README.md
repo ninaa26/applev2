@@ -26,7 +26,7 @@ server/     FastAPI + SQLite (Postgres later): upload API, detection/tracking/co
 ml/         training photos (AMI, iNaturalist, trap-style synthetic), labelling tool, detector and classifier training and scoring
 hardware/   trap dimensions (TRAP.md), mockup trap template, 3D-printable camera mount + liner tray, calibration prints
 docs/       ESP32 traps and the hub, the server on Linux or the Mac, Pi camera bring-up and wiring, camera bench test,
-            measuring accuracy, research notes, and the code-review ledger (docs/code-review/)
+            measuring accuracy, security and privacy, research notes, and the code-review ledger (docs/code-review/)
 ```
 
 Every doc and what it's for: [docs/README.md](docs/README.md). How the team works (setup, `make check`,
@@ -41,7 +41,7 @@ cd server && uv sync --locked --python 3.12 --extra dev
 ```
 
 Then run the device software with the fake camera ([docs/server-on-mac.md](docs/server-on-mac.md#try-it-without-a-pi)).
-ESP32 cameras and the hub: [docs/esp32-traps.md](docs/esp32-traps.md). The server on a Pi or a cloud machine: [docs/server-on-linux.md](docs/server-on-linux.md). A Pi with its own camera: [docs/bring-up.md](docs/bring-up.md). Choosing between cameras: [docs/camera-bench.md](docs/camera-bench.md).
+ESP32 cameras and the hub: [docs/esp32-traps.md](docs/esp32-traps.md). The server on a Pi or a cloud machine: [docs/server-on-linux.md](docs/server-on-linux.md). A Pi with its own camera: [docs/bring-up.md](docs/bring-up.md). Choosing between cameras: [docs/camera-bench.md](docs/camera-bench.md). Before opening it to growers: [docs/security-and-privacy.md](docs/security-and-privacy.md).
 
 ## What works today
 

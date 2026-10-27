@@ -29,4 +29,5 @@ These are records, each dated at its top, not instructions to follow.
 | [cv-research-status.md](cv-research-status.md) | What the imaging, detection and counting literature says, and what the repo did about each point (as of Oct 8 2026) |
 | [ml-research-status.md](ml-research-status.md) | The same for data, classification and evaluation (as of Oct 8 2026) |
 | [backend-practices.md](backend-practices.md) | Python backend and GitHub repo practices, each checked against this repo, with what's done |
+| [security-and-privacy.md](security-and-privacy.md) | Threat model, the standards that apply, what's done and what to change before growers use it (as of Oct 25 2026) |
 | [code-review/](code-review/) | The review ledger: checked findings from the code reviews, and the raw review output |
