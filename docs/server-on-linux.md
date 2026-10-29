@@ -63,6 +63,28 @@ journalctl -u sentinel-server -f        # "worker started (baseline-cv-0.4+biocl
 The first start downloads BioCLIP 2 (about 1.6 GB, to `~/.cache/huggingface`). After `git pull` or a
 change to `.env`: `sudo systemctl restart sentinel-server`.
 
+## Error reports (Sentry)
+
+The server and the hub gateways can send their crashes and logged errors to [Sentry](https://sentry.io)
+(free on the GitHub Student Developer Pack). Nothing is sent unless `SENTRY_DSN` is set. Make one Python
+project in Sentry, copy its DSN (Settings → Client Keys), then:
+
+```bash
+# server: add to ~/applev2/server/.env, then restart
+echo 'SENTRY_DSN=https://...ingest.sentry.io/...' >> ~/applev2/server/.env
+sudo systemctl restart sentinel-server
+
+# each hub (after a deploy-hub.sh that installs the new unit file)
+echo 'SENTRY_DSN=https://...ingest.sentry.io/...' | sudo tee /etc/sentinel/sentry.env
+sudo chmod 640 /etc/sentinel/sentry.env && sudo chown root:sentinel /etc/sentinel/sentry.env
+sudo systemctl restart sentinel-gateway
+```
+
+Reports are tagged with the machine's host name and `component` (`serve`, `worker`, `gateway`, ...). They
+include the request path but no request bodies, cookies, headers or IP addresses, and there's no
+performance tracing. A hub that can't reach the server logs a warning, not an error, so a dropped
+connection doesn't send a report. Set `SENTRY_ENVIRONMENT=dev` on a test machine to keep its errors apart.
+
 ## Deploying a fix
 
 From the Mac, in the repo, on the commit to deploy (normally `master` after the pull request is merged):
