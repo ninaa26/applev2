@@ -146,7 +146,8 @@ a lot. Every photo's metadata carries the node's signal strength (`device.rssi`)
 trap, take its board to the spot and check that the hub hears it at better than about -80 dBm. For
 traps further out, ESP32-S3 boards with an antenna connector (WROOM-1U modules) and an external
 antenna are the next step, and a fieldhouse far from the blocks may need the access point on a mast
-or a second hub.
+or a second hub. For traps beyond Wi-Fi's reach, the two 900 MHz options (Wi-Fi HaLow, or our own FSK
+radio) with their costs and evidence are in [radio-range.md](radio-range.md).
 
 ## Adding and removing ESP32 traps
 
