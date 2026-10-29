@@ -28,6 +28,6 @@ These are records, each dated at its top, not instructions to follow.
 |---|---|
 | [cv-research-status.md](cv-research-status.md) | What the imaging, detection and counting literature says, and what the repo did about each point (as of Oct 8 2026) |
 | [ml-research-status.md](ml-research-status.md) | The same for data, classification and evaluation (as of Oct 8 2026) |
-| [radio-range.md](radio-range.md) | Reaching traps beyond the hub's Wi-Fi through canopy: Wi-Fi HaLow or a DIY FSK radio, costs, evidence, and the range walk to choose (as of Oct 29 2026) |
+| [radio-range.md](radio-range.md) | Reaching traps beyond the hub's Wi-Fi through canopy: the plan (a 900 MHz SX1262 radio), its parts and cost, the LR2021 upgrade, the HaLow fallback, what was ruled out, and the steps (as of Oct 29 2026) |
 | [backend-practices.md](backend-practices.md) | Python backend and GitHub repo practices, each checked against this repo, with what's done |
 | [code-review/](code-review/) | The review ledger: checked findings from the code reviews, and the raw review output |

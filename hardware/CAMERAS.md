@@ -102,6 +102,9 @@ package does not run on it: the capture and upload code has to be written as ESP
   Keep the 130° if it covers the card.
 - The camera's JPEG output and its limited exposure and colour control mean the white-card
   correction would be applied on the server, to JPEGs.
+- For traps beyond the hub's Wi-Fi, each board also gets a 900 MHz SX1262 radio module (Ebyte
+  E22-900M22S) on SPI, which needs 7 free pins next to the camera's: see
+  [docs/radio-range.md](../docs/radio-range.md).
 
 ## What a trap camera needs
 
