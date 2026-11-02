@@ -8,6 +8,7 @@ dependencies = [
     "smbus2>=0.4",
     "numpy>=1.24",
     "pillow>=10.0",
+    "pyserial>=3.5",  # the radio link to cameras beyond Wi-Fi (sentinel-radio)
 ]
 
 [project.optional-dependencies]
@@ -22,6 +23,7 @@ sentinel-flatfield = "sentinel_device.tools.flatfield:main"
 sentinel-camera-bench = "sentinel_device.tools.camera_bench:main"
 sentinel-camfeed = "sentinel_device.tools.camfeed:main"
 sentinel-gateway = "sentinel_device.gateway:main"
+sentinel-radio = "sentinel_device.radio_link:main"
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -40,5 +42,5 @@ files = ["sentinel_device"]
 
 # no type stubs for these (and on most machines they aren't installed)
 [[tool.mypy.overrides]]
-module = ["cv2", "cv2.*", "picamera2", "picamera2.*", "libcamera", "libcamera.*", "gpiozero", "gpiozero.*", "smbus2", "smbus2.*"]
+module = ["cv2", "cv2.*", "picamera2", "picamera2.*", "libcamera", "libcamera.*", "gpiozero", "gpiozero.*", "smbus2", "smbus2.*", "serial", "serial.*"]
 ignore_missing_imports = true
