@@ -32,7 +32,7 @@ if [[ -n $(git status --porcelain -- .) ]]; then echo "device/ has uncommitted c
 
 echo "copying $sha to $host"
 uv export --locked --no-dev --no-emit-project --no-hashes --no-header --no-annotate -q -o constraints.txt.new
-rsync -a --delete --exclude .venv --exclude __pycache__ --exclude esp32-node/.pio --exclude esp32-node/releases \
+rsync -a --delete --exclude .venv --exclude __pycache__ --exclude esp32-node/.pio --exclude esp32-radio-bridge/.pio --exclude esp32-node/releases \
   --exclude esp32-node/include/node_config.h --exclude tests \
   --exclude constraints.txt.new ./ "$host:sentinel-src.new/"
 rsync -a constraints.txt.new "$host:sentinel-src.new/constraints.txt" && rm constraints.txt.new
@@ -40,9 +40,10 @@ remote "bash -s $(printf '%q ' "$sha" "$check")" <<'EOF'  # ssh joins its argume
 set -euo pipefail
 sha=$1; check=$2
 sudo /opt/sentinel/venv/bin/pip install -q -c ~/sentinel-src.new/constraints.txt ~/sentinel-src.new
-sudo install -m 644 ~/sentinel-src.new/systemd/sentinel-gateway.service /etc/systemd/system/
+sudo install -m 644 ~/sentinel-src.new/systemd/sentinel-gateway.service ~/sentinel-src.new/systemd/sentinel-radio.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl restart sentinel-gateway
+systemctl -q is-enabled sentinel-radio 2>/dev/null && sudo systemctl restart sentinel-radio  # only on a hub with a radio
 if bash -c "$check"; then
   rm -rf ~/sentinel-src.prev
   [[ -d ~/sentinel-src ]] && mv ~/sentinel-src ~/sentinel-src.prev

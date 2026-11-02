@@ -1,0 +1,18 @@
+[Unit]
+Description=Orchard Sentinel hub: the 900 MHz radio link to cameras beyond its Wi-Fi
+Wants=sentinel-gateway.service
+After=sentinel-gateway.service
+
+[Service]
+User=sentinel
+SupplementaryGroups=dialout
+# The radio bridge (an ESP32 + SX1262 on USB, device/esp32-radio-bridge). Put its port in /etc/sentinel/radio.env
+# as RADIO_PORT=/dev/serial/by-id/... so it survives other USB devices being plugged in.
+Environment=RADIO_PORT=/dev/ttyUSB0
+EnvironmentFile=-/etc/sentinel/radio.env
+ExecStart=/opt/sentinel/venv/bin/sentinel-radio --port ${RADIO_PORT}
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

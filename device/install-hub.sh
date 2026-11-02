@@ -39,6 +39,9 @@ if [[ ! -f /etc/sentinel/config.toml ]]; then
 fi
 
 install -m 644 systemd/sentinel-gateway.service /etc/systemd/system/
+# The radio link to cameras beyond Wi-Fi: installed, started only once a radio bridge is plugged in
+# (sudo systemctl enable --now sentinel-radio; docs/radio-range.md).
+install -m 644 systemd/sentinel-radio.service /etc/systemd/system/
 systemctl daemon-reload
 
 if [[ $# -eq 3 ]]; then
