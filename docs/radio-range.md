@@ -84,6 +84,38 @@ Buy the **M** Ebyte parts (E22-900**M**22S, **M**30S): they expose the chip over
 The base hub is the same whichever radio is used: the Pi, a cellular modem or router (~$40–150\*), a data
 plan (~$5–20 a month\*), a box, and solar (~$100–200\*) if it can't be on mains power.
 
+### The prototype (chosen Nov 1 2026)
+
+The same module at both ends, so one wiring and one set of radio settings:
+
+| Where | Part | Cost |
+|---|---|---|
+| Trap | Waveshare Core1262-HF, header pins soldered on (2.54 mm), Dupont jumpers to the Freenove | $7.99 |
+| Hub | a second Core1262-HF on any spare ESP32 board, on USB to the Pi | $7.99 + ~$0–10 |
+| Antennas | Slinkdsco 915 MHz 17 cm whip, 2-pack, each with a 10 cm u.FL-to-SMA-female cable | ~$10–16\* |
+| | **Total** | ~$26–42 |
+
+- **Antenna:** SMA male, 900–930 MHz, vertical. Its "10 dBi" can't be true of a 17 cm whip (a half-wave
+  manages about 2 dBi) and its listing gives two SWR figures, so its tuning is unverified: before
+  trusting it on a field trap, compare its RSSI against a Linx ANT-916-CW-HW-SMA at the same spot, or
+  check its SWR at 915 MHz with a NanoVNA (under 2:1). Its cable, if the SMA end has a nut, doubles as
+  the bulkhead through the housing's ridge; add an O-ring.
+- **Core1262-HF:** 19 × 22 mm, TCXO, 3.3 V, 5.3 mA receiving, IPEX antenna socket
+  ([Waveshare](https://www.waveshare.com/core1262-868m.htm?sku=20855)). Its page rates it **0–85 °C**:
+  confirm with Waveshare or a freezer test before field traps see frost, or use the E22-900M22S
+  (−40 °C\*) for them; the firmware is the same.
+- **Firmware settings to take from Waveshare's wiki or Meshtastic's config for this module:** the TCXO
+  voltage (likely 1.8 V\*, RadioLib's `tcxoVoltage`) and whether DIO2 drives its RF switch
+  (`setDio2AsRfSwitch(true)`\*). Wrong values leave the radio silent or deaf.
+- **Wiring, both ends:** NSS, SCK, MOSI, MISO, BUSY, DIO1, RESET, 3.3 V, GND (names from the pinout image
+  on Waveshare's page). Trap pins tentatively SCK 47, MOSI 21, MISO 14, NSS 41, BUSY 42, DIO1 1, RESET 3\*,
+  clear of the camera (GPIO 4–13, 15–18), the button (0) and PSRAM (35–37); check the Freenove's pinout
+  and the LED strips' pins. A 100 µF capacitor across the module's 3.3 V and GND at each end.
+- **In the camera housing:** on the drawer floor on the far side of the camera from the ESP32, under the
+  ridge antenna, header pins up, under about 13 mm tall where it passes the hatch opening (use
+  right-angle headers or solder the wires if Dupont plugs are too tall). Unplug the u.FL before sliding
+  the drawer out.
+
 ### What we build
 
 - **Camera firmware** (`device/esp32-node/`): drive the SX1262 with RadioLib; split each queued JPEG into
@@ -185,8 +217,8 @@ network with repeater antennas in the orchard ([Good Fruit Grower](https://goodf
 
 ## Steps
 
-1. **Order the test kit** (~$45–55): a Heltec WiFi LoRa 32 V3 (US915) and two E22-900M22S with antennas.
-   Check the Freenove's free pins against the module's 7.
+1. **Order the prototype** (~$26–42, above): two Core1262-HF and the 2-pack of whips; a spare ESP32
+   for the hub. Check the Freenove's free pins against the module's 7.
 2. **Bench sketch:** send a stored 200 kB photo in 255-byte packets with acknowledgements at the
    settings above; log time per photo, packets resent and current drawn.
 3. **Range walk, leaves on:** walk out from the hub spot along a row and across rows, and at each stop
