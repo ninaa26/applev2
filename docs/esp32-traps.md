@@ -252,8 +252,8 @@ then run `sentinel-gateway --config that.toml --forward-every 30` beside `sentin
   firmware compiles. The camera check found the board's pins (ESP32-S3-EYE / Freenove layout) and an
   OV3660, and took 1600×1200 photos over USB.
 - Not yet done: the hub on cellular, the ESP32 on the hub's own access point, drift correction over real
-  sleeps, range in the orchard (and the 900 MHz radio planned for traps beyond Wi-Fi,
-  [radio-range.md](radio-range.md)), and the ESP32's deep-sleep current (dev boards have a power LED and
+  sleeps, range in the orchard, the 900 MHz radio link for traps beyond Wi-Fi (written Nov 2 2026, not yet
+  run on the radios: [radio-range.md](radio-range.md)), and the ESP32's deep-sleep current (dev boards have a power LED and
   USB chip that draw power even while the ESP32 sleeps).
 - ESP32 photos get no white-card correction (`flatfield.npz` is done on a Pi camera), so they reach the
   server uncorrected. Exposure is auto unless `CAM_AEC_VALUE`/`CAM_AGC_GAIN` are set.

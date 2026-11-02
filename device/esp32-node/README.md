@@ -89,3 +89,32 @@ the MAC registered).
 awake (it is awake for a few minutes after each scheduled time). `ERROR hub not answering`: the node
 joined the Wi-Fi but the gateway never took the photos before the connect window ran out. `ERROR hub does not know this trap's
 key`: the camera was removed on the dashboard, given a new key, or not added yet.
+
+## Radio link
+
+For a camera beyond the hub's Wi-Fi (firmware 0.4.0): uncomment `HUB_LINK_RADIO` in `node_config.h` and wire
+an SX1262 module (Waveshare Core1262-HF, or Ebyte E22-900M22S for traps that will see frost: the Core1262 is
+rated 0–85 °C) to the `RADIO_*` pins there, 3.3 V and GND, with 100 µF across its supply and its 915 MHz
+antenna on. The hub needs the radio bridge ([../esp32-radio-bridge](../esp32-radio-bridge/README.md)). Why
+and what was considered: [docs/radio-range.md](../../docs/radio-range.md).
+
+The camera then makes the same requests as on Wi-Fi (photos, schedule, pairing, firmware), sent in 240-byte
+chunks that the hub acknowledges 32 at a time; lost chunks are sent again. Everything else stays the same:
+the queue, the schedule, check-ins, **Take a photo now**, pairing a new camera and firmware updates from the
+dashboard (about a minute for a 1.3 MB build). Only the setup preview needs Wi-Fi: after power-on the camera
+looks for the hub's Wi-Fi for `SETUP_WIFI_S` (20 s in the example) and skips the preview if it isn't there.
+Each request prints a line like
+
+```
+radio 915.0 MHz 250 kbps, TCXO 1.8 V, address 3c4d5e6f
+radio POST /node/v1/captures -> 201 (153711 B up, 412 B down, 11204 ms, -86 dBm)
+```
+
+and the radio sleeps (under 1 µA) whenever the ESP32 does. `device.rssi` in each photo's metadata is how
+strongly the camera heard the hub, and `device.hub_rssi` how strongly the hub heard it.
+
+The pins in `node_config.example.h` (SCK 47, MOSI 21, MISO 14, NSS 41, BUSY 42, DIO1 1, RESET 3) avoid the
+camera, the button and the PSRAM, but are not checked against the Freenove board's header yet: check them, and
+the LED strips' pins, before wiring. Written Nov 2 2026; compiled, not yet run on the hardware. The hub's side
+of the protocol is tested in `device/tests/test_radio_link.py`, against a Python copy of this firmware's logic
+over a lossy channel.
