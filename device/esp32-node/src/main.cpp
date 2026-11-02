@@ -14,6 +14,9 @@
 // the other app slot and restarts into it. The new firmware keeps itself only if it reaches the hub on that
 // first boot; if it can't, or crashes, the bootloader goes back to the old one.
 //
+// Hub link: Wi-Fi (the hub's access point) or, with HUB_LINK_RADIO in node_config.h, the 900 MHz radio
+// (radio_link.cpp): the same requests either way. The live preview always uses Wi-Fi, when there is any.
+//
 // Timekeeping: the node never sets its clock. `clock` is seconds since power-on, which keeps counting
 // through deep sleep on the RTC timer, and `offset` (hub time - clock) is measured on every contact.
 // Comparing offsets an hour or more apart gives the RTC's drift (drift.h), which shortens or lengthens
@@ -34,6 +37,7 @@
 #include "drift.h"
 #include "esp_http_server.h"
 #include "node_config.h"
+#include "radio_link.h"
 
 // Settings added after the first node_config.h files were written: defaults for those.
 #ifndef SETUP_PREVIEW_S
@@ -41,6 +45,9 @@
 #endif
 #ifndef PREVIEW_FRAMESIZE
 #define PREVIEW_FRAMESIZE FRAMESIZE_VGA  // live preview size; "full size" on the page uses CAM_FRAMESIZE
+#endif
+#ifndef SETUP_WIFI_S
+#define SETUP_WIFI_S 60                  // setup mode looks for the hub's Wi-Fi this long for the preview
 #endif
 #ifndef SETUP_HOLD_MS
 #define SETUP_HOLD_MS 3000               // hold BUTTON_PIN this long on a button wake for setup mode
@@ -53,7 +60,7 @@
 #define API_KEY ""
 #endif
 
-#define FW_VERSION "0.3.0"
+#define FW_VERSION "0.4.0"
 #ifdef RELEASE_BUILD
 #define FW_KIND "release"
 #else
@@ -268,6 +275,23 @@ static bool connectWifi(int max_s) {
   return false;
 }
 
+// The link to the hub: what connectWifi and WiFi.RSSI were before the radio.
+#ifdef HUB_LINK_RADIO
+static bool linkUp(int) { return radioLinkBegin(); }  // nothing to join: whether the hub hears is known on the first request
+static int linkRssi() { return radioLinkRssi(); }
+#else
+static bool linkUp(int max_s) { return connectWifi(max_s); }
+static int linkRssi() { return WiFi.RSSI(); }
+#endif
+
+static void linkDown() {  // before every deep sleep and restart
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_OFF);
+#ifdef HUB_LINK_RADIO
+  radioLinkSleep();
+#endif
+}
+
 // Everything the hub's reply says about time: measure the offset, update the drift, store the wakes.
 static void takeTime(JsonDocument &reply, double sent_clock) {
   if (reply["checkin_s"].is<int>()) checkin_s = reply["checkin_s"].as<int>();
@@ -287,7 +311,7 @@ static void takeTime(JsonDocument &reply, double sent_clock) {
   }
 }
 
-static int post(const String &path, const char *method, File *body, const String &meta, JsonDocument &reply) {
+static int httpPost(const String &path, const char *method, File *body, const String &meta, JsonDocument &reply) {
   HTTPClient http;
   http.begin(String(HUB_URL) + path);
   http.setTimeout(20000);
@@ -302,6 +326,22 @@ static int post(const String &path, const char *method, File *body, const String
   }
   http.end();
   return code;
+}
+
+static int post(const String &path, const char *method, File *body, const String &meta, JsonDocument &reply) {
+#ifdef HUB_LINK_RADIO
+  StringSink got;
+  uint32_t uploaded = 0;
+  int code = radioLinkRequest(method, path.c_str(), api_key, meta, body ? "image/jpeg" : "", body, got,
+                              body ? 120000 : 30000, &uploaded);
+  // The hub stamps its reply once it has the whole request: time the round trip from then, not from the
+  // start of a 10 s photo upload.
+  double sent = clockNow() - (millis() - uploaded) / 1000.0;
+  if (code > 0 && !deserializeJson(reply, got.data)) takeTime(reply, sent);
+  return code;
+#else
+  return httpPost(path, method, body, meta, reply);
+#endif
 }
 
 // Upload the queue oldest first. Returns 0 when it is empty, or the reply that stopped it
@@ -329,7 +369,7 @@ static int uploadQueue() {
     }
     meta["trap_id"] = trap_id;
     JsonObject dev = meta["device"].to<JsonObject>();
-    dev["sw_version"] = FW_VERSION; dev["rssi"] = WiFi.RSSI(); dev["boots"] = boots;
+    dev["sw_version"] = FW_VERSION; dev["rssi"] = linkRssi(); dev["boots"] = boots;
     dev["cpu_temp_c"] = temperatureRead(); dev["last_error"] = last_error[0] ? last_error : nullptr;
     dev["fs_free_kb"] = (LittleFS.totalBytes() - LittleFS.usedBytes()) / 1000;
     dev["drift_ppm"] = (rate - 1.0) * 1e6;
@@ -357,7 +397,7 @@ static int uploadQueue() {
 static int askSchedule() {
   JsonDocument st, reply;
   st["last_error"] = last_error[0] ? last_error : nullptr;
-  st["rssi"] = WiFi.RSSI();
+  st["rssi"] = linkRssi();
   // Awake time per wake, for estimating power: this one so far, and the whole of the previous one.
   st["fw"] = FW_VERSION; st["boots"] = boots; st["wake"] = wake_reason; st["awake_ms"] = awake_before_ms + millis();
   if (prev_wake[0]) {
@@ -430,7 +470,7 @@ static esp_err_t streamHandler(httpd_req_t *req) {
 // Serve a live preview on the hub's Wi-Fi for SETUP_PREVIEW_S: the page on port 80, the stream on 81
 // (one server can't serve the page while it streams). The hub lists it on its own page.
 static void runPreview() {
-  if (!connectWifi(60)) { setError("setup: hub Wi-Fi not reachable"); return; }
+  if (!connectWifi(SETUP_WIFI_S)) { setError("setup: hub Wi-Fi not reachable"); return; }
   if (!cameraInit()) { setError("camera not found"); return; }
   sensor_t *s = esp_camera_sensor_get();
   s->set_framesize(s, PREVIEW_FRAMESIZE);
@@ -451,7 +491,7 @@ static void runPreview() {
   m["url"] = url; m["seconds"] = SETUP_PREVIEW_S;
   String meta;
   serializeJson(m, meta);
-  post("/node/v1/preview", "POST", nullptr, meta, reply);  // the hub lists it on its page (and gives the time)
+  httpPost("/node/v1/preview", "POST", nullptr, meta, reply);  // the hub lists it on its page (and gives the time)
 
   while ((int32_t)(preview_until - millis()) > 0) delay(200);
   delay(500);  // let an open stream see the deadline and end
@@ -465,8 +505,7 @@ static void runPreview() {
 // RedRover: every wake with a photo or the preview, while the check-ins between them, which don't use the
 // camera, sent 3 photos in a second). A deep sleep resets the chip, so upload from a fresh boot.
 static void restartForUpload(const char *reason) {
-  WiFi.disconnect(true);
-  WiFi.mode(WIFI_OFF);
+  linkDown();
   upload_next = true;
   strlcpy(upload_reason, reason, sizeof(upload_reason));
   upload_before_ms = millis();
@@ -504,9 +543,9 @@ static void sleepFor(double s) {
 static void pairWake() {
   String code = pairingCode();
   Serial.printf("not added yet: pairing code %s\n", code.c_str());
-  if (connectWifi(pair_tries < PAIR_FAST_TRIES ? 20 : 60)) {
+  if (linkUp(pair_tries < PAIR_FAST_TRIES ? 20 : 60)) {
     JsonDocument m, reply;
-    m["code"] = code; m["fw"] = FW_VERSION; m["rssi"] = WiFi.RSSI();
+    m["code"] = code; m["fw"] = FW_VERSION; m["rssi"] = linkRssi();
     String meta;
     serializeJson(m, meta);
     int c = post("/node/v1/pair", "POST", nullptr, meta, reply);
@@ -515,7 +554,7 @@ static void pairWake() {
       saveIdentity(id, key);
       Serial.printf("added on the dashboard as %s\n", trap_id);
       pair_tries = 0;
-      WiFi.disconnect(true);
+      linkDown();
       esp_restart();  // as if just powered on: the live preview for aiming, then the first photo
     }
     Serial.printf("pair -> %d (waiting to be added on the dashboard)\n", c);
@@ -523,8 +562,7 @@ static void pairWake() {
     setError("hub not reachable");
   }
   pair_tries++;
-  WiFi.disconnect(true);
-  WiFi.mode(WIFI_OFF);
+  linkDown();
   sleepFor(pair_tries <= PAIR_FAST_TRIES ? 30 : 600);
 }
 
@@ -539,6 +577,22 @@ static void maybeUpdate() {
   p.putInt("tries", tries + 1);  // counted before trying: a crash or a rollback counts too
   p.end();
   Serial.printf("updating firmware %s -> %s (%u bytes)\n", FW_VERSION, fw_offer.c_str(), (unsigned)fw_offer_size);
+#ifdef HUB_LINK_RADIO
+  // About a minute over the radio for a 1.3 MB build. Written to the other app slot as it arrives.
+  struct UpdateSink : RadioSink {
+    size_t size; const char *md5;
+    bool begin(int status, size_t total) override {
+      if (status != 200 || total != size || !Update.begin(size)) return false;
+      Update.setMD5(md5);
+      return true;
+    }
+    bool write(const uint8_t *p, size_t n) override { return Update.write((uint8_t *)p, n) == n; }
+  } sink;
+  sink.size = fw_offer_size; sink.md5 = fw_offer_md5.c_str();
+  int code = radioLinkRequest("GET", "/node/v1/firmware", api_key, "", "", nullptr, sink, 600000);
+  bool ok = code == 200 && Update.end();
+  if (!ok) Update.abort();
+#else
   HTTPClient http;
   http.begin(String(HUB_URL) + "/node/v1/firmware");
   http.setTimeout(30000);
@@ -551,10 +605,11 @@ static void maybeUpdate() {
     if (!ok) Update.abort();
   }
   http.end();
+#endif
   if (!ok) { Serial.printf("firmware -> %d, %s\n", code, Update.errorString()); setError("firmware update failed"); return; }
   Serial.println("firmware written: restarting into it");
   Serial.flush();
-  WiFi.disconnect(true);
+  linkDown();
   esp_restart();
 }
 
@@ -669,17 +724,19 @@ void setup() {
                   : hub_misses > 0 ? HUB_DOWN_CONNECT_S
                   : std::min(CONNECT_MAX_S, CONNECT_MIN_S + (int)(2 * real_margin));
   uint32_t until = millis() + connect_s * 1000UL;
-  if (connectWifi(connect_s)) {
+  if (linkUp(connect_s)) {
     // The hub's Wi-Fi can be up before its gateway opens (it is still booting or photographing its
     // own liner), so keep trying it for the rest of this wake's window. A check-in tries once.
     int code = uploadQueue();
     for (int tries = 1; !checkin && code != 0 && code != 401 && (int32_t)(until - millis()) > 5000; tries++) {
       delay(5000);
+#ifndef HUB_LINK_RADIO
       if (tries % 3 == 0) {  // still failing on a connection that reads as up: it may be stale, so make a new one
         WiFi.disconnect(true);
         delay(200);
       }
       if (WiFi.status() != WL_CONNECTED) connectWifi(std::max(10, (int)((int32_t)(until - millis()) / 1000)));
+#endif
       code = uploadQueue();
     }
     if (code == 0) {
@@ -707,8 +764,7 @@ void setup() {
     setError("hub not reachable");
     if (!search) hub_misses++;
   }
-  WiFi.disconnect(true);
-  WiFi.mode(WIFI_OFF);
+  linkDown();
   if (trial) {  // the new firmware didn't reach the hub: back to the one before it
     setError("new firmware didn't reach the hub: going back");
     Serial.flush();

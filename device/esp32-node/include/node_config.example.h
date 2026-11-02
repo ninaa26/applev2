@@ -5,7 +5,8 @@
 #define TRAP_ID "T2"
 #define API_KEY "paste-the-key-printed-by-add-trap"
 
-// The hub Pi's access point and gateway (NetworkManager's shared mode gives the hub 10.42.0.1).
+// The hub Pi's access point and gateway (NetworkManager's shared mode gives the hub 10.42.0.1). With the radio
+// below, Wi-Fi is only for the setup preview, near the hub.
 #define WIFI_SSID "sentinel-hub"
 #define WIFI_PASSWORD "change-me"
 #define HUB_URL "http://10.42.0.1:8080"
@@ -43,3 +44,19 @@
 #define SETUP_PREVIEW_S 120               // how long the preview runs before the camera takes its photo
 #define PREVIEW_FRAMESIZE FRAMESIZE_VGA   // preview size (640x480); the page's full-size photo uses CAM_FRAMESIZE
 #define SETUP_HOLD_MS 3000
+
+// The 900 MHz radio link instead of Wi-Fi, for a camera beyond the hub's Wi-Fi (docs/radio-range.md): uncomment
+// HUB_LINK_RADIO and wire an SX1262 module (Waveshare Core1262-HF or Ebyte E22-900M22S) to these pins, 3.3 V and
+// GND, with 100 uF across its supply. The pins avoid the camera (4-13, 15-18), the button (0) and PSRAM (35-37):
+// check them against your board's pinout. The hub needs the radio bridge (device/esp32-radio-bridge).
+// #define HUB_LINK_RADIO
+#define RADIO_SCK 47
+#define RADIO_MOSI 21
+#define RADIO_MISO 14
+#define RADIO_NSS 41
+#define RADIO_BUSY 42
+#define RADIO_DIO1 1
+#define RADIO_RESET 3
+#define RADIO_RXEN -1   // -1: the module's DIO2 drives its RF switch; else the GPIOs wired to its RXEN and TXEN
+#define RADIO_TXEN -1
+#define SETUP_WIFI_S 20  // with the radio, setup mode gives up on Wi-Fi sooner (the preview needs it)

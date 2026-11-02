@@ -116,17 +116,24 @@ The same module at both ends, so one wiring and one set of radio settings:
   right-angle headers or solder the wires if Dupont plugs are too tall). Unplug the u.FL before sliding
   the drawer out.
 
-### What we build
+### What we built (Nov 2 2026: compiled and tested in software, not yet run on the radios)
 
-- **Camera firmware** (`device/esp32-node/`): drive the SX1262 with RadioLib; split each queued JPEG into
-  255-byte packets with a photo id and sequence number; resend what the hub didn't acknowledge; keep the
-  photo in flash until the hub has all of it (the queue already works this way). The wake schedule,
-  clock sync and **Take a photo now** need small messages both ways over the same link.
-- **Hub bridge:** an ESP32 + SX1262 on the Pi's USB that receives packets, acknowledges them and passes
-  each finished photo to `gateway.py`, which then handles it exactly as a Wi-Fi upload.
-- **Firmware updates over the radio:** about 1–1.5 MB, a couple of minutes at the link's real speed\*.
-  To design; until then cameras are updated near the hub over Wi-Fi.
-- Wi-Fi stays for pairing, the live preview and the bench.
+The camera's hub requests go over the radio unchanged, so the gateway and the server needed no changes:
+
+- **Camera:** `HUB_LINK_RADIO` in `node_config.h` (firmware 0.4.0;
+  [device/esp32-node/README.md](../device/esp32-node/README.md#radio-link)). `src/radio_link.cpp` sends each
+  request (method, path, key, metadata, photo) in 240-byte chunks, 32 to a window, resends what the hub
+  didn't acknowledge, then pulls the reply back the same way. Photos, the schedule, check-ins, pairing and
+  firmware updates all work over it; the setup preview still needs Wi-Fi.
+- **Hub radio:** [device/esp32-radio-bridge](../device/esp32-radio-bridge/README.md), an ESP32 + SX1262 on the
+  Pi's USB that only passes frames both ways.
+- **Hub Pi:** `sentinel-radio` (`sentinel_device/radio_link.py`, `systemd/sentinel-radio.service`) puts each
+  request back together, replays it to the gateway on localhost, and keeps the reply for the camera to pull.
+  Many cameras share it: each has its own radio address (from its MAC).
+- **Shared:** [device/radio-common/sentinel_radio.h](../device/radio-common/sentinel_radio.h), the radio
+  settings and the frame layout, used by both firmwares.
+- **Tested:** `device/tests/test_radio_link.py` runs a Python copy of the camera's logic against the hub's code
+  with 10–20% of frames lost both ways, through the real gateway, and checks every photo arrives whole.
 
 ### Open questions
 
@@ -219,11 +226,11 @@ network with repeater antennas in the orchard ([Good Fruit Grower](https://goodf
 
 1. **Order the prototype** (~$26–42, above): two Core1262-HF and the 2-pack of whips; a spare ESP32
    for the hub. Check the Freenove's free pins against the module's 7.
-2. **Bench sketch:** send a stored 200 kB photo in 255-byte packets with acknowledgements at the
-   settings above; log time per photo, packets resent and current drawn.
+2. **Bench test:** flash the bridge and a camera with `HUB_LINK_RADIO`, side by side on the desk; check the
+   camera's photos reach the dashboard, and note time per photo, chunks resent (the hub's log) and current drawn.
 3. **Range walk, leaves on:** walk out from the hub spot along a row and across rows, and at each stop
    log RSSI and whether a whole photo arrives, next to today's Freenove on the hub's Wi-Fi
    (`device.rssi` is already in each photo's metadata).
-4. **If it reaches the farthest trap position:** build the camera side and the hub bridge as above. If not,
+4. **If it reaches the farthest trap position:** put it on a trap. If not,
    try the E22-900M30S, a higher hub antenna, or an LR2021 kit; if a home-made link still falls short,
    go to HaLow.
