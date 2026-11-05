@@ -50,7 +50,14 @@ class HubClaim(BaseModel):
     code: str = Field(default="", max_length=40, description="the pairing code on the hub's sticker")
 
 
-templates = Jinja2Templates(directory=str(HERE / "templates"))
+def is_public(request: Request) -> bool:
+    """A visitor from the internet: Tailscale Funnel marks each request it brings in, and a tailnet device's
+    don't have the mark. Adding the mark by hand only makes a request see less, so it can't be used to get in."""
+    return "tailscale-funnel-request" in request.headers
+
+
+templates = Jinja2Templates(directory=str(HERE / "templates"),
+                            context_processors=[lambda request: {"public": is_public(request)}])
 
 
 def _local(dt: datetime | None, fmt: str = "%b %d %H:%M") -> str:
@@ -135,8 +142,18 @@ def create_app(start_worker: bool = False) -> FastAPI:
     # password can't be guessed by trying many. A browser's first visit, with no password yet, doesn't count.
     wrong: dict[str, list[float]] = {}
 
+    # The internet sees these pages, read-only, with no password. Everything else stays on the tailnet: the
+    # forms, /manage, /review, the device API (traps and hubs reach the server over the tailnet) and /docs.
+    public_exact = {"/", "/healthz"}
+    public_prefixes = ("/traps/", "/captures/", "/crops/", "/media/", "/static/")
+
     @app.middleware("http")
     async def dashboard_password(request: Request, call_next):
+        if is_public(request):
+            path = request.url.path
+            if request.method in ("GET", "HEAD") and (path in public_exact or path.startswith(public_prefixes)):
+                return await call_next(request)
+            return Response("This public page is view-only.", status_code=403)
         expected = get_settings().dashboard_password
         if expected and request.url.path not in no_password and not request.url.path.startswith("/api/v1/hub/"):
             who, now = request.client.host if request.client else "", time.monotonic()

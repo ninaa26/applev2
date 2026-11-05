@@ -12,12 +12,12 @@
     <p class="sub"><span>{{ trap.id }}, hub with no camera{% if trap.block %}, {{ trap.block }}{% endif %}</span>
       <span class="pill {{ health.state }}">{% if health.state == 'never' %}Not heard from yet{% else %}{{ health.state|capitalize }}, checked in {{ health.seen_at|ago }}{% endif %}</span></p>
     <p class="lede">It takes the photos from the ESP32 cameras below and sends them here, and checks in every minute or so.</p>
-    {% if trap.retired_at %}<p class="notice warn" style="margin-top:12px">Taken out of the orchard {{ trap.retired_at|local('%b %-d, %Y') }}. <a href="/manage">Set up traps</a> to put it back.</p>{% endif %}
+    {% if trap.retired_at %}<p class="notice warn" style="margin-top:12px">Taken out of the orchard {{ trap.retired_at|local('%b %-d, %Y') }}.{% if not public %} <a href="/manage">Set up traps</a> to put it back.{% endif %}</p>{% endif %}
   </div>
 </div>
 
 <section class="section">
-  <div class="section-head"><h2>Its cameras</h2><a href="/manage">Add a camera</a></div>
+  <div class="section-head"><h2>Its cameras</h2>{% if not public %}<a href="/manage">Add a camera</a>{% endif %}</div>
   {% if cameras %}
   <div class="tbl"><table><tbody>
   {% for c in cameras %}{% set h = c.health %}
@@ -27,9 +27,10 @@
   </tr>
   {% endfor %}
   </tbody></table></div>
-  {% else %}<p class="muted">No cameras use this hub yet. <a href="/manage">Add one</a>.</p>{% endif %}
+  {% else %}<p class="muted">No cameras use this hub yet.{% if not public %} <a href="/manage">Add one</a>.{% endif %}</p>{% endif %}
 </section>
 
+{% if not public %}
 <section class="section card" id="location">
   <h2>Location</h2>
   {% if trap.lat is not none %}<p>{{ '%.4f, %.4f'|format(trap.lat, trap.lon) }}. Its cameras' photos get the temperature and humidity from the nearest National Weather Service station, since the ESP32s have no sensor.</p>
@@ -40,4 +41,5 @@
   </form>
 </section>
 {{ location_script() }}
+{% endif %}
 {% endblock %}
