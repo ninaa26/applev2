@@ -61,6 +61,7 @@ from urllib.parse import urlsplit
 import requests
 
 from . import config as config_mod
+from .monitoring import init_sentry
 from .schedule import next_wake
 from .uploader import Queue, drain
 
@@ -666,6 +667,7 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    init_sentry("gateway")
     cfg = config_mod.load(args.config)
     data_dir = Path(cfg["data_dir"])
     if not load_identity(cfg, data_dir):
