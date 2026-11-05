@@ -150,6 +150,17 @@ The dashboard is then `http://apple-pi-server:8000` from any device on the tailn
 or it drops off the tailnet after about 6 months. A cloud server for growers will want a domain name and
 HTTPS (for example Caddy with Let's Encrypt) instead.
 
+**The public, view-only site.** Anyone on the internet can look at
+<https://apple-pi-server.tail603a2c.ts.net/>, with no password or Tailscale. It comes from Tailscale
+Funnel (`sudo tailscale funnel --bg 8000`; `sudo tailscale funnel reset` takes it down again) and it
+keeps working after a reboot. Funnel marks what it brings in with a `Tailscale-Funnel-Request` header,
+and `dashboard_password` in `app.py` lets those requests see only the overview, trap, capture and photo
+pages, with the buttons and the hub's coordinates left out. They get 403 for every form, `/manage`,
+`/review`, the JSON API and `/docs`, even with the password, so changing anything still happens at
+`http://apple-pi-server:8000` on the tailnet, and traps and hubs keep using that address too. Photos,
+counts and trap names are visible to everyone. Devices on the tailnet that open the https address skip
+Funnel, so they get the password prompt instead of the public page.
+
 **On Cornell's network** a Pi has to be registered before it gets real internet: until then every
 website it looks up resolves to Cornell's registration page. Register its Wi-Fi MAC at
 mycomputers.cit.cornell.edu (Add Device with No Browser), then reconnect its Wi-Fi. Registration

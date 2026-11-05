@@ -19,10 +19,12 @@
     </a>
     <nav aria-label="Main">
       <a href="/" class="{{ 'on' if nav == 'overview' }}" {{ 'aria-current="page"' if nav == 'overview' }}>Orchard</a>
+      {% if not public %}
       <a href="/review" class="{{ 'on' if nav == 'review' }}" {{ 'aria-current="page"' if nav == 'review' }}>Review insects</a>
       <a href="/manage" class="{{ 'on' if nav == 'manage' }}" {{ 'aria-current="page"' if nav == 'manage' }}>Set up traps</a>
+      {% endif %}
     </nav>
-    <span class="ver">v{{ version }}</span>
+    <span class="ver">{{ 'View only' if public else 'v' ~ version }}</span>
   </div>
 </header>
 <main id="main">

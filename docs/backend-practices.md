@@ -119,6 +119,8 @@ against the repo (new section below). Round 15: all eight organization ideas don
    (for example a few failed tries per minute per IP); right now nothing slows down guessing. Put it
    behind HTTPS too (Caddy or `tailscale serve`/Funnel gives you a certificate), since Basic auth
    sends the password in every request.
+   Since Nov 5 2026 the public Funnel address shows a view-only subset with no password and refuses
+   everything else (`docs/server-on-linux.md`); the password still guards the tailnet address.
 9. **Ops basics.** Already done: `/healthz` with deploy rollback, `logging`, WAL mode and backups
    pushed off the SD card. JSON log output is the only thing left, and it's only worth adding if
    logs go to a collector.

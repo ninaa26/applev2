@@ -13,10 +13,10 @@
       <span>{{ trap.id }}, {% if trap.kind == 'esp32' %}ESP32 camera via <a href="/traps/{{ trap.hub_id }}">{{ trap.hub_id }}</a>{% else %}Raspberry Pi camera{% endif %}{% if trap.block %}, {{ trap.block }}{% endif %}</span>
       {{ camera_status(health, 'last photo ') }}
     </p>
-    {% if trap.retired_at %}<p class="notice warn" style="margin-top:12px">Taken out of the orchard {{ trap.retired_at|local('%b %-d, %Y') }}. <a href="/manage">Set up traps</a> to put it back.</p>{% endif %}
+    {% if trap.retired_at %}<p class="notice warn" style="margin-top:12px">Taken out of the orchard {{ trap.retired_at|local('%b %-d, %Y') }}.{% if not public %} <a href="/manage">Set up traps</a> to put it back.{% endif %}</p>{% endif %}
     {% if health.device_error %}<p class="notice warn" style="margin-top:12px">The trap reported: {{ health.device_error }}</p>{% endif %}
   </div>
-  {% if not trap.retired_at %}
+  {% if not trap.retired_at and not public %}
   <div class="btns">
     {% if trap.kind == 'esp32' %}
       {% if trap.photo_requested_at %}
@@ -78,8 +78,9 @@
       <p>{% if pheno.biofix %}<b>{{ pheno.biofix.strftime('%B %-d, %Y') }}</b>{% else %}Not set yet{% endif %}
         <span class="muted small">{% if pheno.biofix_set %}{% if pheno.biofix == pheno.biofix_auto %}Confirmed by a person.{% else %}Set by a person; from the catches it would be {{ pheno.biofix_auto.strftime('%b %-d') if pheno.biofix_auto else 'not set yet' }}.{% endif %}{% elif pheno.biofix %}From the catches: the first sustained catch.{% endif %}</span></p>
       {% if pheno.biofix and pheno.biofix != pheno.biofix_sure and not pheno.biofix_set %}
-      <p class="notice warn small" style="margin-top:8px">Provisional: it rests on {{ pheno.unsure_catches }} catch{{ 'es' if pheno.unsure_catches != 1 }} the model was unsure of. <a href="/review">Confirm them</a>{% if pheno.biofix_sure %}; from confirmed catches alone it is {{ pheno.biofix_sure.strftime('%b %-d') }}{% endif %}.</p>
+      <p class="notice warn small" style="margin-top:8px">Provisional: it rests on {{ pheno.unsure_catches }} catch{{ 'es' if pheno.unsure_catches != 1 }} the model was unsure of.{% if not public %} <a href="/review">Confirm them</a>{% endif %}{% if pheno.biofix_sure %}; from confirmed catches alone it is {{ pheno.biofix_sure.strftime('%b %-d') }}{% endif %}.</p>
       {% endif %}
+      {% if not public %}
       <div class="btns" style="margin-top:10px;align-items:center">
         {% if pheno.biofix and not pheno.biofix_set %}
         <form method="post" action="/traps/{{ trap.id }}/biofix">
@@ -101,6 +102,7 @@
         </form>
         {% endif %}
       </div>
+      {% endif %}
 
       <dl class="kv small" style="margin-top:18px">
         <dt>Degree days</dt><dd>Base {{ '%.0f'|format(pheno.model.base_f) }} °F, Baskerville-Emin{% if pheno.missing_days %}; {{ pheno.missing_days }} day{{ 's' if pheno.missing_days != 1 }} without weather data{% endif %}</dd>
@@ -114,7 +116,7 @@
       <h2 id="rev">Review</h2>
       {% if pending %}
       <p>{{ pending }} insect{{ 's' if pending != 1 }} waiting for a person to confirm. They aren't counted until then.</p>
-      <p style="margin-top:10px"><a class="btn" href="/review">Review them</a></p>
+      {% if not public %}<p style="margin-top:10px"><a class="btn" href="/review">Review them</a></p>{% endif %}
       {% else %}<p class="muted">Nothing waiting.</p>{% endif %}
       {% if checks.checked %}<p class="muted small" style="margin-top:10px">Spot checks of labels the model was sure of: {{ checks.agreed }} of {{ checks.checked }} agreed with a person.</p>{% endif %}
     </section>

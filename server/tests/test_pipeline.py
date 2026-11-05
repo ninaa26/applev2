@@ -79,6 +79,40 @@ def test_upload_auth_and_duplicates():
         assert bad.status_code == 422
 
 
+def test_visitors_through_funnel_can_look_but_not_touch(monkeypatch):
+    from sentinel_server import settings as settings_mod
+
+    key = add_trap()
+    monkeypatch.setenv("SENTINEL_DASHBOARD_PASSWORD", "orchard")
+    settings_mod.reset_settings()
+    outside = {"Tailscale-Funnel-Request": "?1"}
+    with TestClient(create_app()) as client:
+        assert upload(client, key, datetime.now(UTC), MOTHS, "a").status_code == 201  # over the tailnet, as ever
+        for path in ("/", "/traps/T1", "/traps/T1/photos", "/static/app.css", "/healthz"):
+            assert client.get(path, headers=outside).status_code == 200, path
+        for path in ("/manage", "/review", "/api/v1/traps", "/docs", "/openapi.json", "/api/v1/hub/nodes"):
+            assert client.get(path, headers=outside).status_code == 403, path
+        for path in ("/traps/T1/new-card", "/traps/T1/biofix", "/manage/traps", "/api/v1/hub/claim", "/api/v1/captures"):
+            # The right password or trap key doesn't help: these aren't offered to the internet at all.
+            assert client.post(path, headers=outside, auth=("anyone", "orchard")).status_code == 403, path
+
+        page = client.get("/traps/T1", headers=outside).text
+        assert "<form" not in page and "/manage" not in page and "/review" not in page and "View only" in page
+        assert "<form" in client.get("/traps/T1", auth=("anyone", "orchard")).text
+
+        # Without the mark nothing has changed: the tailnet still needs the password.
+        assert client.get("/traps/T1").status_code == 401
+
+
+def test_a_hub_location_is_kept_off_the_public_page(monkeypatch):
+    with TestClient(create_app()) as client:
+        assert client.post("/manage/traps", data={"trap_id": "H1", "kind": "hub", "lure": "CM"}).status_code == 200
+        client.post("/traps/H1/location", data={"lat": "42.4459", "lon": "-76.4712"})
+        assert "42.4459" in client.get("/traps/H1").text
+        page = client.get("/traps/H1", headers={"Tailscale-Funnel-Request": "?1"}).text
+        assert "42.4459" not in page and "<form" not in page
+
+
 def test_dashboard_password_guards_pages_but_not_trap_uploads(monkeypatch):
     from sentinel_server import settings as settings_mod
 

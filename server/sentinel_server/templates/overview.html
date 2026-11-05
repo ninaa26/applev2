@@ -13,11 +13,11 @@
       {% if rows %}<span>{{ o.reporting }} of {{ o.n_traps }} traps reporting</span><span>{{ o.photos_24h }} photos in the last 24 hours</span>{% endif %}
     </p>
   </div>
-  {% if o.pending %}<a class="btn primary" href="/review">Review {{ o.pending }} insect{{ 's' if o.pending != 1 }}</a>{% endif %}
+  {% if o.pending and not public %}<a class="btn primary" href="/review">Review {{ o.pending }} insect{{ 's' if o.pending != 1 }}</a>{% endif %}
 </div>
 
 {% if not rows %}
-<div class="notice">No cameras yet. <a href="/manage">Add a hub and its ESP32 cameras</a> to start counting.</div>
+<div class="notice">No cameras yet.{% if not public %} <a href="/manage">Add a hub and its ESP32 cameras</a> to start counting.{% endif %}</div>
 {% endif %}
 
 {% if rows %}
@@ -57,8 +57,8 @@
     {% for h in hubs_down %}<li class="crit"><span class="what">Hub {{ h.trap.name or h.trap.id }} is offline: its {{ h.cameras }} camera{{ 's' if h.cameras != 1 }} can't send photos. Last checked in {{ h.health.seen_at|ago }}.</span><a href="/traps/{{ h.trap.id }}">Open hub</a></li>{% endfor %}
     {% for r in crit %}<li class="crit"><span class="what">{{ r.trap.name or r.trap.id }} hasn't sent a photo since {{ r.health.last.received_at|local('%b %-d, %H:%M') }}. Check its battery and Wi-Fi.</span><a href="/traps/{{ r.trap.id }}">Open trap</a></li>{% endfor %}
     {% for r in errs %}<li class="warn"><span class="what">{{ r.trap.name or r.trap.id }}: {{ r.health.reason }}</span><a href="{{ r.health.reason_url }}">See why</a></li>{% endfor %}
-    {% for r in old %}<li class="warn"><span class="what">The liner in {{ r.trap.name or r.trap.id }} is {{ r.liner_days|round|int }} days old. Old glue catches less and blurs the count.</span><a href="/traps/{{ r.trap.id }}">Record a new liner</a></li>{% endfor %}
-    {% if o.pending %}<li class="info"><span class="what">{{ o.pending }} insect{{ 's' if o.pending != 1 }} waiting for a person to confirm. They aren't counted until then.</span><a href="/review">Review them</a></li>{% endif %}
+    {% for r in old %}<li class="warn"><span class="what">The liner in {{ r.trap.name or r.trap.id }} is {{ r.liner_days|round|int }} days old. Old glue catches less and blurs the count.</span>{% if not public %}<a href="/traps/{{ r.trap.id }}">Record a new liner</a>{% endif %}</li>{% endfor %}
+    {% if o.pending %}<li class="info"><span class="what">{{ o.pending }} insect{{ 's' if o.pending != 1 }} waiting for a person to confirm. They aren't counted until then.</span>{% if not public %}<a href="/review">Review them</a>{% endif %}</li>{% endif %}
   </ul>
   {% else %}<p class="allgood">Every trap is reporting and nothing is waiting for review.</p>{% endif %}
 </section>
@@ -104,7 +104,7 @@
 <section class="section">
   <div class="section-head">
     <h2>Each trap</h2>
-    <a href="/manage">Add or remove traps</a>
+    {% if not public %}<a href="/manage">Add or remove traps</a>{% endif %}
   </div>
   <div class="tbl">
   <table>
@@ -116,7 +116,7 @@
       <td>{{ camera_status(h) }}</td>
       {% for sp in PESTS %}{% set n = r.week.get(sp, 0) %}<td class="n {{ 'zero' if not n }}">{{ n }}</td>{% endfor %}
       {% set other = r.week.get('other_moth', 0) + r.week.get('unclassified', 0) %}<td class="n {{ 'zero' if not other }}">{{ other }}</td>
-      <td class="n">{% if r.pending %}<a href="/review">{{ r.pending }}</a>{% else %}<span class="zero">0</span>{% endif %}</td>
+      <td class="n">{% if r.pending and public %}{{ r.pending }}{% elif r.pending %}<a href="/review">{{ r.pending }}</a>{% else %}<span class="zero">0</span>{% endif %}</td>
       <td>{{ r.card.installed_at|local('%b %-d') if r.card else '—' }}{% if r.card %}<span class="sub">{{ r.liner_days|round|int }} days</span>{% endif %}</td>
       <td class="n">{{ '%.2f V'|format(h.last.battery_v) if h.last and h.last.battery_v else '—' }}</td>
     </tr>
