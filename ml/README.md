@@ -10,8 +10,8 @@ flat layout: `data/inat`, `data/synth`, `models/v1`, …) is moved into place wi
 
 ```bash
 uv venv --python 3.12 .venv && uv pip install -p .venv/bin/python -r requirements.txt
-python3 fetch_ami.py --out data/web_moth_photos/ami_gbif --other-moths 60     # ~4,000 photos (AMI / GBIF)
-python3 fetch_inat.py --out data/web_moth_photos/inaturalist                    # ~10,300 photos (iNaturalist, research grade, CC; incl. ~3,000 non-moth bycatch)
+python3 fetch_ami.py --out data/web_moth_photos/ami_gbif --other-moths 300    # ~8,000 photos (AMI / GBIF; 300 other moth species × 15)
+python3 fetch_inat.py --out data/web_moth_photos/inaturalist                    # iNaturalist, research grade, CC: our 5 moths uncapped, ~4,200 other tortricids (359 NY species × ≤25), ~3,000 non-moth bycatch
 .venv/bin/python build_dataset.py                        # merge, de-duplicate, split -> data/training/classifier/dataset.csv
 .venv/bin/python segment_moths.py                        # flatbug cutout of each insect (~45 min, resumable)
 .venv/bin/python make_trap_style.py                      # paste cutouts onto data/trap_style/v1_webcam_2026-09/blank_liners/*.jpg -> data/trap_style/v1_webcam_2026-09/photos/
@@ -23,7 +23,7 @@ python3 fetch_inat.py --out data/web_moth_photos/inaturalist                    
 ```
 
 **Classes** (what the server stores): `CM`, `OFM`, `OBLR`, `other_moth` (other tortricids, lesser
-appleworm, redbanded leafroller, 60 common NE moths), `other_insect` (non-moth bycatch photographed in
+appleworm, redbanded leafroller, 300 common NE moths), `other_insect` (non-moth bycatch photographed in
 NY: `other_insect` and the `bycatch_*` labels: flies, wasps, beetles, bugs, lacewings, leafhoppers,
 spiders) and `debris` (bare liner: grid, glare, shadows; later real leaf bits and insect remains).
 
@@ -433,12 +433,17 @@ tight crops.
 
 ```bash
 python3 fetch_ami.py --out data/web_moth_photos/ami_gbif --dry-run              # counts only (~330 MB of metadata, cached)
-python3 fetch_ami.py --out data/web_moth_photos/ami_gbif --other-moths 60       # download: our moths + 60 common NE moths
+python3 fetch_ami.py --out data/web_moth_photos/ami_gbif --other-moths 300      # download: our moths + 300 common NE moths
 ```
 
 Checked Sep 23 2026 (adults, all AMI splits): CM 729, OBLR 1,300, **OFM 72**, lesser appleworm 84,
-redbanded leafroller 1,300, 900 "other moth" photos at 60 × 15. A few links (the SCAN museum portal)
-refuse automated downloads; the script logs them in `manifest.csv` and moves on. `manifest.csv`
+redbanded leafroller 1,300, 900 "other moth" photos at 60 × 15. **Nov 9 2026: other moths raised to
+300 species × 15 (4,500 photos)**: for the head, more kinds of look-alike moth help more than more photos of
+the same kinds (capping every label at 1,000 changed nothing, `docs/ml-research-status.md`). The same day
+`fetch_inat.py` lost its caps on our five moths and spread `other_tortricid` over every NY tortricid species
+(≤25 photos each) instead of the newest 1,500 observations. The manifests from before are kept as
+`manifest.before-*.csv` in each folder. SCAN's museum links refuse scripted downloads, so they are fetched
+from Symbiota's media server instead; any that still fail are logged in `manifest.csv`. `manifest.csv`
 also keeps every photo's source URL, for credits.
 
 These are photos of live or pinned moths, **not** moths on sticky liners. Use them to train only,

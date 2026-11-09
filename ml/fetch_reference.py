@@ -19,6 +19,9 @@ Sources, best documented first (each photo keeps its licence and attribution in 
                  is skipped (that's `inat`)
   idigbio        iDigBio, US museum specimens. Mostly the same photos as GBIF; links already fetched are skipped
   commons        Wikimedia Commons, the species category and its subcategories
+  ecdysis        Ecdysis (ecdysis.org), the Symbiota portal for arthropod collections: imaged specimens from
+                 MSU, the Mississippi Entomological Museum and others, CC0 or CC as each page says. Many are
+                 also in GBIF; links already fetched are skipped
   adw            Animal Diversity Web (University of Michigan): Phil Myers' photos, CC BY-NC-SA
   europeana      Europeana: Naturalis specimens, old bulletins and plates (public domain or CC only)
   inat_needs_id  iNaturalist observations nobody has confirmed yet. The species is the uploader's guess
@@ -28,8 +31,11 @@ Sources, best documented first (each photo keeps its licence and attribution in 
 Looked at and not fetched (Nov 2026): BugGuide's own site, Moth Photographers Group, UKMoths, Lepiforum and
 Pherobase (all rights reserved, no API); Flickr and Openverse (need an API key or an account); EOL (its image
 API returns nothing now); BOLD (its v5 API has no image links; the photos come through GBIF); the Atlas of
-Living Australia (its CM photos are iNaturalist Australia and GBIF datasets again); SCAN (Delaware's
-specimens: refuses scripted downloads, also through GBIF and iDigBio).
+Living Australia (its CM photos are iNaturalist Australia and GBIF datasets again).
+
+SCAN (scan-bugs.org, e.g. Delaware's specimens) refuses scripted downloads, so its photo links, which GBIF and
+iDigBio give, are fetched from Symbiota's media server (media01.symbiota.org), where the same files are and
+where Ecdysis links SCAN photos. Anything that still fails goes in hand_download.csv.
 
 Sizes: iNaturalist 'medium' (500 px long side), Bugwood 1536 px, Commons 1024 px, the rest as the host serves them. Exact duplicates
 (same bytes, e.g. an iNaturalist photo also on Commons) are kept once per species, from the source listed
@@ -62,13 +68,18 @@ BUGWOOD_API = "https://api.bugwood.org/rest/api/image/.json"
 BUGWOOD_V2 = "https://api.bugwoodcloud.org/v2/image"
 IDIGBIO_API = "https://search.idigbio.org/v2/search/media"
 ADW = "https://animaldiversity.org"
+ECDYSIS = "https://ecdysis.org/collections"
+# SCAN (scan-bugs.org) refuses scripted downloads, but its photos are also on Symbiota's media server, where
+# Ecdysis and SCAN's newer records link them. The path keeps its case there.
+SCAN_IMGLIB = re.compile(r"^https?://scan-bugs\.org(?::443)?/imglib/scan/")
+SYMBIOTA_MEDIA = "https://media01.symbiota.org/media/scan/"
 EUROPEANA_API = "https://api.europeana.eu/record/v2/search.json"  # api2demo is Europeana's public demo key
 OLD_NAMES = {"CM": ["Laspeyresia pomonella", "Carpocapsa pomonella"], "lookalike_LAW": ["Laspeyresia prunivora"]}
 # Bugwood gives each image a `commercial` flag; checked against the licence its pages show (Nov 2026)
 BUGWOOD_LICENSES = {1: "cc-by-nc-3.0-us", 2: "cc-by-3.0-us", 3: "cc-by-3.0-us"}
 GBIF_INAT_DATASET = "50c9509d-22c7-4a22-a47d-8c48425ef4a7"
 INAT_LICENSES = "cc0,cc-by,cc-by-nc,cc-by-sa,cc-by-nc-sa,cc-by-nd,cc-by-nc-nd"
-SOURCES = ("inat", "bugwood", "gbif", "idigbio", "commons", "adw", "europeana", "inat_needs_id", "inat_casual")
+SOURCES = ("inat", "bugwood", "gbif", "idigbio", "commons", "ecdysis", "adw", "europeana", "inat_needs_id", "inat_casual")
 # iNaturalist annotation 1 (life stage): value ids
 LIFE_STAGES = {2: "adult", 3: "teneral", 4: "pupa", 5: "nymph", 6: "larva", 7: "egg", 8: "juvenile"}
 
@@ -299,9 +310,16 @@ def idigbio_rows(label: str, names: list[str], count_only: bool = False) -> list
 
 # ---------- Animal Diversity Web (University of Michigan; Phil Myers' moth photos, CC BY-NC-SA) ----------
 
-def get_text(url: str) -> str:
-    with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=60) as r:
-        return r.read().decode("utf-8", "replace")
+def get_text(url: str, retries: int = 5) -> str:
+    for attempt in range(retries):
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=90) as r:
+                return r.read().decode("utf-8", "replace")
+        except urllib.error.HTTPError as e:
+            if e.code != 429 and e.code < 500 or attempt == retries - 1:
+                raise
+            time.sleep(30 * (attempt + 1))  # 429: the portal asks us to slow down
+    raise RuntimeError("unreachable")
 
 
 def adw_rows(label: str, account: str | None, count_only: bool = False) -> list[dict] | int:
@@ -329,6 +347,51 @@ def adw_rows(label: str, account: str | None, count_only: bool = False) -> list[
             "source_url": ADW + img.group(1),
         })
         time.sleep(0.5)
+    return rows
+
+
+# ---------- Ecdysis (Symbiota portal for arthropod collections: MSU, Mississippi, Purdue...) ----------
+
+def ecdysis_rows(label: str, names: list[str], count_only: bool = False) -> list[dict] | int:
+    """Its API has no image links, so: the search results (imaged specimens only, 100 a page), then each
+    specimen's page for its photos and licence."""
+    occids: list[str] = []
+    for name in names:
+        page = 1
+        while True:
+            time.sleep(2)
+            q = {"taxa": name, "usethes": 1, "taxontype": 2, "hasimages": 1, "page": page}
+            html = get_text(f"{ECDYSIS}/list.php?{urllib.parse.urlencode(q)}")
+            found = [o for o in dict.fromkeys(re.findall(r"openIndPU\((\d+)", html)) if o not in occids]
+            occids += found
+            m = re.search(r"records \d+-(\d+) of ([\d,]+)", html)
+            if not found or not m or int(m.group(1)) >= int(m.group(2).replace(",", "")):
+                break
+            page += 1
+            time.sleep(2)
+    if count_only:
+        return len(occids)
+    rows = []
+    for occ in occids:
+        url = f"{ECDYSIS}/individual/index.php?occid={occ}"
+        html = get_text(url)
+        lic = re.search(r"creativecommons\.org/(licenses/([a-z-]+)/([0-9.]+)|publicdomain/zero)", html)
+        if not lic:
+            continue
+        license_ = "cc0" if "zero" in lic.group(1) else f"cc-{lic.group(2)}-{lic.group(3)}"
+        holder = re.search(r"Rights Holder:\s*(?:<[^>]+>\s*)*([^<]+)", html)
+        files = re.findall(r"https://media01\.symbiota\.org/media/[^\"' ]+?\.(?:jpe?g|JPE?G)", html)
+        # each photo comes as base, _lg (large) and _tn (thumbnail): keep the large one, else the base
+        bases = dict.fromkeys(re.sub(r"_(?:lg|tn)(\.\w+)$", r"\1", f) for f in files)
+        for i, base in enumerate(bases):
+            large = re.sub(r"(\.\w+)$", r"_lg\1", base)
+            rows.append({
+                "label": label, "source": "ecdysis", "record": occ, "photo": f"{occ}_{i}", "record_url": url,
+                "taxon": names[0], "life_stage": "", "place": "", "country": "", "date": "",
+                "license": license_, "attribution": holder.group(1).strip() if holder else "",
+                "source_url": large if large in files else base,
+            })
+        time.sleep(2)
     return rows
 
 
@@ -387,7 +450,8 @@ def download(row: dict, out: Path, retries: int = 3) -> None:
     err = ""
     for attempt in range(retries):
         try:
-            with urllib.request.urlopen(urllib.request.Request(row["source_url"], headers=UA), timeout=60) as r:
+            url = SCAN_IMGLIB.sub(SYMBIOTA_MEDIA, row["source_url"])
+            with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=60) as r:
                 data = r.read()
             ext = image_kind(data)
             if not ext:
@@ -424,6 +488,8 @@ def list_rows(label: str, source: str, count_only: bool = False):
         return idigbio_rows(label, cats, count_only)
     if source == "europeana":
         return europeana_rows(label, cats, count_only)
+    if source == "ecdysis":
+        return ecdysis_rows(label, cats, count_only)
     if source == "adw":
         return adw_rows(label, adw, count_only)
     return commons_rows(label, cats, count_only)
