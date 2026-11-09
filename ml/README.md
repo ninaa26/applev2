@@ -465,17 +465,17 @@ attribution. Exact duplicates are kept once per species, from the best-documente
 
 Photos fetched Nov 9 2026 (files on disk, after duplicates and failed links):
 
-| | iNat confirmed | Bugwood | GBIF | Commons | ADW | Europeana | iNat unconfirmed | iNat casual | Total |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| CM | 12,925 | 83 | 7,564 | 98 | 5 | 11 | 2,003 | 53 | **22,742** |
-| OFM | 96 | 40 | 50 | 3 | 0 | 0 | 302 | 0 | **491** |
-| OBLR | 10,229 | 29 | 1,020 | 22 | 8 | 0 | 16,085 | 95 | **27,488** |
-| Redbanded leafroller | 8,856 | 9 | 442 | 20 | 6 | 0 | 9,489 | 16 | **18,838** |
-| Lesser appleworm | 190 | 7 | 43 | 3 | 0 | 1 | 309 | 0 | **553** |
-| **All** | 32,296 | 168 | 9,119 | 146 | 19 | 12 | 28,188 | 164 | **70,112** |
+| | iNat confirmed | Bugwood | GBIF | Ecdysis | Commons | ADW | Europeana | iNat unconfirmed | iNat casual | Total |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| CM | 12,925 | 83 | 7,574 | 1 | 115 | 5 | 11 | 2,003 | 53 | **22,770** |
+| OFM | 96 | 40 | 64 | 5 | 3 | 0 | 0 | 302 | 0 | **510** |
+| OBLR | 10,229 | 29 | 1,028 | 3 | 22 | 8 | 0 | 16,085 | 95 | **27,499** |
+| Redbanded leafroller | 8,856 | 9 | 448 | 2 | 20 | 6 | 0 | 9,489 | 16 | **18,846** |
+| Lesser appleworm | 190 | 7 | 47 | 0 | 3 | 0 | 1 | 309 | 0 | **557** |
+| **All** | 32,296 | 168 | 9,161 | 11 | 163 | 19 | 12 | 28,188 | 164 | **70,182** |
 
-9.7 GB. 157 photos failed (90 SCAN, 48 Wikimedia rate limits, a few dead links); they are in
-`hand_download.csv`, and `--retry-failed` tries them again.
+9.7 GB. 50 photos still fail (31 Wikimedia rate limits, 8 BugGuide, 8 a French recording site, a few
+deleted on iNaturalist); they are in `hand_download.csv`, and `--retry-failed` tries them again.
 
 `inat_needs_id/` (nobody has confirmed the species) and `inat_casual/` (reared or captive moths, or missing a
 date or place) are the uploader's guess: a look at 64 OFM photos there found larvae, fruit damage and a few
@@ -489,9 +489,9 @@ Things to know:
   is CC BY 3.0, checked against its pages Nov 9 2026.
 - iDigBio's own copies of its images are gone (410); its specimens come through GBIF with their original
   links, so `idigbio/` stays empty unless iDigBio has a photo GBIF doesn't.
-- Blocked: SCAN (scan-bugs.org) refuses scripted downloads and, from Cornell's network, browsers too.
-  `hand_download.csv` lists those photos with their specimen pages and the file name to save each as;
-  the next run picks a saved file up.
+- SCAN (scan-bugs.org) refuses scripted downloads, and browsers too from Cornell's network; its photos are
+  fetched from Symbiota's media server (media01.symbiota.org), where the same files are. `hand_download.csv`
+  lists whatever still fails, with the file name to save each as; the next run picks a saved file up.
 - Looked at and not fetched: BugGuide's own site, Moth Photographers Group, UKMoths, Lepiforum and Pherobase
   (all rights reserved, no API; fine to look at when checking an identification); Flickr and Openverse
   (need an API key or account); EOL (its image API returns nothing); BOLD (no image links; its photos come
@@ -510,7 +510,7 @@ bytes, and the largest file is kept. The files are links into the collections, s
 (`cp -RL` to copy it). Unconfirmed iNaturalist photos are left out. `manifest.csv` says where each photo was
 found, its licence, attribution and record link. Training doesn't read it.
 
-Nov 9 2026: CM 20,707, OFM 215, OBLR 11,341, redbanded leafroller 9,254, lesser appleworm 212 (41,729
+Nov 9 2026: CM 20,733, OFM 215, OBLR 11,346, redbanded leafroller 9,259, lesser appleworm 212 (41,765
 photos); left out as unconfirmed: 2,054, 302, 16,180, 9,504 and 309. About 100 OBLR and OFM photos are
 probably there twice: AMI's copies of BOLD specimens from BOLD's old image host, which no rule can match to
 the same photos fetched from its new one.
