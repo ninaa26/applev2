@@ -10,8 +10,8 @@ flat layout: `data/inat`, `data/synth`, `models/v1`, …) is moved into place wi
 
 ```bash
 uv venv --python 3.12 .venv && uv pip install -p .venv/bin/python -r requirements.txt
-python3 fetch_ami.py --out data/web_moth_photos/ami_gbif --other-moths 60     # ~4,000 photos (AMI / GBIF)
-python3 fetch_inat.py --out data/web_moth_photos/inaturalist                    # ~10,300 photos (iNaturalist, research grade, CC; incl. ~3,000 non-moth bycatch)
+python3 fetch_ami.py --out data/web_moth_photos/ami_gbif --other-moths 300    # ~8,000 photos (AMI / GBIF; 300 other moth species × 15)
+python3 fetch_inat.py --out data/web_moth_photos/inaturalist                    # iNaturalist, research grade, CC: our 5 moths uncapped, ~4,200 other tortricids (359 NY species × ≤25), ~3,000 non-moth bycatch
 .venv/bin/python build_dataset.py                        # merge, de-duplicate, split -> data/training/classifier/dataset.csv
 .venv/bin/python segment_moths.py                        # flatbug cutout of each insect (~45 min, resumable)
 .venv/bin/python make_trap_style.py                      # paste cutouts onto data/trap_style/v1_webcam_2026-09/blank_liners/*.jpg -> data/trap_style/v1_webcam_2026-09/photos/
@@ -23,7 +23,7 @@ python3 fetch_inat.py --out data/web_moth_photos/inaturalist                    
 ```
 
 **Classes** (what the server stores): `CM`, `OFM`, `OBLR`, `other_moth` (other tortricids, lesser
-appleworm, redbanded leafroller, 60 common NE moths), `other_insect` (non-moth bycatch photographed in
+appleworm, redbanded leafroller, 300 common NE moths), `other_insect` (non-moth bycatch photographed in
 NY: `other_insect` and the `bycatch_*` labels: flies, wasps, beetles, bugs, lacewings, leafhoppers,
 spiders) and `debris` (bare liner: grid, glare, shadows; later real leaf bits and insect remains).
 
@@ -433,16 +433,87 @@ tight crops.
 
 ```bash
 python3 fetch_ami.py --out data/web_moth_photos/ami_gbif --dry-run              # counts only (~330 MB of metadata, cached)
-python3 fetch_ami.py --out data/web_moth_photos/ami_gbif --other-moths 60       # download: our moths + 60 common NE moths
+python3 fetch_ami.py --out data/web_moth_photos/ami_gbif --other-moths 300      # download: our moths + 300 common NE moths
 ```
 
 Checked Sep 23 2026 (adults, all AMI splits): CM 729, OBLR 1,300, **OFM 72**, lesser appleworm 84,
-redbanded leafroller 1,300, 900 "other moth" photos at 60 × 15. A few links (the SCAN museum portal)
-refuse automated downloads; the script logs them in `manifest.csv` and moves on. `manifest.csv`
+redbanded leafroller 1,300, 900 "other moth" photos at 60 × 15. **Nov 9 2026: other moths raised to
+300 species × 15 (4,500 photos)**: for the head, more kinds of look-alike moth help more than more photos of
+the same kinds (capping every label at 1,000 changed nothing, `docs/ml-research-status.md`). The same day
+`fetch_inat.py` lost its caps on our five moths and spread `other_tortricid` over every NY tortricid species
+(≤25 photos each) instead of the newest 1,500 observations. The manifests from before are kept as
+`manifest.before-*.csv` in each folder. SCAN's museum links refuse scripted downloads, so they are fetched
+from Symbiota's media server instead; any that still fail are logged in `manifest.csv`. `manifest.csv`
 also keeps every photo's source URL, for credits.
 
 These are photos of live or pinned moths, **not** moths on sticky liners. Use them to train only,
 never to report accuracy. Accuracy numbers come from our own staged-card photos, split by card.
+
+## Reference library: every open photo of our five moths
+
+```bash
+python3 fetch_reference.py --dry-run          # records per species and source
+python3 fetch_reference.py                    # download into data/web_moth_photos/reference/<label>/<source>/
+python3 fetch_reference.py --retry-failed     # try the failed photos again (no listing)
+```
+
+A library to look at and pick from, **not read by training** (`build_dataset.py` doesn't know it), so
+running it changes no model. It pulls every openly licensed photo it can find of CM, OFM, OBLR, redbanded
+leafroller and lesser appleworm, all life stages, from nine sources (the script's docstring says what each
+is). `manifest.csv` keeps each photo's record link, life stage when given, place, date, licence and
+attribution. Exact duplicates are kept once per species, from the best-documented source.
+
+Photos fetched Nov 9 2026 (files on disk, after duplicates and failed links):
+
+| | iNat confirmed | Bugwood | GBIF | Ecdysis | Commons | ADW | Europeana | iNat unconfirmed | iNat casual | Total |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| CM | 12,925 | 83 | 7,574 | 1 | 115 | 5 | 11 | 2,003 | 53 | **22,770** |
+| OFM | 96 | 40 | 64 | 5 | 3 | 0 | 0 | 302 | 0 | **510** |
+| OBLR | 10,229 | 29 | 1,028 | 3 | 22 | 8 | 0 | 16,085 | 95 | **27,499** |
+| Redbanded leafroller | 8,856 | 9 | 448 | 2 | 20 | 6 | 0 | 9,489 | 16 | **18,846** |
+| Lesser appleworm | 190 | 7 | 47 | 0 | 3 | 0 | 1 | 309 | 0 | **557** |
+| **All** | 32,296 | 168 | 9,161 | 11 | 163 | 19 | 12 | 28,188 | 164 | **70,182** |
+
+9.7 GB. 50 photos still fail (31 Wikimedia rate limits, 8 BugGuide, 8 a French recording site, a few
+deleted on iNaturalist); they are in `hand_download.csv`, and `--retry-failed` tries them again.
+
+`inat_needs_id/` (nobody has confirmed the species) and `inat_casual/` (reared or captive moths, or missing a
+date or place) are the uploader's guess: a look at 64 OFM photos there found larvae, fruit damage and a few
+moths that look like other tortricids. Don't train on them without checking.
+
+Things to know:
+- OFM and lesser appleworm are scarce everywhere: about 100 and 200 confirmed photos on iNaturalist, about 50
+  and 45 more on GBIF, about 40 and 7 on Bugwood. GBIF files iNaturalist's *Aspila* records under the genus
+  only, so those come from iNaturalist directly.
+- Bugwood (insectimages.org) has no licence in its API: its `commercial` flag 1 is CC BY-NC 3.0 and 2 or 3
+  is CC BY 3.0, checked against its pages Nov 9 2026.
+- iDigBio's own copies of its images are gone (410); its specimens come through GBIF with their original
+  links, so `idigbio/` stays empty unless iDigBio has a photo GBIF doesn't.
+- SCAN (scan-bugs.org) refuses scripted downloads, and browsers too from Cornell's network; its photos are
+  fetched from Symbiota's media server (media01.symbiota.org), where the same files are. `hand_download.csv`
+  lists whatever still fails, with the file name to save each as; the next run picks a saved file up.
+- Looked at and not fetched: BugGuide's own site, Moth Photographers Group, UKMoths, Lepiforum and Pherobase
+  (all rights reserved, no API; fine to look at when checking an identification); Flickr and Openverse
+  (need an API key or account); EOL (its image API returns nothing); BOLD (no image links; its photos come
+  through GBIF's iBOL dataset); the Atlas of Living Australia (repeats iNaturalist and GBIF). No public
+  trap-photo dataset of these species turned up beyond the Roboflow sets already in `real_liners/from_the_web/`.
+
+## All confirmed photos of each species in one folder
+
+```bash
+python3 compile_species.py     # -> data/web_moth_photos/all_by_species/<label>/ + manifest.csv
+```
+
+Every confirmed web photo of each of our five moths from all three collections (`reference/`,
+`inaturalist/`, `ami_gbif/`), each photo once: copies are matched by iNaturalist photo number, by link or by
+bytes, and the largest file is kept. The files are links into the collections, so the folder takes no space
+(`cp -RL` to copy it). Unconfirmed iNaturalist photos are left out. `manifest.csv` says where each photo was
+found, its licence, attribution and record link. Training doesn't read it.
+
+Nov 9 2026: CM 20,733, OFM 215, OBLR 11,346, redbanded leafroller 9,259, lesser appleworm 212 (41,765
+photos); left out as unconfirmed: 2,054, 302, 16,180, 9,504 and 309. About 100 OBLR and OFM photos are
+probably there twice: AMI's copies of BOLD specimens from BOLD's old image host, which no rule can match to
+the same photos fetched from its new one.
 
 ## Model versions (see the architecture page)
 
