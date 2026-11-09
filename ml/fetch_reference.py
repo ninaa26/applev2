@@ -294,7 +294,7 @@ def idigbio_rows(label: str, names: list[str], count_only: bool = False) -> list
                 lic = gbif_license(d.get("xmpRights:WebStatement") or d.get("xmpRights:UsageTerms") or "")
                 # api.idigbio.org/v2/media/... was iDigBio's own copy and is gone (410, Nov 2026); those
                 # collections (MSU's on Ecdysis) come through GBIF with their original links instead
-                if not url.startswith("http") or "api.idigbio.org" in url or not lic:
+                if not url.startswith("http") or urllib.parse.urlparse(url).hostname == "api.idigbio.org" or not lic:
                     continue
                 rows.append({
                     "label": label, "source": "idigbio", "record": (t.get("records") or [""])[0],
