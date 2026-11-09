@@ -498,6 +498,23 @@ Things to know:
   through GBIF's iBOL dataset); the Atlas of Living Australia (repeats iNaturalist and GBIF). No public
   trap-photo dataset of these species turned up beyond the Roboflow sets already in `real_liners/from_the_web/`.
 
+## All confirmed photos of each species in one folder
+
+```bash
+python3 compile_species.py     # -> data/web_moth_photos/all_by_species/<label>/ + manifest.csv
+```
+
+Every confirmed web photo of each of our five moths from all three collections (`reference/`,
+`inaturalist/`, `ami_gbif/`), each photo once: copies are matched by iNaturalist photo number, by link or by
+bytes, and the largest file is kept. The files are links into the collections, so the folder takes no space
+(`cp -RL` to copy it). Unconfirmed iNaturalist photos are left out. `manifest.csv` says where each photo was
+found, its licence, attribution and record link. Training doesn't read it.
+
+Nov 9 2026: CM 20,707, OFM 215, OBLR 11,341, redbanded leafroller 9,254, lesser appleworm 212 (41,729
+photos); left out as unconfirmed: 2,054, 302, 16,180, 9,504 and 309. About 100 OBLR and OFM photos are
+probably there twice: AMI's copies of BOLD specimens from BOLD's old image host, which no rule can match to
+the same photos fetched from its new one.
+
 ## Model versions (see the architecture page)
 
 | Version | Detector | Species ID | Where it lives |

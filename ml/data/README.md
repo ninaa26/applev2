@@ -9,6 +9,8 @@ data/
   web_moth_photos/            moths photographed in nature (web), for learning species
     inaturalist/<label>/        iNaturalist, research grade, CC (fetch_inat.py) + manifest.csv
     ami_gbif/<label>/           AMI / GBIF, part museum specimens (fetch_ami.py) + manifest.csv
+    all_by_species/<label>/     every confirmed photo of our 5 moths from the three collections above, once each:
+                                links, not copies (compile_species.py) + manifest.csv
     cutouts/<label>/            each web insect cut out by flatbug, for pasting (segment_moths.py)
     reference/<label>/<source>/ every open photo of our 5 moths, all life stages (fetch_reference.py): inat, bugwood,
                                 gbif, idigbio, commons, adw, europeana, and the unconfirmed inat_needs_id and

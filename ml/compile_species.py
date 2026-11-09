@@ -11,9 +11,10 @@ library), so each photo is listed once:
   - of its copies, the largest file is kept (AMI's iNaturalist originals beat the 500 px copies)
 
 Writes data/web_moth_photos/all_by_species/<label>/<source>_<id>.<ext>, links (not copies) to the files in
-the collections, so it takes no space; copy it elsewhere with `cp -RL`. Photos whose species nobody has
-confirmed (iNaturalist needs_id and casual) go in <label>/unconfirmed/. manifest.csv has one row per photo:
-every collection and source it was found in, licence, attribution, record link and life stage.
+the collections, so it takes no space; copy it elsewhere with `cp -RL`. Confirmed photos only: a photo whose
+species nobody has confirmed (iNaturalist needs_id and casual, and nowhere else) is left out; those stay in
+reference/<label>/inat_needs_id/ and inat_casual/. manifest.csv has one row per photo: every collection and
+source it was found in, licence, attribution, record link and life stage.
 
 Training doesn't read this folder; it's for looking at, and for picking from.
 """
@@ -33,7 +34,7 @@ import paths
 
 SPECIES = ["CM", "OFM", "OBLR", "lookalike_RBLR", "lookalike_LAW"]
 UNCONFIRMED = {"inat_needs_id", "inat_casual"}
-FIELDS = ["label", "confirmed", "file", "source", "found_in", "license", "attribution", "record_url",
+FIELDS = ["label", "file", "source", "found_in", "license", "attribution", "record_url",
           "life_stage", "source_url", "target"]
 
 
@@ -140,12 +141,18 @@ def main(argv=None) -> int:
         for f in out.rglob("*"):
             if f.is_symlink() or f.name == "manifest.csv":
                 f.unlink()
-    rows, table = [], Counter()
+        for d in sorted((d for d in out.rglob("*") if d.is_dir()), reverse=True):
+            if not any(d.iterdir()):
+                d.rmdir()
+    rows, kept, left_out = [], Counter(), Counter()
     for copies in groups:
+        label = copies[0]["label"]
+        copies = [p for p in copies if p["confirmed"]]  # an unconfirmed copy never decides which file is kept
+        if not copies:
+            left_out[label] += 1
+            continue
         keep, info = best(copies)
-        confirmed = any(p["confirmed"] for p in copies)
-        label = keep["label"]
-        folder = out / label if confirmed else out / label / "unconfirmed"
+        folder = out / label
         folder.mkdir(parents=True, exist_ok=True)
         source = keep.get("source", keep["collection"])
         name = f"{source}_{keep.get('photo') or keep['path'].stem}{keep['path'].suffix}"
@@ -153,23 +160,23 @@ def main(argv=None) -> int:
         os.symlink(os.path.relpath(keep["path"], folder), link)
         found_in = sorted({f"{p['collection']}/{p.get('source', '')}".rstrip("/") for p in copies})
         rows.append({
-            "label": label, "confirmed": "yes" if confirmed else "no", "file": str(link.relative_to(out)),
+            "label": label, "file": str(link.relative_to(out)),
             "source": source, "found_in": "; ".join(found_in), "license": info.get("license", ""),
             "attribution": info.get("attribution", ""), "record_url": info.get("record_url", ""),
             "life_stage": info.get("life_stage", ""), "source_url": keep.get("source_url", ""),
             "target": str(keep["path"]),
         })
-        table[(label, confirmed)] += 1
-    rows.sort(key=lambda r: (SPECIES.index(r["label"]), r["confirmed"] == "no", r["file"]))
+        kept[label] += 1
+    rows.sort(key=lambda r: (SPECIES.index(r["label"]), r["file"]))
     with open(out / "manifest.csv", "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=FIELDS)
         w.writeheader()
         w.writerows(rows)
 
-    print(f"{len(photos)} photo files in the three collections -> {len(rows)} different photos")
-    print(f"  {'':16}{'confirmed':>10}{'unconfirmed':>12}")
+    print(f"{len(photos)} photo files in the three collections -> {len(rows)} different confirmed photos")
+    print(f"  {'':16}{'in folder':>10}{'unconfirmed, left out':>23}")
     for label in SPECIES:
-        print(f"  {label:16}{table[(label, True)]:>10,}{table[(label, False)]:>12,}")
+        print(f"  {label:16}{kept[label]:>10,}{left_out[label]:>23,}")
     print(f"Written to {out}")
     return 0
 
