@@ -10,6 +10,10 @@ data/
     inaturalist/<label>/        iNaturalist, research grade, CC (fetch_inat.py) + manifest.csv
     ami_gbif/<label>/           AMI / GBIF, part museum specimens (fetch_ami.py) + manifest.csv
     cutouts/<label>/            each web insect cut out by flatbug, for pasting (segment_moths.py)
+    reference/<label>/<source>/ every open photo of our 5 moths, all life stages (fetch_reference.py): inat, bugwood,
+                                gbif, idigbio, commons, adw, europeana, and the unconfirmed inat_needs_id and
+                                inat_casual. manifest.csv (licences, links) and hand_download.csv (blocked photos).
+                                A library to look at; training doesn't read it
 
   real_liners/                real insects stuck on real sticky liners
     from_the_web/               other people's liner photos and Roboflow sets; its own README.md says what each

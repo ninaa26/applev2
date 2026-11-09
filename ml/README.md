@@ -444,6 +444,55 @@ also keeps every photo's source URL, for credits.
 These are photos of live or pinned moths, **not** moths on sticky liners. Use them to train only,
 never to report accuracy. Accuracy numbers come from our own staged-card photos, split by card.
 
+## Reference library: every open photo of our five moths
+
+```bash
+python3 fetch_reference.py --dry-run          # records per species and source
+python3 fetch_reference.py                    # download into data/web_moth_photos/reference/<label>/<source>/
+python3 fetch_reference.py --retry-failed     # try the failed photos again (no listing)
+```
+
+A library to look at and pick from, **not read by training** (`build_dataset.py` doesn't know it), so
+running it changes no model. It pulls every openly licensed photo it can find of CM, OFM, OBLR, redbanded
+leafroller and lesser appleworm, all life stages, from nine sources (the script's docstring says what each
+is). `manifest.csv` keeps each photo's record link, life stage when given, place, date, licence and
+attribution. Exact duplicates are kept once per species, from the best-documented source.
+
+Photos fetched Nov 9 2026 (files on disk, after duplicates and failed links):
+
+| | iNat confirmed | Bugwood | GBIF | Commons | ADW | Europeana | iNat unconfirmed | iNat casual | Total |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| CM | 12,925 | 83 | 7,564 | 98 | 5 | 11 | 2,003 | 53 | **22,742** |
+| OFM | 96 | 40 | 50 | 3 | 0 | 0 | 302 | 0 | **491** |
+| OBLR | 10,229 | 29 | 1,020 | 22 | 8 | 0 | 16,085 | 95 | **27,488** |
+| Redbanded leafroller | 8,856 | 9 | 442 | 20 | 6 | 0 | 9,489 | 16 | **18,838** |
+| Lesser appleworm | 190 | 7 | 43 | 3 | 0 | 1 | 309 | 0 | **553** |
+| **All** | 32,296 | 168 | 9,119 | 146 | 19 | 12 | 28,188 | 164 | **70,112** |
+
+9.7 GB. 157 photos failed (90 SCAN, 48 Wikimedia rate limits, a few dead links); they are in
+`hand_download.csv`, and `--retry-failed` tries them again.
+
+`inat_needs_id/` (nobody has confirmed the species) and `inat_casual/` (reared or captive moths, or missing a
+date or place) are the uploader's guess: a look at 64 OFM photos there found larvae, fruit damage and a few
+moths that look like other tortricids. Don't train on them without checking.
+
+Things to know:
+- OFM and lesser appleworm are scarce everywhere: about 100 and 200 confirmed photos on iNaturalist, about 50
+  and 45 more on GBIF, about 40 and 7 on Bugwood. GBIF files iNaturalist's *Aspila* records under the genus
+  only, so those come from iNaturalist directly.
+- Bugwood (insectimages.org) has no licence in its API: its `commercial` flag 1 is CC BY-NC 3.0 and 2 or 3
+  is CC BY 3.0, checked against its pages Nov 9 2026.
+- iDigBio's own copies of its images are gone (410); its specimens come through GBIF with their original
+  links, so `idigbio/` stays empty unless iDigBio has a photo GBIF doesn't.
+- Blocked: SCAN (scan-bugs.org) refuses scripted downloads and, from Cornell's network, browsers too.
+  `hand_download.csv` lists those photos with their specimen pages and the file name to save each as;
+  the next run picks a saved file up.
+- Looked at and not fetched: BugGuide's own site, Moth Photographers Group, UKMoths, Lepiforum and Pherobase
+  (all rights reserved, no API; fine to look at when checking an identification); Flickr and Openverse
+  (need an API key or account); EOL (its image API returns nothing); BOLD (no image links; its photos come
+  through GBIF's iBOL dataset); the Atlas of Living Australia (repeats iNaturalist and GBIF). No public
+  trap-photo dataset of these species turned up beyond the Roboflow sets already in `real_liners/from_the_web/`.
+
 ## Model versions (see the architecture page)
 
 | Version | Detector | Species ID | Where it lives |
