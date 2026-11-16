@@ -7,7 +7,7 @@ for the species we care about, and downloads those photos from their original
 hosts into data/web_moth_photos/ami_gbif/<label>/.
 
     python fetch_ami.py --out data/web_moth_photos/ami_gbif                          # our 5 moths
-    python fetch_ami.py --out data/web_moth_photos/ami_gbif --other-moths 80          # + 80 common NE moths as "other_moth"
+    python fetch_ami.py --out data/web_moth_photos/ami_gbif --other-moths 300         # + 300 common NE moths as "other_moth"
     python fetch_ami.py --out data/web_moth_photos/ami_gbif --dry-run                 # counts only
 
 Photos keep their original licences; manifest.csv records each image's source URL
@@ -20,6 +20,7 @@ import argparse
 import csv
 import io
 import random
+import re
 import sys
 import time
 import urllib.request
@@ -123,7 +124,10 @@ def download(row: dict, out: Path, retries: int = 3) -> tuple[str, str]:
     dest.parent.mkdir(parents=True, exist_ok=True)
     for attempt in range(retries):
         try:
-            with urllib.request.urlopen(urllib.request.Request(row["identifier"], headers=UA), timeout=30) as r:
+            # SCAN refuses scripted downloads; the same files are on Symbiota's media server (see fetch_reference.py)
+            url = re.sub(r"^https?://scan-bugs\.org(?::443)?/imglib/scan/", "https://media01.symbiota.org/media/scan/",
+                         row["identifier"])
+            with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=30) as r:
                 dest.write_bytes(r.read())
             return "ok", str(dest)
         except Exception as e:  # dead links are common in GBIF media; skip after retries

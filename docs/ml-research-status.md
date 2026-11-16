@@ -68,7 +68,7 @@ claim and the camera is not ours, so they choose between options; they are not t
 | Attention module on a lightweight detector | Open 7 | |
 | Hierarchical transfer COCO → IP102 → target | Open 6 | |
 | Simple open-set scoring (max softmax + temperature) | Done | `train_v1.py` fits a temperature on real-liner val crops (T = 1.65) and saves it in the head; server, playground and scorers divide logits by it. Fitted on web photos it came out 0.9–1.1 and did nothing |
-| Expert-curated outlier species; more species beats more images | Had / Open 3 | `other_moth` is NY tortricids across many species plus 60 common NE moths, lesser appleworm and redbanded leafroller, not a generic set |
+| Expert-curated outlier species; more species beats more images | Had / Open 3 | `other_moth` is NY tortricids across many species (since Nov 9 2026: all 359 NY species, ≤25 photos each) plus 300 common NE moths (was 60), lesser appleworm and redbanded leafroller, not a generic set. Not yet retrained on |
 | Anomaly / OOD filter on detections | Had | The `debris` class, the review and unknown bands, and two-photo confirmation. Not measurable yet (Open 13) |
 | Hierarchical output, stop at the confident rank | Done | Below 0.80 a catch is "the model's guess" and waits for review; the biofix says when it depends on such catches. No new label was added: the six classes are fixed across the repo |
 | Morphospecies clustering + human review | Open 14 | |

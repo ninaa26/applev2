@@ -14,6 +14,8 @@ MODELS = Path("models")
 # Moths photographed in nature (web), for learning species.
 INAT = "web_moth_photos/inaturalist"  # <label>/<photo>.jpg + manifest.csv (fetch_inat.py)
 AMI = "web_moth_photos/ami_gbif"  # <label>/<photo>.jpg + manifest.csv (fetch_ami.py)
+REFERENCE = "web_moth_photos/reference"  # <label>/<source>/<photo>.jpg + manifest.csv: every open photo of our 5 moths (fetch_reference.py), not read by training
+ALL_SPECIES = "web_moth_photos/all_by_species"  # <label>/ links to every web photo of our 5 moths, one per photo (compile_species.py)
 CUTOUTS = "web_moth_photos/cutouts"  # flatbug cutout of each web insect (segment_moths.py)
 
 # Real insects stuck on real sticky liners.
