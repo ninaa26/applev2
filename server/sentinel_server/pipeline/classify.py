@@ -31,7 +31,7 @@ NOT_FOR_A_MOTH_HEAD = ("other_insect", "debris")  # detector labels whose call s
 
 def moth_only(classifier) -> bool:
     """True for a classifier that can only name moth species (no other_insect, no debris)."""
-    classes = getattr(classifier, "classes", None)
+    classes = getattr(classifier, "classes", None) or []
     return bool(classes) and set(classes) <= set(MOTH_SPECIES)
 
 
