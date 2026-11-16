@@ -14,6 +14,7 @@ MODELS = Path("models")
 # Moths photographed in nature (web), for learning species.
 INAT = "web_moth_photos/inaturalist"  # <label>/<photo>.jpg + manifest.csv (fetch_inat.py)
 AMI = "web_moth_photos/ami_gbif"  # <label>/<photo>.jpg + manifest.csv (fetch_ami.py)
+ALL_SPECIES = "web_moth_photos/all_by_species"  # <label>/ links to every web photo of our 5 moths, one per photo (compile_species.py)
 CUTOUTS = "web_moth_photos/cutouts"  # flatbug cutout of each web insect (segment_moths.py)
 
 # Real insects stuck on real sticky liners.
@@ -30,6 +31,7 @@ TRAP_STYLE_VERSION = "v1_webcam_2026-09"  # the version build_dataset.py and tra
 # What training reads and writes.
 CLASSIFIER = "training/classifier"
 DATASET = f"{CLASSIFIER}/dataset.csv"  # build_dataset.py
+MOTH_DATASET = f"{CLASSIFIER}/moth_dataset.csv"  # build_moth_dataset.py: the species head for detector-found moths
 EXCLUDE = f"{CLASSIFIER}/exclude.csv"  # photos a person decided to leave out (path, why)
 DROPPED = f"{CLASSIFIER}/dropped.csv"  # every photo build_dataset.py left out, and why
 EMBEDDINGS = f"{CLASSIFIER}/bioclip_embeddings"

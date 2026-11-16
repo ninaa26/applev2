@@ -2,6 +2,9 @@
 
     python train_v1.py                    # embed new photos, train, report on the test split
     python train_v1.py --final            # also report on our locked test cards (do this once, at the end)
+    python train_v1.py --dataset moth --out models/classifier/bioclip_head/archive/<date>_moth_only
+                                          # build_moth_dataset.py: the species of boxes the detector called moth,
+                                          # trained on web photos only, C and T picked on real-liner "tune" crops
 
 Reads data/training/classifier/dataset.csv from build_dataset.py. Embeddings are cached in
 data/training/classifier/bioclip_embeddings/, so re-running after adding photos only embeds the new ones and
@@ -30,6 +33,7 @@ import argparse
 import csv
 import json
 import sys
+from collections import Counter
 from pathlib import Path
 
 import numpy as np
@@ -48,8 +52,11 @@ PROMPTS = {
 }
 
 
-def load_rows(data: Path) -> list[dict]:
-    with open(data / paths.DATASET, newline="") as f:
+DATASETS = {"all": paths.DATASET, "moth": paths.MOTH_DATASET}
+
+
+def load_rows(data: Path, dataset: str = "all") -> list[dict]:
+    with open(data / DATASETS[dataset], newline="") as f:
         return list(csv.DictReader(f))
 
 
@@ -169,11 +176,14 @@ def main(argv=None) -> int:
     ap.add_argument("--device", default="auto",
                     help="auto (mps > cuda > cpu) or e.g. cpu: on the 16 GB M3, mps stalls in Metal after a few thousand photos")
     ap.add_argument("--final", action="store_true", help="also evaluate on the locked test cards")
+    ap.add_argument("--dataset", choices=sorted(DATASETS), default="all",
+                    help="all: build_dataset.py, six classes for every box; moth: build_moth_dataset.py, the species "
+                         "of boxes the detector called moth (trained on web photos, tuned on real-liner crops)")
     args = ap.parse_args(argv)
 
     from sklearn.linear_model import LogisticRegression
 
-    rows = [r for r in load_rows(args.data) if r["split"] != "locked" or args.final]
+    rows = [r for r in load_rows(args.data, args.dataset) if r["split"] != "locked" or args.final]
     slug = args.model.split("/")[-1].replace(":", "_")
     X, embedder = embeddings(rows, args.data / paths.EMBEDDINGS / f"{slug}.npz", args.model, args.batch, args.device)
 
@@ -183,11 +193,13 @@ def main(argv=None) -> int:
     rows, X = [r for r, k in zip(rows, keep) if k], X[keep]
     y = np.array([idx[r["class"]] for r in rows])
     split = np.array([r["split"] for r in rows])
-    tr, va, te, lk = (split == s for s in ("train", "val", "test", "locked"))
+    tr, va, te, lk, tn = (split == s for s in ("train", "val", "test", "locked", "tune"))
     synth = np.array([r["source"] == "synth" for r in rows])
     real = np.array([r["source"] in REAL for r in rows])
     tests = {"test · web photos": te & ~synth & ~real, "test · trap-style": te & synth,
              "test · real liners (held out)": te & real}
+    if tn.any():  # what C and T were picked on, so it flatters the head; the held-out test is the number
+        tests["tune · real liners (picked C and T)"] = tn
     tests = {k: m for k, m in tests.items() if m.any()}
     print(f"Classes {classes}; train {tr.sum()}, val {va.sum()}, test {te.sum()} "
           f"({(te & synth).sum()} trap-style), locked {lk.sum()}")
@@ -200,8 +212,9 @@ def main(argv=None) -> int:
         results[f"v0 zero-shot · {name}"] = report(y[m], (X[m] @ text.T).argmax(1), classes)
 
     # v1: pick C and T on val (its real-liner rows, when there are any), then refit on train + val.
-    tune = va & real if (va & real).sum() >= 50 else va
-    tuned_on = "real-liner val crops" if tune is not va else "val"
+    # "tune" rows (build_moth_dataset.py's real-liner crops) pick C and T and are never fitted on.
+    tune = tn if tn.sum() >= 50 else va & real if (va & real).sum() >= 50 else va
+    tuned_on = "real-liner tune crops" if tune is tn else "real-liner val crops" if tune is not va else "val"
     best = None
     for C in (0.3, 1, 3, 10, 30, 100):
         clf = LogisticRegression(C=C, class_weight="balanced", max_iter=3000).fit(X[tr], y[tr])
@@ -224,10 +237,9 @@ def main(argv=None) -> int:
     np.savez(args.out / "head.npz", classes=np.array(classes), W=clf.coef_.astype(np.float32),
              b=clf.intercept_.astype(np.float32), T=np.float32(T), model=np.array(args.model))
     (args.out / "metrics.json").write_text(json.dumps(results, indent=2))
-    trained_on.write(args.out, trained_on.summary(args.data, args.model, args.data / paths.DATASET, rows,
+    trained_on.write(args.out, trained_on.summary(args.data, args.model, args.data / DATASETS[args.dataset], rows,
                                                   C=C, T=round(float(T), 4), final=args.final))
-    by_source = {s: int(sum(1 for r in rows if r["source"] == s and r["split"] == "train"))
-                 for s in ("inat", "ami", "own", "liner", "synth")}
+    by_source = dict(Counter(r["source"] for r in rows if r["split"] == "train").most_common())
     md = ["# Species ID v0 / v1", "",
           f"BioCLIP 2 image features. Training photos by source: {by_source}.",
           f"C={C} and temperature {T:.2f} were picked on {int(tune.sum())} {tuned_on}.",
