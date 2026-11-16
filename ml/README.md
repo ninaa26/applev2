@@ -510,8 +510,12 @@ bytes, and the largest file is kept. The files are links into the collections, s
 (`cp -RL` to copy it). Unconfirmed iNaturalist photos are left out. `manifest.csv` says where each photo was
 found, its licence, attribution and record link. Training doesn't read it.
 
-Nov 9 2026: CM 20,733, OFM 215, OBLR 11,346, redbanded leafroller 9,259, lesser appleworm 212 (41,765
-photos); left out as unconfirmed: 2,054, 302, 16,180, 9,504 and 309. About 100 OBLR and OFM photos are
+Nov 15 2026: CM 20,733, OFM 215, OBLR 11,346, redbanded leafroller 9,259, lesser appleworm 212 (41,765
+photos); left out as unconfirmed: 2,054, 302, 16,180, 9,504 and 309. Plus `other_moth/`, the look-alikes in one
+folder: up to 7 photos of each species from `inaturalist/other_tortricid` (1,774 photos, 360 New York tortricid
+species; 167 of them have fewer than 7) and from `ami_gbif/other_moth` (2,100 photos, 300 northeastern moth
+species), 3,874 in all; `--per-lookalike-species` changes the 7. The manifest's `taxon` names each species
+(AMI's GBIF species numbers are looked up once and cached in `ami_gbif/_metadata/species_names.json`). About 100 OBLR and OFM photos are
 probably there twice: AMI's copies of BOLD specimens from BOLD's old image host, which no rule can match to
 the same photos fetched from its new one.
 

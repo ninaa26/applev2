@@ -16,6 +16,11 @@ species nobody has confirmed (iNaturalist needs_id and casual, and nowhere else)
 reference/<label>/inat_needs_id/ and inat_casual/. manifest.csv has one row per photo: every collection and
 source it was found in, licence, attribution, record link and life stage.
 
+Also other_moth/, the look-alikes, in one folder: a sample of each species (7 photos per species from each
+source by default, the same ones on every rebuild) of inaturalist/'s other_tortricid (New York tortricids,
+fetch_inat.py) and ami_gbif/'s other_moth (common northeastern moths, fetch_ami.py). Both are `other_moth` to
+the classifier. The manifest's `taxon` names each one's species and `source` says which set it came from.
+
 Training doesn't read this folder; it's for looking at, and for picking from.
 """
 
@@ -24,9 +29,13 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
+import json
 import os
+import random
 import re
 import sys
+import time
+import urllib.request
 from collections import Counter
 from pathlib import Path
 
@@ -34,7 +43,8 @@ import paths
 
 SPECIES = ["CM", "OFM", "OBLR", "lookalike_RBLR", "lookalike_LAW"]
 UNCONFIRMED = {"inat_needs_id", "inat_casual"}
-FIELDS = ["label", "file", "source", "found_in", "license", "attribution", "record_url",
+LOOKALIKES = ["other_moth"]  # other tortricids (iNaturalist) and other moths (AMI), sampled per species
+FIELDS = ["label", "taxon", "file", "source", "found_in", "license", "attribution", "record_url",
           "life_stage", "source_url", "target"]
 
 
@@ -128,9 +138,58 @@ def best(copies: list[dict]) -> tuple[dict, dict]:
     return keep, info
 
 
+def gbif_names(keys: set[str], cache: Path) -> dict[str, str]:
+    """GBIF species key -> scientific name (AMI's rows only have the key), cached next to AMI's metadata."""
+    names = json.loads(cache.read_text()) if cache.exists() else {}
+    for k in sorted(keys - names.keys()):
+        try:
+            req = urllib.request.Request(f"https://api.gbif.org/v1/species/{k}",
+                                         headers={"User-Agent": "orchard-sentinel-capstone/0.1 (educational research)"})
+            with urllib.request.urlopen(req, timeout=30) as r:
+                names[k] = json.load(r).get("canonicalName", "")
+        except Exception:
+            names[k] = ""
+        time.sleep(0.1)
+    cache.write_text(json.dumps(names, indent=0, sort_keys=True))
+    return names
+
+
+def lookalike_rows(data: Path, per_species: int) -> list[dict]:
+    """Up to `per_species` photos of each species from each of other_tortricid (iNaturalist) and other_moth
+    (AMI), all labelled other_moth. A photo listed twice in a manifest is taken once."""
+    ml_dir = data.parent
+    found: list[dict] = []
+    for r in read(data / paths.INAT / "manifest.csv"):
+        f = resolve(r.get("local_path", ""), ml_dir)
+        if f and r["label"] == "other_tortricid":
+            found.append({"label": "other_moth", "taxon": r["taxon"], "source": "inat", "photo": r["photo"],
+                          "license": r["license"], "attribution": r["attribution"], "source_url": r["source_url"],
+                          "record_url": f"https://www.inaturalist.org/observations/{r['observation']}", "path": f})
+    ami = [r for r in read(data / paths.AMI / "manifest.csv") if r["label"] == "other_moth"]
+    names = gbif_names({r["species_key"] for r in ami}, data / paths.AMI / "_metadata" / "species_names.json")
+    for r in ami:
+        f = resolve(r.get("local_path", ""), ml_dir)
+        if f:
+            found.append({"label": "other_moth", "taxon": names.get(r["species_key"]) or r["species_key"],
+                          "source": "ami", "photo": r["gbif_occurrence"], "license": "", "attribution": "",
+                          "source_url": r["source_url"], "path": f,
+                          "record_url": f"https://www.gbif.org/occurrence/{r['gbif_occurrence']}"})
+    by_species: dict[tuple, dict[str, dict]] = {}
+    for p in found:  # keyed by photo, so a repeated manifest row counts once
+        by_species.setdefault((p["source"], p["taxon"]), {})[str(p["photo"])] = p
+    picked = []
+    for (source, taxon), by_photo in sorted(by_species.items()):
+        ps = [by_photo[k] for k in sorted(by_photo)]
+        random.Random(f"{source}:{taxon}").shuffle(ps)  # the same sample on every rebuild
+        picked += ps[:per_species]
+    return picked
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--data", type=Path, default=paths.DATA)
+    ap.add_argument("--per-lookalike-species", type=int, default=7,
+                    help="photos of each species in other_tortricid and other_moth (0: leave those out)")
     args = ap.parse_args(argv)
     data = args.data.resolve()
     out = data / paths.ALL_SPECIES
@@ -160,14 +219,26 @@ def main(argv=None) -> int:
         os.symlink(os.path.relpath(keep["path"], folder), link)
         found_in = sorted({f"{p['collection']}/{p.get('source', '')}".rstrip("/") for p in copies})
         rows.append({
-            "label": label, "file": str(link.relative_to(out)),
+            "label": label, "taxon": keep.get("taxon", ""), "file": str(link.relative_to(out)),
             "source": source, "found_in": "; ".join(found_in), "license": info.get("license", ""),
             "attribution": info.get("attribution", ""), "record_url": info.get("record_url", ""),
             "life_stage": info.get("life_stage", ""), "source_url": keep.get("source_url", ""),
             "target": str(keep["path"]),
         })
         kept[label] += 1
-    rows.sort(key=lambda r: (SPECIES.index(r["label"]), r["file"]))
+    look = lookalike_rows(data, args.per_lookalike_species) if args.per_lookalike_species else []
+    for p in look:
+        folder = out / p["label"]
+        folder.mkdir(parents=True, exist_ok=True)
+        link = folder / re.sub(r"[^\w.-]", "_", f"{p['source']}_{p['photo']}{p['path'].suffix}")
+        os.symlink(os.path.relpath(p["path"], folder), link)
+        rows.append({"label": p["label"], "taxon": p["taxon"], "file": str(link.relative_to(out)),
+                     "source": p["source"], "found_in": "inaturalist/other_tortricid" if p["source"] == "inat"
+                     else "ami_gbif/other_moth", "license": p["license"], "attribution": p["attribution"],
+                     "record_url": p["record_url"], "life_stage": "", "source_url": p["source_url"],
+                     "target": str(p["path"])})
+    order = SPECIES + LOOKALIKES
+    rows.sort(key=lambda r: (order.index(r["label"]), r["taxon"], r["file"]))
     with open(out / "manifest.csv", "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=FIELDS)
         w.writeheader()
@@ -177,6 +248,10 @@ def main(argv=None) -> int:
     print(f"  {'':16}{'in folder':>10}{'unconfirmed, left out':>23}")
     for label in SPECIES:
         print(f"  {label:16}{kept[label]:>10,}{left_out[label]:>23,}")
+    for source, what in (("inat", "New York tortricids"), ("ami", "northeastern moths")):
+        sample = [p for p in look if p["source"] == source]
+        print(f"  {'other_moth':16}{len(sample):>10,}   {what} ({source}): {len({p['taxon'] for p in sample})} "
+              f"species, up to {args.per_lookalike_species} each")
     print(f"Written to {out}")
     return 0
 
