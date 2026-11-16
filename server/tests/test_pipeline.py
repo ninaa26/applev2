@@ -550,6 +550,39 @@ def test_worker_thread_keeps_going_after_a_failed_pass(monkeypatch):
     assert len(calls) == 2
 
 
+def test_moth_only_head_sees_only_the_detectors_moths(tmp_path):
+    """A head trained on moth species alone (ml/build_moth_dataset.py) can't call a fly a fly: the detector's
+    other_insect and debris stand, and only its moth boxes (or boxes from a detector that gives no class) are
+    cropped for the head. A six-class head still sees every box."""
+    from sentinel_server.pipeline.classify import moth_only
+    from sentinel_server.pipeline.detect import Box
+
+    class Head:
+        def __init__(self, classes):
+            self.classes, self.version, self.seen = classes, "fake", 0
+
+        def classify(self, crops):
+            self.seen += len(crops)
+            return [{"OFM": 0.9, "CM": 0.1} for _ in crops]
+
+    Image.new("RGB", (400, 300), "white").save(tmp_path / "liner.jpg")
+    boxes = [Box(10, 10, 40, 30, 0.9, label="moth"), Box(100, 10, 130, 30, 0.8, label="other_insect"),
+             Box(200, 10, 230, 30, 0.7, label="debris"), Box(300, 10, 330, 30, 0.6)]
+    found = {"path": tmp_path / "liner.jpg", "boxes": boxes}
+    pipeline = Pipeline()
+
+    pipeline.classifier = Head(["CM", "OBLR", "OFM", "other_moth"])
+    assert moth_only(pipeline.classifier)
+    probs = pipeline._classify(found)
+    assert pipeline.classifier.seen == 2  # the moth box and the unlabelled one
+    assert probs == [{"OFM": 0.9, "CM": 0.1}, {"other_insect": 1.0}, {"debris": 1.0}, {"OFM": 0.9, "CM": 0.1}]
+    assert trk.consensus(probs[1], 1) == ("other_insect", 1.0, "auto")
+
+    pipeline.classifier = Head(["CM", "OBLR", "OFM", "debris", "other_insect", "other_moth"])
+    assert not moth_only(pipeline.classifier)
+    assert len(pipeline._classify(found)) == 4 and pipeline.classifier.seen == 4
+
+
 def test_upload_commits_while_classifier_runs(monkeypatch):
     """A slow classifier (BioCLIP on the Pi's CPU takes minutes for a cluttered photo) must not hold the
     database's write lock: uploads would wait out the 30 s busy timeout and fail with "database is locked"."""
