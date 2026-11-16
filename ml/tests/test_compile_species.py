@@ -5,7 +5,8 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from compile_species import photo_key  # noqa: E402
+import numpy as np  # noqa: E402
+from compile_species import near_pairs, photo_key  # noqa: E402
 
 
 class PhotoKey(unittest.TestCase):
@@ -20,6 +21,17 @@ class PhotoKey(unittest.TestCase):
         self.assertEqual(a, b)
         self.assertNotEqual(photo_key("https://bugwoodcloud.org/images/768x512/1.jpg"),
                             photo_key("https://bugwoodcloud.org/images/768x512/2.jpg"))
+
+
+class NearPairs(unittest.TestCase):
+    def test_within_threshold_only(self):
+        a = np.array([0, 0, 0, 0], dtype=np.uint64)
+        b = np.array([0b111, 0, 0, 0], dtype=np.uint64)  # 3 bits from a
+        c = np.array([2**64 - 1, 0, 0, 0], dtype=np.uint64)  # 64 bits from a
+        hashes = np.stack([a, b, c])
+        self.assertEqual(near_pairs(hashes, 3), [(0, 1)])
+        self.assertEqual(near_pairs(hashes, 3, block=1), [(0, 1)])  # same answer in small blocks
+        self.assertEqual(near_pairs(hashes, 2), [])
 
 
 if __name__ == "__main__":

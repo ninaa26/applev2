@@ -21,6 +21,12 @@ source by default, the same ones on every rebuild) of inaturalist/'s other_tortr
 fetch_inat.py) and ami_gbif/'s other_moth (common northeastern moths, fetch_ami.py). Both are `other_moth` to
 the classifier. The manifest's `taxon` names each one's species and `source` says which set it came from.
 
+Then near-duplicates are removed: the same picture resized or re-encoded (BOLD's old and new image hosts, a
+Commons copy of an iNaturalist photo, consecutive near-identical shots). Same check as build_dataset.py: a
+256-bit difference hash within 10 bits, confirmed by 64x64 thumbnails. Of each group the largest image stays.
+If one picture is under two labels, every copy goes, since one label is wrong. removed_duplicates.csv lists
+each removed photo, why, and the one kept.
+
 Training doesn't read this folder; it's for looking at, and for picking from.
 """
 
@@ -39,7 +45,10 @@ import urllib.request
 from collections import Counter
 from pathlib import Path
 
+import numpy as np
 import paths
+from build_dataset import dhash, same_picture
+from PIL import Image
 
 SPECIES = ["CM", "OFM", "OBLR", "lookalike_RBLR", "lookalike_LAW"]
 UNCONFIRMED = {"inat_needs_id", "inat_casual"}
@@ -185,9 +194,77 @@ def lookalike_rows(data: Path, per_species: int) -> list[dict]:
     return picked
 
 
+def near_pairs(hashes: np.ndarray, max_bits: int, block: int = 256) -> list[tuple[int, int]]:
+    """All (i, j), i < j, whose hashes differ in <= max_bits bits; small blocks keep memory under ~400 MB."""
+    pairs = []
+    for start in range(0, len(hashes), block):
+        dist = np.bitwise_count(hashes[start:start + block, None, :] ^ hashes[None, :, :]).sum(axis=-1)
+        for a, b in zip(*np.nonzero(dist <= max_bits)):
+            i, j = start + int(a), int(b)
+            if i < j:
+                pairs.append((i, j))
+    return pairs
+
+
+def remove_near_duplicates(rows: list[dict], out: Path, max_bits: int) -> list[dict]:
+    """Drop near-identical pictures (see the module docstring); returns what was removed."""
+    cache_file = out / ".dhash_cache.json"  # hashing 45,000 photos takes minutes; keyed by file, size, mtime
+    cache = json.loads(cache_file.read_text()) if cache_file.exists() else {}
+    hashes, usable = [], []
+    for i, r in enumerate(rows):
+        st = Path(r["target"]).stat()
+        key = f"{r['target']}|{st.st_size}|{int(st.st_mtime)}"
+        if key not in cache:
+            h = dhash(r["target"])
+            cache[key] = "".join(f"{int(x):016x}" for x in h) if h is not None else ""
+        if cache[key]:
+            hashes.append([int(cache[key][k:k + 16], 16) for k in range(0, 64, 16)])
+            usable.append(i)
+    cache_file.write_text(json.dumps(cache))
+    H = np.array(hashes, dtype=np.uint64)
+
+    parent = {i: i for i in usable}
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    for a, b in near_pairs(H, max_bits):
+        i, j = usable[a], usable[b]
+        if find(i) != find(j) and same_picture(rows[i]["target"], rows[j]["target"]):
+            parent[find(j)] = find(i)
+    groups: dict[int, list[int]] = {}
+    for i in usable:
+        groups.setdefault(find(i), []).append(i)
+
+    def area(i: int) -> int:
+        with Image.open(rows[i]["target"]) as im:
+            return im.size[0] * im.size[1]
+
+    removed = []
+    for members in groups.values():
+        if len(members) < 2:
+            continue
+        labels = {rows[i]["label"] for i in members}
+        if len(labels) > 1:
+            for i in members:
+                removed.append({**rows[i], "why": "same picture under " + " and ".join(sorted(labels)), "kept": ""})
+            continue
+        keep = max(members, key=lambda i: (area(i), Path(rows[i]["target"]).stat().st_size))
+        for i in members:
+            if i != keep:
+                removed.append({**rows[i], "why": "near-duplicate", "kept": rows[keep]["file"]})
+    for r in removed:
+        (out / r["file"]).unlink(missing_ok=True)
+    return removed
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--data", type=Path, default=paths.DATA)
+    ap.add_argument("--max-bits", type=int, default=10, help="near-duplicate threshold (of 256 bits)")
     ap.add_argument("--per-lookalike-species", type=int, default=7,
                     help="photos of each species in other_tortricid and other_moth (0: leave those out)")
     args = ap.parse_args(argv)
@@ -198,7 +275,7 @@ def main(argv=None) -> int:
     groups = group(photos)
     if out.exists():  # only ever links and our manifest in here, so a rebuild starts clean
         for f in out.rglob("*"):
-            if f.is_symlink() or f.name == "manifest.csv":
+            if f.is_symlink() or f.name in ("manifest.csv", "removed_duplicates.csv"):
                 f.unlink()
         for d in sorted((d for d in out.rglob("*") if d.is_dir()), reverse=True):
             if not any(d.iterdir()):
@@ -239,6 +316,14 @@ def main(argv=None) -> int:
                      "target": str(p["path"])})
     order = SPECIES + LOOKALIKES
     rows.sort(key=lambda r: (order.index(r["label"]), r["taxon"], r["file"]))
+    removed = remove_near_duplicates(rows, out, args.max_bits)
+    gone = {r["file"] for r in removed}
+    rows = [r for r in rows if r["file"] not in gone]
+    with open(out / "removed_duplicates.csv", "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=["label", "file", "why", "kept", "source", "found_in", "record_url",
+                                          "target"], extrasaction="ignore")
+        w.writeheader()
+        w.writerows(removed)
     with open(out / "manifest.csv", "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=FIELDS)
         w.writeheader()
@@ -252,6 +337,13 @@ def main(argv=None) -> int:
         sample = [p for p in look if p["source"] == source]
         print(f"  {'other_moth':16}{len(sample):>10,}   {what} ({source}): {len({p['taxon'] for p in sample})} "
               f"species, up to {args.per_lookalike_species} each")
+    by = Counter((r["label"], r["why"] == "near-duplicate") for r in removed)
+    print(f"Removed {len(removed)} near-duplicates: " + ", ".join(
+        f"{label} {by[(label, True)]}" for label in order if by[(label, True)]) +
+        f"; {sum(v for (_, d), v in by.items() if not d)} photos whose picture is under two labels "
+        "(removed_duplicates.csv)")
+    final = Counter(r["label"] for r in rows)
+    print("In the folder now: " + ", ".join(f"{label} {final[label]:,}" for label in order))
     print(f"Written to {out}")
     return 0
 

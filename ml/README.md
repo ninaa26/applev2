@@ -510,14 +510,19 @@ bytes, and the largest file is kept. The files are links into the collections, s
 (`cp -RL` to copy it). Unconfirmed iNaturalist photos are left out. `manifest.csv` says where each photo was
 found, its licence, attribution and record link. Training doesn't read it.
 
-Nov 15 2026: CM 20,733, OFM 215, OBLR 11,346, redbanded leafroller 9,259, lesser appleworm 212 (41,765
-photos); left out as unconfirmed: 2,054, 302, 16,180, 9,504 and 309. Plus `other_moth/`, the look-alikes in one
-folder: up to 7 photos of each species from `inaturalist/other_tortricid` (1,774 photos, 360 New York tortricid
-species; 167 of them have fewer than 7) and from `ami_gbif/other_moth` (2,100 photos, 300 northeastern moth
-species), 3,874 in all; `--per-lookalike-species` changes the 7. The manifest's `taxon` names each species
-(AMI's GBIF species numbers are looked up once and cached in `ami_gbif/_metadata/species_names.json`). About 100 OBLR and OFM photos are
-probably there twice: AMI's copies of BOLD specimens from BOLD's old image host, which no rule can match to
-the same photos fetched from its new one.
+Then near-duplicates are removed (the same picture resized or re-encoded: BOLD's old and new image hosts, a
+Commons copy of an iNaturalist photo; same check as `build_dataset.py`), keeping the largest image; a picture
+found under two labels is dropped. Each removal is in `removed_duplicates.csv` with the copy kept.
+
+Nov 15 2026, after removing 422 near-duplicates (CM 286, OBLR 91, OFM 26, redbanded leafroller 15, lesser
+appleworm 2, plus one bulletin page filed under both CM and lesser appleworm): CM 20,446, OBLR 11,255,
+redbanded leafroller 9,244, OFM 189, lesser appleworm 209, `other_moth` 3,874 (45,217 photos). All 26 OFM
+pairs and 28 sampled CM pairs were looked at: each is one picture twice. Left out as unconfirmed: 2,054 CM,
+302 OFM, 16,180 OBLR, 9,504 redbanded leafroller, 309 lesser appleworm. `other_moth/` holds the look-alikes in
+one folder: up to 7 photos of each species from `inaturalist/other_tortricid` (1,774 photos, 360 New York
+tortricid species; 167 of them have fewer than 7) and from `ami_gbif/other_moth` (2,100 photos, 300
+northeastern moth species); `--per-lookalike-species` changes the 7. The manifest's `taxon` names each species
+(AMI's GBIF species numbers are looked up once and cached in `ami_gbif/_metadata/species_names.json`). 
 
 ## Model versions (see the architecture page)
 
