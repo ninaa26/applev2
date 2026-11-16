@@ -36,6 +36,7 @@ EMBEDDINGS = f"{CLASSIFIER}/bioclip_embeddings"
 DETECTOR = "training/detector"  # yolo_real/, yolo_blank/, yolo_synth/ (train_yolo.py)
 HELD_OUT = "training/held_out"  # lists of photos no model trains on; in git, see its README.md
 LABEL_SITE = "review/labelling_site"  # the team labelling site: every gridded liner set (label_sets.py)
+LABEL_SITE_EXPORTS = f"{LABEL_SITE}/from_pi/exports"  # <time>/labels.csv etc., fetched by label_site/deploy.sh --fetch
 SUSPECTS = "review/cleaning_suspects"  # clean_dataset.py: web photos for a person to look at
 
 # Held-out lists, in HELD_OUT. One name or name prefix per line; # starts a comment.

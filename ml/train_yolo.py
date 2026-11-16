@@ -7,11 +7,15 @@
     python train_yolo.py --blank 'data/real_liners/our_trap_bench_tests/capture_2026-10-06/calibrated_*.jpg' --blank-ppm 15.3
                                                   # also train on blank-liner photos from the trap camera
 
-Only photos where every box was looked at go in: all of the Cornell field cards (data/real_liners/cornell_field_cards/,
-crop_field_cards.py + label_field_cards.py)
-and the ofm-ervins liner photos with no box still unlabelled. The other Roboflow sets are left out, since only the
-target moth was boxed there, so their bycatch would teach the model that insects are background. `skip` rows
-(not an insect / off the card) are background too. Classes are pass-1 labels: moth, other_insect, debris.
+Only photos where every box was looked at go in. Since Nov 15 2026 most come from the team labelling site
+(every gridded liner set: grape-moth, ofm-ervins, cm-ervins, the Cornell field cards and the web liners), read from
+the newest export fetched with `label_site/deploy.sh <pi> --fetch` (data/review/labelling_site/from_pi/exports/), or
+--site-export: a photo goes in when every box on it has a `by` (someone, or Claude, checked it) and nobody tagged it
+unusable, wrong scale or not gridded. Photos the site leaves out (its gold photos, or one with a box nobody checked)
+fall back to their older hand-labelled folders, if they have one: the Cornell field cards (crop_field_cards.py +
+label_field_cards.py) and the ofm-ervins liners with no box still unlabelled. --no-site uses only those folders,
+as before. Every species label counts as `moth`; `skip` rows (not an insect / off the card) are background.
+Classes are pass-1 labels: moth, other_insect, debris.
 
 Each photo is shrunk to --ppm px/mm (what the trap camera sees; from the printed grid, the `ppm` column) and cut
 into overlapping --tile px tiles, so moths are the size they'll be in the trap. The overlap is at least the longest
@@ -51,6 +55,7 @@ import shutil
 import statistics
 import sys
 from pathlib import Path
+from typing import NamedTuple
 
 import paths
 import trained_on
@@ -63,6 +68,7 @@ SPECIES = {"CM", "OFM", "OBLR", "lookalike_RBLR", "lookalike_LAW", "other_tortri
 DATA = HERE / paths.DATA
 SOURCES = [DATA / paths.FIELD, DATA / paths.WEB_LINERS / "label/ofm-ervins"]
 SPLITS = ["train", "val", "test"]
+BAD_PHOTO_TAGS = {"unusable", "wrong_scale", "not_gridded"}  # labelling-site photo tags that keep a photo out
 MERGE: dict[str, str] = {}  # --one-insect-class: {"moth": "insect", "other_insect": "insect"}
 NMS_IOUS = (0.5, 0.7, 0.9)
 
@@ -71,6 +77,15 @@ def one_insect_class() -> None:
     global CLASSES
     CLASSES = ["insect", "debris"]
     MERGE.update(moth="insect", other_insect="insect")
+
+
+class Source(NamedTuple):
+    """One set of liner photos whose boxes were all checked."""
+    name: str                       # tile names start with it
+    inbox: Path                     # where the photos are
+    labelled: dict[str, list[dict]]  # photo -> its box rows (x1..y2, label, ppm)
+    groups: list[set[str]]          # photos of one liner on several days
+    listed_as: dict[str, str]       # photo -> the name the held-out lists use for it
 
 
 def labelled_photos(data: Path) -> dict[str, list[dict]]:
@@ -88,31 +103,88 @@ def liner_groups(data: Path) -> list[set[str]]:
     return [set(g) for g in json.loads(liners.read_text())] if liners.exists() else []
 
 
-def held_out(data: Path, test_photos: list[str]) -> set[str]:
-    """Photos in `data`'s inbox named (or name-prefixed) in `test_photos`, with their liner's other days."""
-    names = [p.name for p in (data / "inbox").iterdir()]
-    out = {n for n in names if paths.is_listed(n, test_photos)}
-    for group in liner_groups(data):
+def folder_source(data: Path, skip: set[str] = frozenset()) -> Source:
+    """A label_field_cards.py folder: labels.csv, inbox/, liners.json. Photos in `skip` are left out."""
+    labelled = {p: rs for p, rs in labelled_photos(data).items() if p not in skip}
+    return Source(data.name, data / "inbox", labelled, liner_groups(data), {p: p for p in labelled})
+
+
+def latest_site_export(data: Path = DATA) -> Path | None:
+    """labels.csv of the newest labelling-site export fetched with `label_site/deploy.sh <pi> --fetch`."""
+    found = sorted((data / paths.LABEL_SITE_EXPORTS).glob("*/labels.csv"))
+    return found[-1] if found else None
+
+
+def site_source(export: Path, data: Path = DATA) -> tuple[Source, dict]:
+    """The team labelling site's photos (every gridded liner set), from a fetched export.
+
+    A photo goes in only if every box on it was checked on the site (`by` filled in): the gold photos and the
+    few with a box nobody looked at are left out. So are photos someone tagged unusable, wrong scale or not
+    gridded. The site names a photo `<set>__<file>`; the held-out lists and liners.json use `<file>`."""
+    rows = _site_rows(export)
+    tagged = set()
+    if (export.parent / "photo_tags.csv").exists():
+        with open(export.parent / "photo_tags.csv", newline="") as f:
+            tagged = {r["photo"] for r in csv.DictReader(f) if r["tag"] in BAD_PHOTO_TAGS}
+    unchecked = {p for p, rs in rows.items() if not all(r["by"] and r["label"] for r in rs)}
+    labelled = {p: rs for p, rs in rows.items() if p not in unchecked and p not in tagged}
+    listed_as = {p: rs[0]["photo"] for p, rs in labelled.items()}
+    groups = []
+    for set_dir in sorted((data / paths.WEB_LINERS / "label").glob("*/liners.json")):
+        prefix = f"{set_dir.parent.name}__"
+        groups += [{prefix + p for p in g} for g in json.loads(set_dir.read_text())]
+    site = data / paths.LABEL_SITE
+    left_out = {"unchecked boxes": len(unchecked), "tagged": len(tagged - unchecked)}
+    return Source("site", site / "inbox", labelled, groups, listed_as), left_out
+
+
+def default_sources(export: Path | None = None, data: Path = DATA) -> tuple[list[Source], dict]:
+    """The labelling site's fetched export when there is one, plus the photos of the old hand-labelled folders
+    (field cards, ofm-ervins) that the site didn't supply; without an export, just those folders."""
+    export = export or latest_site_export(data)
+    if export is None:
+        return [folder_source(d) for d in SOURCES], {"site_export": None}
+    site, left_out = site_source(export, data)
+    # A photo the site left out (gold, or a box nobody checked) keeps its older hand-checked labels, if it has any.
+    rest = [folder_source(d, skip={site.listed_as[p] for p in site.labelled}) for d in SOURCES]
+    info = {"site_export": str(export.relative_to(data.parent)) if export.is_relative_to(data.parent) else str(export),
+            "site_photos": len(site.labelled), "site_left_out": left_out,
+            "other_photos": {s.name: len(s.labelled) for s in rest}}
+    return [site, *rest], info
+
+
+def _site_rows(export: Path) -> dict[str, list[dict]]:
+    rows: dict[str, list[dict]] = {}
+    with open(export, newline="") as f:
+        for r in csv.DictReader(f):
+            rows.setdefault(r["site_photo"], []).append(r)
+    return rows
+
+
+def held_out(src: Source, test_photos: list[str]) -> set[str]:
+    """Photos of `src` named (or name-prefixed) in `test_photos`, with their liner's other days."""
+    out = {p for p in src.labelled if paths.is_listed(src.listed_as[p], test_photos)}
+    for group in src.groups:
         if out & group:
             out |= group
     return out
 
 
-def pick_val(data: Path, photos: list[str], frac: float) -> set[str]:
+def pick_val(groups: list[set[str]], photos: list[str], frac: float) -> set[str]:
     """About `frac` of `photos` (the ones not in test) for choosing the checkpoint: whole liners, and the same
     ones on every run, ordered by a hash of the name so adding a photo doesn't reshuffle the rest."""
     if frac <= 0 or len(photos) < 2:
         return set()
     left = set(photos)
-    groups = []
-    for g in liner_groups(data):
+    order = []
+    for g in groups:
         if g & left:
-            groups.append(sorted(g & left))
+            order.append(sorted(g & left))
             left -= g
-    groups += [[p] for p in left]
-    groups.sort(key=lambda g: hashlib.sha1(g[0].encode(), usedforsecurity=False).hexdigest())
+    order += [[p] for p in left]
+    order.sort(key=lambda g: hashlib.sha1(g[0].encode(), usedforsecurity=False).hexdigest())
     val: set[str] = set()
-    for g in groups[:-1]:  # always leave something to train on
+    for g in order[:-1]:  # always leave something to train on
         if len(val) >= frac * len(photos):
             break
         val |= set(g)
@@ -133,7 +205,7 @@ def tiles(w: int, h: int, tile: int, overlap: int):
 
 
 def build(out: Path, ppm: float, tile: int, overlap: int, test_photos: list[str], min_visible: float,
-          val_frac: float = 0.15, sources: list[Path] | None = None) -> dict:
+          val_frac: float = 0.15, sources: list[Source | Path] | None = None) -> dict:
     if out.exists():
         shutil.rmtree(out)
     stats = {s: {"photos": 0, "tiles": 0, "boxes": 0} for s in SPLITS}
@@ -141,21 +213,21 @@ def build(out: Path, ppm: float, tile: int, overlap: int, test_photos: list[str]
     for d in ("images", "labels"):
         for s in SPLITS:
             (out / d / s).mkdir(parents=True, exist_ok=True)
-    for data in sources or SOURCES:
-        labelled = labelled_photos(data)
-        test = held_out(data, test_photos)
-        val = pick_val(data, sorted(p for p in labelled if p not in test), val_frac)
-        for photo, rows in sorted(labelled.items()):
+    for src in sources if sources is not None else default_sources()[0]:
+        src = folder_source(src) if isinstance(src, Path) else src
+        test = held_out(src, test_photos)
+        val = pick_val(src.groups, sorted(p for p in src.labelled if p not in test), val_frac)
+        for photo, rows in sorted(src.labelled.items()):
             split = "test" if photo in test else "val" if photo in val else "train"
             pass1 = ((r, "moth" if r["label"] in SPECIES else r["label"]) for r in rows)
             boxes = [{**r, "label": c} for r, c0 in pass1 if (c := MERGE.get(c0, c0)) in CLASSES]
             ppms = [float(r["ppm"]) for r in rows if r.get("ppm")]
             scale = min(1.0, ppm / statistics.median(ppms)) if ppms else 1.0
-            with Image.open(data / "inbox" / photo) as im:
+            with Image.open(src.inbox / photo) as im:
                 img = ImageOps.exif_transpose(im).convert("RGB")
             if scale < 1:
                 img = img.resize((round(img.width * scale), round(img.height * scale)), Image.LANCZOS)
-            stem = f"{data.name}__{Path(photo).stem}"
+            stem = f"{src.name}__{Path(photo).stem}"
             stats[split]["photos"] += 1
             for tx, ty in tiles(img.width, img.height, tile, overlap):
                 tw, th = min(tile, img.width), min(tile, img.height)
@@ -329,6 +401,10 @@ def main(argv=None) -> int:
     ap.add_argument("--out", type=Path, default=DATA / paths.DETECTOR / "yolo_real")
     ap.add_argument("--name", default=None, help="run name under models/detector/yolo/ (default: model + ppm)")
     ap.add_argument("--synth", type=int, default=0, help="add this many tiles with AMI/iNat cutouts pasted on")
+    ap.add_argument("--site-export", type=Path, default=None,
+                    help="labels.csv of a labelling-site export (default: the newest under "
+                         f"data/{paths.LABEL_SITE_EXPORTS}/)")
+    ap.add_argument("--no-site", action="store_true", help="only the old folders (field cards, ofm-ervins)")
     ap.add_argument("--build-only", action="store_true")
     args = ap.parse_args(argv)
 
@@ -338,7 +414,12 @@ def main(argv=None) -> int:
         one_insect_class()
     imgsz = args.imgsz or args.tile
     test_photos = paths.held_out_list(DATA, paths.FIELD_TEST) + args.test_photos
-    info = build(args.out, args.ppm, args.tile, args.overlap, test_photos, args.min_visible, args.val_frac)
+    if args.no_site:
+        sources, src_info = [folder_source(d) for d in SOURCES], {"site_export": None}
+    else:
+        sources, src_info = default_sources(args.site_export)
+    info = {**src_info, **build(args.out, args.ppm, args.tile, args.overlap, test_photos, args.min_visible,
+                                args.val_frac, sources)}
     if args.blank:
         info["blank"] = add_blanks(args.out, args.blank, args.blank_ppm, args.ppm, args.tile, args.overlap)
     if args.synth:
@@ -380,7 +461,8 @@ def main(argv=None) -> int:
                "val": score("val"), "test": score("test")}
     (run / "summary.json").write_text(json.dumps(summary, indent=1))
     trained_on.write(run, trained_on.summary(DATA, Path(args.model).name, test_photos=test_photos,
-                                             sources=[str(d.relative_to(HERE)) for d in SOURCES],
+                                             sources=[str(s.inbox.parent.relative_to(HERE)) for s in sources],
+                                             site_export=src_info["site_export"],
                                              blank=args.blank, synth_tiles=args.synth))
     print(json.dumps({"test": summary["test"]}, indent=1))
     return 0

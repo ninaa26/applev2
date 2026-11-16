@@ -55,13 +55,55 @@ class Splits(unittest.TestCase):
 
     def test_val_is_the_same_every_run_and_survives_a_new_photo(self):
         rest = [p for p in self.photos if not p.startswith(("liner00", "liner01"))]
-        val = ty.pick_val(self.src, rest, 0.15)
-        self.assertEqual(val, ty.pick_val(self.src, list(reversed(rest)), 0.15))
+        val = ty.pick_val(ty.liner_groups(self.src), rest, 0.15)
+        self.assertEqual(val, ty.pick_val(ty.liner_groups(self.src), list(reversed(rest)), 0.15))
         self.assertGreaterEqual(len(val), 0.15 * len(rest))
-        self.assertLessEqual(val, ty.pick_val(self.src, rest + ["zz_new.jpg"], 0.15) | val)
+        self.assertLessEqual(val, ty.pick_val(ty.liner_groups(self.src), rest + ["zz_new.jpg"], 0.15) | val)
 
     def test_no_val_frac_means_no_val_photos(self):
-        self.assertEqual(ty.pick_val(self.src, self.photos, 0), set())
+        self.assertEqual(ty.pick_val(ty.liner_groups(self.src), self.photos, 0), set())
+
+
+class SiteExport(unittest.TestCase):
+    """The labelling site's export: checked photos only, held-out lists by the file's own name."""
+
+    def test_only_fully_checked_untagged_photos_and_species_count_as_moth(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data = Path(tmp) / "data"
+            site = data / ty.paths.LABEL_SITE
+            export = data / ty.paths.LABEL_SITE_EXPORTS / "20261115-222222"
+            (site / "inbox").mkdir(parents=True)
+            export.mkdir(parents=True)
+            fields = ["site_photo", "photo", "label", "x1", "y1", "x2", "y2", "ppm", "by"]
+            boxes = {  # site photo -> (label, by) per box
+                "ofm__liner1_day1.jpg": [("OFM", "claude"), ("debris", "jacqui")],
+                "ofm__liner1_day2.jpg": [("other_insect", "claude")],
+                "ofm__liner2.jpg": [("moth", "claude")],
+                "ofm__half_checked.jpg": [("moth", "claude"), ("moth", "")],
+                "ofm__tagged.jpg": [("moth", "patti")],
+            }
+            with open(export / "labels.csv", "w", newline="") as f:
+                w = csv.DictWriter(f, fieldnames=fields)
+                w.writeheader()
+                for p, bs in boxes.items():
+                    Image.new("RGB", (640, 640), "white").save(site / "inbox" / p)  # one tile
+                    for label, by in bs:
+                        w.writerow({"site_photo": p, "photo": p.split("__")[1], "label": label, "x1": 100,
+                                    "y1": 100, "x2": 190, "y2": 140, "ppm": 12, "by": by})
+            (export / "photo_tags.csv").write_text("photo,user,tag,at\nofm__tagged.jpg,patti,unusable,0\n")
+            (data / ty.paths.WEB_LINERS / "label/ofm").mkdir(parents=True)
+            (data / ty.paths.WEB_LINERS / "label/ofm/liners.json").write_text(
+                json.dumps([["liner1_day1.jpg", "liner1_day2.jpg"]]))
+
+            self.assertEqual(ty.latest_site_export(data), export / "labels.csv")
+            src, left_out = ty.site_source(export / "labels.csv", data)
+            self.assertEqual(set(src.labelled), {"ofm__liner1_day1.jpg", "ofm__liner1_day2.jpg", "ofm__liner2.jpg"})
+            self.assertEqual(left_out, {"unchecked boxes": 1, "tagged": 1})
+            # the list names the file as photographed; the liner's other day goes to test with it
+            self.assertEqual(ty.held_out(src, ["liner1_day1"]), {"ofm__liner1_day1.jpg", "ofm__liner1_day2.jpg"})
+            info = ty.build(Path(tmp) / "out", 12, 640, 224, ["liner1_day1"], 0.4, 0, sources=[src])
+            self.assertEqual(info["boxes_per_class"]["test"], {"moth": 1, "other_insect": 1, "debris": 1})
+            self.assertEqual(info["boxes_per_class"]["train"]["moth"], 1)
 
 
 class TilesAndBlanks(unittest.TestCase):
