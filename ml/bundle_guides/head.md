@@ -42,7 +42,7 @@ nvidia-smi --query-gpu=name,memory.total --format=csv
 - Plain Linux works the same. Native Windows Python also works; use `py -3.12 -m venv .venv` and
   `.venv\Scripts\activate` in place of the two venv lines below.
 - **Internet is needed:** BioCLIP 2 downloads from Hugging Face (about 1.7 GB) on the first run.
-- Free disk: about 6 GB.
+- Free disk: about 10 GB (the 4.1 GB zip, the unzipped folder, PyTorch and BioCLIP).
 
 ## 2. Set up (once)
 
@@ -79,8 +79,8 @@ values of C, picks one and a temperature on the tune crops, refits, and writes `
 Read `models/classifier/bioclip_head/archive/moth_only_all_by_species/report.md`. Report:
 - the C and temperature it picked;
 - **"v1 linear head · test · real liners (held out)"**: recall for CM, OFM and OBLR and the confusion matrix.
-  These are small (about 22 CM, 18 OFM and 8 OBLR moths, each at two resolutions), so give counts ("16 of 18"),
-  not just percentages;
+  These are small (22 CM, 9 OFM and 4 OBLR moths; most appear twice, at 15 and 10 px/mm, so the table counts
+  crops), so give counts ("16 of 18 crops"), not just percentages;
 - the same table for "v0 zero-shot" (BioCLIP with text prompts, no head), as the baseline the head must beat;
 - "tune · real liners" only as a note: C and T were picked on it, so it flatters the head.
 

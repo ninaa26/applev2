@@ -143,7 +143,7 @@ the commands for a machine with a CUDA GPU: three v2 runs (`efficientnet_b0`, `c
 `mobilenet_v3_large`), v1, and the detector, which now has all 31 OFM liner photos. `train_v2.py` keeps the
 epoch that does best on real-liner val crops and saves a temperature with the weights; the server applies it.
 `make_bundle.py --what yolo` and `--what head` pack one run each (`orchard-yolo.zip`, 0.1 GB;
-`orchard-head.zip`) with a CLAUDE.md from `bundle_guides/` at the top, so Claude Code on the training PC can
+`orchard-head.zip`, 4.1 GB) with a CLAUDE.md from `bundle_guides/` at the top, so Claude Code on the training PC can
 set up, train and zip the result from that file alone.
 
 **Detector first, then a moth-only head (Nov 16 2026).** Two models, one after the other: `train_yolo.py` sorts
@@ -151,10 +151,10 @@ every insect into moth, other insect or debris, and only its moth boxes go to th
 built by `build_moth_dataset.py` (`data/training/classifier/moth_dataset.csv`) and trained with
 `train_v1.py --dataset moth`: four classes (CM, OFM, OBLR, other_moth), trained on the web photos in
 `data/web_moth_photos/all_by_species/` alone (adults, split by observation; about 45,000), never on a real liner.
-The labelling site's checked species boxes (Nov 15 2026 export: about 470 CM, 480 OFM and 450 other moths, but
-only 8 OBLR) are cropped as the server crops them, at 15 and 10 px/mm: the held-out liners' crops are the test
-(22 CM, 18 OFM, 8 OBLR moths), the rest are `tune`, where C and the temperature are picked and nothing is
-fitted. The server sends only moth boxes to such a head (`classify.moth_only`); with a six-class head every box
+The labelling site's checked species boxes (Nov 15 2026 export: 478 CM, 483 OFM, 450 other moths and only 4
+OBLR) are cropped as the server crops them, at 15 and 10 px/mm (one moth, up to two crops): the held-out liners'
+moths are the test (22 CM, 9 OFM, 4 OBLR), the rest are `tune`, where C and the temperature are picked and
+nothing is fitted. The server sends only moth boxes to such a head (`classify.moth_only`); with a six-class head every box
 still goes to it. Not trained yet: both runs are bundled for the RTX 3060.
 
 **The CUDA runs (Oct 8 2026, RTX 3060 Ti under WSL).** Three fine-tuned CNNs, 20 epochs each, scored on the
