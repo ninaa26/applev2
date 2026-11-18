@@ -134,7 +134,8 @@ def site_source(export: Path, data: Path = DATA) -> tuple[Source, dict]:
         prefix = f"{set_dir.parent.name}__"
         groups += [{prefix + p for p in g} for g in json.loads(set_dir.read_text())]
     site = data / paths.LABEL_SITE
-    left_out = {"unchecked boxes": len(unchecked), "tagged": len(tagged - unchecked)}
+    left_out = {"unchecked boxes": len(unchecked), "tagged": len(tagged - unchecked),
+                "tagged_files": sorted(rows[p][0]["photo"] for p in tagged if p in rows)}
     return Source("site", site / "inbox", labelled, groups, listed_as), left_out
 
 
@@ -145,8 +146,10 @@ def default_sources(export: Path | None = None, data: Path = DATA) -> tuple[list
     if export is None:
         return [folder_source(d) for d in SOURCES], {"site_export": None}
     site, left_out = site_source(export, data)
-    # A photo the site left out (gold, or a box nobody checked) keeps its older hand-checked labels, if it has any.
-    rest = [folder_source(d, skip={site.listed_as[p] for p in site.labelled}) for d in SOURCES]
+    # A photo the site left out (gold, or a box nobody checked) keeps its older hand-checked labels, if it has any;
+    # one someone tagged unusable, wrong scale or not gridded stays out everywhere.
+    skip = {site.listed_as[p] for p in site.labelled} | set(left_out["tagged_files"])
+    rest = [folder_source(d, skip=skip) for d in SOURCES]
     info = {"site_export": str(export.relative_to(data.parent)) if export.is_relative_to(data.parent) else str(export),
             "site_photos": len(site.labelled), "site_left_out": left_out,
             "other_photos": {s.name: len(s.labelled) for s in rest}}
