@@ -98,7 +98,7 @@ class SiteExport(unittest.TestCase):
             self.assertEqual(ty.latest_site_export(data), export / "labels.csv")
             src, left_out = ty.site_source(export / "labels.csv", data)
             self.assertEqual(set(src.labelled), {"ofm__liner1_day1.jpg", "ofm__liner1_day2.jpg", "ofm__liner2.jpg"})
-            self.assertEqual(left_out, {"unchecked boxes": 1, "tagged": 1})
+            self.assertEqual(left_out, {"unchecked boxes": 1, "tagged": 1, "tagged_files": ["tagged.jpg"]})
             # the list names the file as photographed; the liner's other day goes to test with it
             self.assertEqual(ty.held_out(src, ["liner1_day1"]), {"ofm__liner1_day1.jpg", "ofm__liner1_day2.jpg"})
             info = ty.build(Path(tmp) / "out", 12, 640, 224, ["liner1_day1"], 0.4, 0, sources=[src])
