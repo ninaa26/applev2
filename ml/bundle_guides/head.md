@@ -11,20 +11,21 @@ classes: `CM` (codling moth), `OFM` (oriental fruit moth), `OBLR` (obliquebanded
 `other_moth`. Then zip the result so it can be carried back to the Mac.
 
 The data (`ml/data/training/classifier/moth_dataset.csv`, from `build_moth_dataset.py`):
-- **train / val / test:** about 45,000 web photos of these moths and look-alikes (iNaturalist, GBIF and others,
-  adults only). The head learns from train and val; test is a pipeline check only.
-- **tune:** real moths on real sticky liners, cropped the way the server crops them. Never trained on: the
-  regularisation C and the temperature T are picked on them, so the head's confidence means something on a
-  liner.
-- **test (real liners):** real-liner crops from held-out liners. **This is the number that matters.**
+- 44,845 web photos of these moths and look-alikes (iNaturalist, GBIF and others, adults only), split by
+  observation into train, val and test. The head learns from train; the regularisation C and the temperature
+  T are picked on val; test is a check that the pipeline works.
+- **No liner photos.** Liner labels are moth / other insect / debris only, so nothing in this run says how the
+  head does on a real liner. That comes later, from the trap's own cards. Don't present the web test as trap
+  accuracy: BioCLIP 2 has likely seen many of these photos.
+- OFM is thin: 116 training photos against about 16,000 CM.
 
-The PC has an **NVIDIA RTX 3060**. Expect 20–60 minutes, nearly all of it BioCLIP reading 46,000 photos once.
+The PC has an **NVIDIA RTX 3060**. Expect 20–60 minutes, nearly all of it BioCLIP reading 45,000 photos once.
 
 ## Rules
 
 - Run the scripts as they are. Don't edit them to get a run through or to raise a score; if one fails, stop
   and report the error with what you tried.
-- Never change a row's split in `moth_dataset.csv`, and never train on the `tune` or `test` rows.
+- Never change a row's split in `moth_dataset.csv`, and never train on the `test` rows.
 - Write the new head under `models/classifier/bioclip_head/archive/`, never over `current/` (that is the head
   the server runs now, included for comparison).
 - Everything runs from `ml/` with its `.venv` active.
@@ -66,7 +67,7 @@ python train_v1.py --dataset moth --device cuda --batch 64 \
 
 It embeds every photo first (progress every 640 photos; the features are saved as it goes to
 `data/training/classifier/bioclip_embeddings/`, so a crash or a rerun picks up where it stopped), then tries six
-values of C, picks one and a temperature on the tune crops, refits, and writes `head.npz`, `metrics.json`,
+values of C, picks one and a temperature on val, refits on train and val, and writes `head.npz`, `metrics.json`,
 `report.md` and `trained_on.json`.
 
 - **"CUDA out of memory":** run again with `--batch 32`, then 16.
@@ -78,14 +79,13 @@ values of C, picks one and a temperature on the tune crops, refits, and writes `
 
 Read `models/classifier/bioclip_head/archive/moth_only_all_by_species/report.md`. Report:
 - the C and temperature it picked;
-- **"v1 linear head · test · real liners (held out)"**: recall for CM, OFM and OBLR and the confusion matrix.
-  These are small (22 CM, 9 OFM and 4 OBLR moths; most appear twice, at 15 and 10 px/mm, so the table counts
-  crops), so give counts ("16 of 18 crops"), not just percentages;
+- **"v1 linear head · test · web photos"**: precision and recall per class and the confusion matrix. OFM has
+  only 9 test photos, so give its counts ("7 of 9"), not just a percentage;
 - the same table for "v0 zero-shot" (BioCLIP with text prompts, no head), as the baseline the head must beat;
-- "tune · real liners" only as a note: C and T were picked on it, so it flatters the head.
+- say plainly that these are web photos, not liner photos.
 
 `models/classifier/bioclip_head/current/report.md` is the head the server runs now (six classes, trained
-differently). Its numbers are on other test crops, so don't put them side by side as if they were the same test.
+differently). Its numbers are on other test photos, so don't put them side by side as if they were the same test.
 
 ## 5. Zip the result for the Mac
 

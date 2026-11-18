@@ -7,9 +7,9 @@ site a photo is named `<set>__<file>`; the lists still name `<file>`, and the sc
 
 | File | Kept out of | Read by |
 |---|---|---|
-| `field_cards.txt` | both models | `train_yolo.py` (test split), `liner_crops.py`, `build_moth_dataset.py`, `make_trap_style.py --field` |
-| `field_cards_classifier_only.txt` | the species classifier (still trains the detector) | `liner_crops.py`, `build_moth_dataset.py`, `make_trap_style.py --field` |
-| `web_liners_classifier.txt` | the species classifier | `liner_crops.py` (crops marked `test`), `build_moth_dataset.py` (same) |
+| `field_cards.txt` | both models | `train_yolo.py` (test split), `liner_crops.py`, `make_trap_style.py --field` |
+| `field_cards_classifier_only.txt` | the species classifier (still trains the detector) | `liner_crops.py`, `make_trap_style.py --field` |
+| `web_liners_classifier.txt` | the species classifier | `liner_crops.py` (crops marked `test`) |
 | `web_liners_detector.txt` | the detector | `train_yolo.py` (default `--test-photos`) |
 | `our_trap_locked.txt` | everything until `--final` | `build_dataset.py` (split `locked`) |
 

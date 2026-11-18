@@ -150,11 +150,12 @@ set up, train and zip the result from that file alone.
 every insect into moth, other insect or debris, and only its moth boxes go to the species head. That head is
 built by `build_moth_dataset.py` (`data/training/classifier/moth_dataset.csv`) and trained with
 `train_v1.py --dataset moth`: four classes (CM, OFM, OBLR, other_moth), trained on the web photos in
-`data/web_moth_photos/all_by_species/` alone (adults, split by observation; about 45,000), never on a real liner.
-The labelling site's checked species boxes (Nov 15 2026 export: 478 CM, 483 OFM, 450 other moths and only 4
-OBLR) are cropped as the server crops them, at 15 and 10 px/mm (one moth, up to two crops): the held-out liners'
-moths are the test (22 CM, 9 OFM, 4 OBLR), the rest are `tune`, where C and the temperature are picked and
-nothing is fitted. The server sends only moth boxes to such a head (`classify.moth_only`); with a six-class head every box
+`data/web_moth_photos/all_by_species/` alone (adults, split by observation; 44,845, of them only 153 OFM). C and
+the temperature are picked on its web val split. **Liner photos carry no species** (decided Nov 18 2026): their
+labels are moth, other insect or debris only, for the detector, so the head is neither trained nor scored on a
+real liner here; how it does on one comes from our own trap's cards. On the labelling site, Claude's review
+(Nov 8–9 2026) is what counts: a box someone else edited stays if Claude passed it, and only Nina's or Claude's
+photo tags keep a photo out of the detector. The server sends only moth boxes to such a head (`classify.moth_only`); with a six-class head every box
 still goes to it. Not trained yet: both runs are bundled for the RTX 3060.
 
 **The CUDA runs (Oct 8 2026, RTX 3060 Ti under WSL).** Three fine-tuned CNNs, 20 epochs each, scored on the
