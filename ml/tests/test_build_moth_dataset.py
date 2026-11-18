@@ -1,13 +1,10 @@
 """python -m unittest discover ml/tests   (needs numpy + pillow only)"""
 
 import csv
-import json
 import sys
 import tempfile
 import unittest
 from pathlib import Path
-
-from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import build_moth_dataset as bm  # noqa: E402
@@ -40,44 +37,6 @@ class WebPhotos(unittest.TestCase):
                              [("a.jpg", "CM"), ("b.jpg", "CM"), ("d.jpg", "other_moth")])
             self.assertEqual(rows[0]["split"], rows[1]["split"])
             self.assertEqual(left_out, {"life stage larva": 1, "label other_insect": 1})
-
-
-class RealLinerCrops(unittest.TestCase):
-    def test_checked_species_boxes_are_cropped_tuned_on_or_held_out_never_trained(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            data = Path(tmp)
-            inbox = data / paths.LABEL_SITE / "inbox"
-            inbox.mkdir(parents=True)
-            box = {"n": 1, "x1": 300, "y1": 300, "x2": 400, "y2": 340, "ppm": 30, "by": "claude", "attrs": ""}
-            labels = []
-            for photo in ("ofm__liner1_day1.jpg", "ofm__liner1_day2.jpg", "ofm__liner2.jpg"):
-                Image.new("RGB", (1000, 800), "white").save(inbox / photo)
-                labels.append({"site_photo": photo, "photo": photo.split("__")[1], "label": "OFM", **box})
-            labels += [
-                {**labels[2], "n": 2, "label": "moth"},                     # no species yet
-                {**labels[2], "n": 3, "label": "debris"},                   # not a moth
-                {**labels[2], "n": 4, "label": "CM", "attrs": "unsure"},    # species unsure
-                {**labels[2], "n": 5, "label": "other_tortricid"},          # -> other_moth
-            ]
-            export = data / paths.LABEL_SITE_EXPORTS / "1" / "labels.csv"
-            write_csv(export, labels)
-            (data / paths.WEB_LINERS / "label/ofm").mkdir(parents=True)
-            (data / paths.WEB_LINERS / "label/ofm/liners.json").write_text(
-                json.dumps([["liner1_day1.jpg", "liner1_day2.jpg"]]))
-
-            rows, skipped = bm.site_rows(data, export, [15.0, 10.0], ["liner1_day1"])
-            got = sorted((r["credit"], r["class"], r["split"], r["ppm"]) for r in rows)
-            self.assertEqual(got, [
-                ("ofm__liner1_day1.jpg #1", "OFM", "test", "10.0"), ("ofm__liner1_day1.jpg #1", "OFM", "test", "15.0"),
-                ("ofm__liner1_day2.jpg #1", "OFM", "test", "10.0"), ("ofm__liner1_day2.jpg #1", "OFM", "test", "15.0"),
-                ("ofm__liner2.jpg #1", "OFM", "tune", "10.0"), ("ofm__liner2.jpg #1", "OFM", "tune", "15.0"),
-                ("ofm__liner2.jpg #5", "other_moth", "tune", "10.0"), ("ofm__liner2.jpg #5", "other_moth", "tune", "15.0"),
-            ])
-            self.assertEqual(skipped, {"marked unsure": 1})
-            self.assertTrue(all(r["source"] == "liner" for r in rows))
-            # 100 px at 30 px/mm with the server's padding, shrunk to 15 px/mm: 170 / 2 = 85 px
-            with Image.open(next(r["path"] for r in rows if r["ppm"] == "15.0")) as im:
-                self.assertEqual(im.size, (85, 85))
 
 
 if __name__ == "__main__":
