@@ -10,8 +10,9 @@
 Only photos where every box was looked at go in. Since Nov 15 2026 most come from the team labelling site
 (every gridded liner set: grape-moth, ofm-ervins, cm-ervins, the Cornell field cards and the web liners), read from
 the newest export fetched with `label_site/deploy.sh <pi> --fetch` (data/review/labelling_site/from_pi/exports/), or
---site-export: a photo goes in when every box on it has a `by` (someone, or Claude, checked it) and nobody tagged it
-unusable, wrong scale or not gridded. Photos the site leaves out (its gold photos, or one with a box nobody checked)
+--site-export: a photo goes in when every box on it has a `by` (someone, or Claude, checked it) and neither Nina nor
+Claude tagged it unusable, wrong scale or not gridded (Claude's review of Nov 8-9 2026 is the one that counts: a box
+another labeller edited stays if Claude passed it, but their tags don't keep a photo out). Photos the site leaves out (its gold photos, or one with a box nobody checked)
 fall back to their older hand-labelled folders, if they have one: the Cornell field cards (crop_field_cards.py +
 label_field_cards.py) and the ofm-ervins liners with no box still unlabelled. --no-site uses only those folders,
 as before. Every species label counts as `moth`; `skip` rows (not an insect / off the card) are background.
@@ -69,6 +70,9 @@ DATA = HERE / paths.DATA
 SOURCES = [DATA / paths.FIELD, DATA / paths.WEB_LINERS / "label/ofm-ervins"]
 SPLITS = ["train", "val", "test"]
 BAD_PHOTO_TAGS = {"unusable", "wrong_scale", "not_gridded"}  # labelling-site photo tags that keep a photo out
+# Whose tags count. Nov 18 2026: Claude re-checked every photo after the team's pass, and that review is the one to
+# go by, so the other labellers' tags no longer keep a photo out.
+TAGS_FROM = {"nina", "claude"}
 MERGE: dict[str, str] = {}  # --one-insect-class: {"moth": "insect", "other_insect": "insect"}
 NMS_IOUS = (0.5, 0.7, 0.9)
 
@@ -120,12 +124,13 @@ def site_source(export: Path, data: Path = DATA) -> tuple[Source, dict]:
 
     A photo goes in only if every box on it was checked on the site (`by` filled in): the gold photos and the
     few with a box nobody looked at are left out. So are photos someone tagged unusable, wrong scale or not
-    gridded. The site names a photo `<set>__<file>`; the held-out lists and liners.json use `<file>`."""
+    gridded (TAGS_FROM: only tags from those people count). The site names a photo `<set>__<file>`; the held-out
+    lists and liners.json use `<file>`."""
     rows = _site_rows(export)
     tagged = set()
     if (export.parent / "photo_tags.csv").exists():
         with open(export.parent / "photo_tags.csv", newline="") as f:
-            tagged = {r["photo"] for r in csv.DictReader(f) if r["tag"] in BAD_PHOTO_TAGS}
+            tagged = {r["photo"] for r in csv.DictReader(f) if r["tag"] in BAD_PHOTO_TAGS and r["user"] in TAGS_FROM}
     unchecked = {p for p, rs in rows.items() if not all(r["by"] and r["label"] for r in rs)}
     labelled = {p: rs for p, rs in rows.items() if p not in unchecked and p not in tagged}
     listed_as = {p: rs[0]["photo"] for p, rs in labelled.items()}
@@ -147,7 +152,7 @@ def default_sources(export: Path | None = None, data: Path = DATA) -> tuple[list
         return [folder_source(d) for d in SOURCES], {"site_export": None}
     site, left_out = site_source(export, data)
     # A photo the site left out (gold, or a box nobody checked) keeps its older hand-checked labels, if it has any;
-    # one someone tagged unusable, wrong scale or not gridded stays out everywhere.
+    # one tagged unusable, wrong scale or not gridded (by someone in TAGS_FROM) stays out everywhere.
     skip = {site.listed_as[p] for p in site.labelled} | set(left_out["tagged_files"])
     rest = [folder_source(d, skip=skip) for d in SOURCES]
     info = {"site_export": str(export.relative_to(data.parent)) if export.is_relative_to(data.parent) else str(export),

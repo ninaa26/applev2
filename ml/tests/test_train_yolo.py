@@ -90,7 +90,8 @@ class SiteExport(unittest.TestCase):
                     for label, by in bs:
                         w.writerow({"site_photo": p, "photo": p.split("__")[1], "label": label, "x1": 100,
                                     "y1": 100, "x2": 190, "y2": 140, "ppm": 12, "by": by})
-            (export / "photo_tags.csv").write_text("photo,user,tag,at\nofm__tagged.jpg,patti,unusable,0\n")
+            (export / "photo_tags.csv").write_text("photo,user,tag,at\nofm__tagged.jpg,nina,unusable,0\n"
+                                                   "ofm__liner2.jpg,patti,unusable,0\n")  # only Nina's (and Claude's) count
             (data / ty.paths.WEB_LINERS / "label/ofm").mkdir(parents=True)
             (data / ty.paths.WEB_LINERS / "label/ofm/liners.json").write_text(
                 json.dumps([["liner1_day1.jpg", "liner1_day2.jpg"]]))
