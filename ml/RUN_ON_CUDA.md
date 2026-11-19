@@ -2,7 +2,7 @@
 
 **One run at a time (since Nov 16 2026):** `make_bundle.py --what yolo` or `--what head` makes a smaller bundle
 for just the detector or just the moth-only species head, with a CLAUDE.md at its top that walks through set-up,
-training and bringing the result back (written for an RTX 3060). Open Claude Code in the unzipped folder and ask
+training and bringing the result back (written for the RTX 3060 Ti, 8 GB). Open Claude Code in the unzipped folder and ask
 it to do what CLAUDE.md says. This page is the full bundle (`make_bundle.py` with no `--what`).
 
 The bundle from `make_bundle.py` (`orchard-train.zip`, 1.75 GB) holds the scripts, the dataset and every image

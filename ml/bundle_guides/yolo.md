@@ -9,7 +9,7 @@ The job: train YOLO11s to find every insect on a liner photo and call it `moth`,
 then zip the result so it can be carried back to the Mac. On the server, only the boxes this detector calls
 `moth` go on to the species classifier, so moth recall matters most.
 
-The PC has an **NVIDIA RTX 3060**. Expect 1–2 hours; training stops by itself when val stops improving.
+The PC has an **NVIDIA RTX 3060 Ti (8 GB)**. Expect 1–2 hours; training stops by itself when val stops improving.
 
 ## Rules
 
@@ -22,8 +22,8 @@ The PC has an **NVIDIA RTX 3060**. Expect 1–2 hours; training stops by itself 
 ## 1. Check the machine
 
 ```bash
-nvidia-smi                                                    # must show the RTX 3060 and a driver
-nvidia-smi --query-gpu=name,memory.total --format=csv         # 12 GB (desktop card) or 6-8 GB (laptop)
+nvidia-smi                                                    # must show the RTX 3060 Ti and a driver
+nvidia-smi --query-gpu=name,memory.total --format=csv         # 8 GB (8192 MiB)
 ```
 
 - **WSL 2 on Windows:** the NVIDIA driver goes on Windows only, never inside WSL, and this folder must sit in
@@ -48,7 +48,7 @@ going on. CPU training would take days.
 
 ## 3. Train
 
-Batch 16 is right for 8 GB or less; with a 12 GB card use `--batch 32`.
+Batch 16 fits the 3060 Ti's 8 GB; don't raise it.
 
 ```bash
 python train_yolo.py --device 0 --batch 16 --name yolo11s-ppm12-site \
