@@ -30,6 +30,8 @@ data/
   training/                   what training reads and writes
     classifier/                 species ID, on crops of one insect
       dataset.csv                 every photo with its label, source, group and split (build_dataset.py)
+      moth_dataset.csv            the moth-only species head: all_by_species web photos, train / val / test
+                                  (build_moth_dataset.py); no liner photos
       exclude.csv                 photos a person looked at and left out (path, why). Doesn't exist yet
       dropped.csv                 every photo build_dataset.py left out, and why
       bioclip_embeddings/         cached BioCLIP 2 features, keyed by photo path
@@ -50,7 +52,8 @@ data/
                                 deployed classifier's labels, `by` = who checked each on the site), crops/,
                                 cutouts/, backups/, auth/ (users.json, secret, passwords.txt; never in git)
 
-  bundle/                     make_bundle.py: a copy to train on another machine (RUN_ON_CUDA.md)
+  bundle/                     make_bundle.py: a copy to train on another machine (RUN_ON_CUDA.md): orchard-train/
+                              (everything), or one run with its own CLAUDE.md: orchard-yolo/, orchard-head/
   logs/                       old run logs and shell scripts
   old/                        backups (an earlier dataset.csv, reorganize_data.py's backup and log)
 ```

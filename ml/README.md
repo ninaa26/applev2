@@ -142,6 +142,21 @@ every image it lists (web photos shrunk to 512 px), the cached features, the cur
 the commands for a machine with a CUDA GPU: three v2 runs (`efficientnet_b0`, `convnext_tiny`,
 `mobilenet_v3_large`), v1, and the detector, which now has all 31 OFM liner photos. `train_v2.py` keeps the
 epoch that does best on real-liner val crops and saves a temperature with the weights; the server applies it.
+`make_bundle.py --what yolo` and `--what head` pack one run each (`orchard-yolo.zip`, 0.1 GB;
+`orchard-head.zip`, 4.1 GB) with a CLAUDE.md from `bundle_guides/` at the top, so Claude Code on the training PC can
+set up, train and zip the result from that file alone.
+
+**Detector first, then a moth-only head (Nov 16 2026).** Two models, one after the other: `train_yolo.py` sorts
+every insect into moth, other insect or debris, and only its moth boxes go to the species head. That head is
+built by `build_moth_dataset.py` (`data/training/classifier/moth_dataset.csv`) and trained with
+`train_v1.py --dataset moth`: four classes (CM, OFM, OBLR, other_moth), trained on the web photos in
+`data/web_moth_photos/all_by_species/` alone (adults, split by observation; 44,845, of them only 153 OFM). C and
+the temperature are picked on its web val split. **Liner photos carry no species** (decided Nov 18 2026): their
+labels are moth, other insect or debris only, for the detector, so the head is neither trained nor scored on a
+real liner here; how it does on one comes from our own trap's cards. On the labelling site, Claude's review
+(Nov 8–9 2026) is what counts: a box someone else edited stays if Claude passed it, and only Nina's or Claude's
+photo tags keep a photo out of the detector. The server sends only moth boxes to such a head (`classify.moth_only`); with a six-class head every box
+still goes to it. Not trained yet: both runs are bundled for the RTX 3060.
 
 **The CUDA runs (Oct 8 2026, RTX 3060 Ti under WSL).** Three fine-tuned CNNs, 20 epochs each, scored on the
 same 785 held-out real-liner crops as `models/classifier/bioclip_head/current` (15 and 10 px/mm together), each with its own temperature:
@@ -295,7 +310,7 @@ liner's (or a card's) photos together.
 **YOLO11 detector and trying models** (`train_yolo.py`, `model_playground.py`):
 
 ```bash
-.venv/bin/python train_yolo.py                                          # hand-checked liner photos only -> models/detector/yolo/<run>/summary.json
+.venv/bin/python train_yolo.py                                          # every checked liner photo -> models/detector/yolo/<run>/summary.json
 .venv/bin/python train_yolo.py --synth 3000 --out data/training/detector/yolo_synth --epochs 50   # plus AMI/iNat cutouts pasted on tiles
 .venv/bin/python train_yolo.py --blank 'data/real_liners/our_trap_bench_tests/capture_2026-10-06/calibrated_*.jpg' --blank-ppm 15.3   # plus blank trap-camera liners, no boxes
 .venv/bin/python model_playground.py                                    # http://localhost:8770: any detector/classifier on a photo or a screen capture

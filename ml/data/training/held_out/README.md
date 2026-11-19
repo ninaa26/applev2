@@ -2,7 +2,8 @@
 
 These lists are in git so that which photos are test photos is recorded and reviewed like code. One photo name
 or name prefix per line (a prefix takes every photo it starts, so a liner's other days go with it); `#` starts a
-comment. The scripts read them through `paths.held_out_list` in [`ml/paths.py`](../../../paths.py).
+comment. The scripts read them through `paths.held_out_list` in [`ml/paths.py`](../../../paths.py). On the labelling
+site a photo is named `<set>__<file>`; the lists still name `<file>`, and the scripts match on that.
 
 | File | Kept out of | Read by |
 |---|---|---|
