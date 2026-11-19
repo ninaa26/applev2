@@ -2,6 +2,9 @@
 
     python train_v1.py                    # embed new photos, train, report on the test split
     python train_v1.py --final            # also report on our locked test cards (do this once, at the end)
+    python train_v1.py --dataset moth --out models/classifier/bioclip_head/archive/<date>_moth_only
+                                          # build_moth_dataset.py: the species of boxes the detector called moth,
+                                          # web photos only (C and T picked on its web val split)
 
 Reads data/training/classifier/dataset.csv from build_dataset.py. Embeddings are cached in
 data/training/classifier/bioclip_embeddings/, so re-running after adding photos only embeds the new ones and
@@ -30,6 +33,7 @@ import argparse
 import csv
 import json
 import sys
+from collections import Counter
 from pathlib import Path
 
 import numpy as np
@@ -48,8 +52,11 @@ PROMPTS = {
 }
 
 
-def load_rows(data: Path) -> list[dict]:
-    with open(data / paths.DATASET, newline="") as f:
+DATASETS = {"all": paths.DATASET, "moth": paths.MOTH_DATASET}
+
+
+def load_rows(data: Path, dataset: str = "all") -> list[dict]:
+    with open(data / DATASETS[dataset], newline="") as f:
         return list(csv.DictReader(f))
 
 
@@ -169,11 +176,14 @@ def main(argv=None) -> int:
     ap.add_argument("--device", default="auto",
                     help="auto (mps > cuda > cpu) or e.g. cpu: on the 16 GB M3, mps stalls in Metal after a few thousand photos")
     ap.add_argument("--final", action="store_true", help="also evaluate on the locked test cards")
+    ap.add_argument("--dataset", choices=sorted(DATASETS), default="all",
+                    help="all: build_dataset.py, six classes for every box; moth: build_moth_dataset.py, the species "
+                         "of boxes the detector called moth (web photos only)")
     args = ap.parse_args(argv)
 
     from sklearn.linear_model import LogisticRegression
 
-    rows = [r for r in load_rows(args.data) if r["split"] != "locked" or args.final]
+    rows = [r for r in load_rows(args.data, args.dataset) if r["split"] != "locked" or args.final]
     slug = args.model.split("/")[-1].replace(":", "_")
     X, embedder = embeddings(rows, args.data / paths.EMBEDDINGS / f"{slug}.npz", args.model, args.batch, args.device)
 
@@ -224,10 +234,9 @@ def main(argv=None) -> int:
     np.savez(args.out / "head.npz", classes=np.array(classes), W=clf.coef_.astype(np.float32),
              b=clf.intercept_.astype(np.float32), T=np.float32(T), model=np.array(args.model))
     (args.out / "metrics.json").write_text(json.dumps(results, indent=2))
-    trained_on.write(args.out, trained_on.summary(args.data, args.model, args.data / paths.DATASET, rows,
+    trained_on.write(args.out, trained_on.summary(args.data, args.model, args.data / DATASETS[args.dataset], rows,
                                                   C=C, T=round(float(T), 4), final=args.final))
-    by_source = {s: int(sum(1 for r in rows if r["source"] == s and r["split"] == "train"))
-                 for s in ("inat", "ami", "own", "liner", "synth")}
+    by_source = dict(Counter(r["source"] for r in rows if r["split"] == "train").most_common())
     md = ["# Species ID v0 / v1", "",
           f"BioCLIP 2 image features. Training photos by source: {by_source}.",
           f"C={C} and temperature {T:.2f} were picked on {int(tune.sum())} {tuned_on}.",
