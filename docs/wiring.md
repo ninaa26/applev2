@@ -62,7 +62,8 @@ INA219 log from a two-day bench run (see [bring-up.md](bring-up.md), "Before a t
 ### Option B: battery swap, no solar (backup)
 
 The Option A pack, boost, fuse and INA219 with the panel and charger board left out. The pack is sized for one
-liner period (`SENTINEL_LINER_MAX_DAYS=28`): 28 days × ~2 Wh plus margin is ~65 Wh, so **6 × 18650 in parallel**.
+liner period (`SENTINEL_LINER_MAX_DAYS=28`): 28 days × ~2 Wh plus margin is ~65 Wh, so **6 × 18650 in parallel**,
+or 4 × 21700 (~72 Wh), which is what the trap housing's swappable cartridge holds ([hardware/HOUSING.md](../hardware/HOUSING.md)).
 Charge packs indoors with a 1S charger and swap one at every liner change. About **$30–40 per trap**, plus a
 spare pack to rotate.
 

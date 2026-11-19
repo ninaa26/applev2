@@ -20,3 +20,6 @@ camera_bench/
 *.pt
 .taste-skill/
 constraints.txt.new
+
+# STLs and renders from hardware/scad/export_housing.sh
+hardware/print/housing/
