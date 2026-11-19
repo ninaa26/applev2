@@ -29,6 +29,7 @@ class Box:
     y2: float
     conf: float
     n: int = 1  # insects in the box: >1 when touching insects couldn't be separated
+    label: str = ""  # what the detector called it (YOLO: moth / other_insect / debris); "" when it can't tell
 
     @property
     def w(self) -> float:
@@ -137,7 +138,7 @@ def merge_fragments(boxes: list[Box], thr: float = 0.6) -> list[Box]:
             iy = max(0.0, min(b.y2, big.y2) - max(b.y1, big.y1))
             if b.w * b.h > 0 and ix * iy / (b.w * b.h) > thr:
                 kept[i] = Box(min(b.x1, big.x1), min(b.y1, big.y1), max(b.x2, big.x2), max(b.y2, big.y2),
-                              max(b.conf, big.conf), max(b.n, big.n))
+                              max(b.conf, big.conf), max(b.n, big.n), big.label)  # the whole insect's label
                 break
         else:
             kept.append(b)
@@ -688,8 +689,10 @@ class YoloDetector:  # pragma: no cover - needs ultralytics + trained weights
     The photo is shrunk so the liner's grid comes out at the run's px/mm, cut into overlapping tiles
     (a whole 8 MP photo squeezed into one 640 px input would leave an OFM a few pixels long), and the
     tiles' boxes are merged with `merge_tiles`. px/mm, tile size, overlap, input size and the confidence
-    and NMS settings chosen on the run's val photos come from its summary.json. Its classes (moth / other insect / debris) are not passed on: every box goes to the
-    classifier, which has the last word.
+    and NMS settings chosen on the run's val photos come from its summary.json. Each box keeps its class
+    (moth / other_insect / debris) in `label`: with a moth-only species head (ml/build_moth_dataset.py) only the
+    moth boxes go to the classifier and the detector's call stands for the rest (worker.Pipeline._classify);
+    with a six-class head every box still goes to the classifier, which has the last word.
     """
 
     def __init__(self, weights: str | Path, grid_mm: float = 25.0, lens: str | float = "auto"):
@@ -718,19 +721,22 @@ class YoloDetector:  # pragma: no cover - needs ultralytics + trained weights
         small = cv2.resize(img, None, fx=s, fy=s, interpolation=cv2.INTER_AREA) if s < 1 else img
         h, w = small.shape[:2]
         origins = tile_origins(w, h, self.tile, self.overlap)
-        found, tiles = [], []
+        found, tiles, labels = [], [], []
         for i in range(0, len(origins), 16):
             crops = [small[y:y + self.tile, x:x + self.tile] for x, y in origins[i:i + 16]]
             # max_det: a full liner tile can hold more insects than the default cap of 300 allows for
             results = self.model.predict(crops, imgsz=self.imgsz, conf=self.conf, iou=self.iou, max_det=1000,
                                          device=self.device, verbose=False)
             for n, ((ox, oy), r) in enumerate(zip(origins[i:i + 16], results)):
-                for (x1, y1, x2, y2), c in zip(r.boxes.xyxy.cpu().tolist(), r.boxes.conf.cpu().tolist()):
+                for (x1, y1, x2, y2), c, k in zip(r.boxes.xyxy.cpu().tolist(), r.boxes.conf.cpu().tolist(),
+                                                  r.boxes.cls.cpu().tolist()):
                     found.append(((x1 + ox) / s, (y1 + oy) / s, (x2 + ox) / s, (y2 + oy) / s, float(c)))
+                    labels.append(str(r.names[int(k)]))
                     tiles.append(i + n)
         outline = card_outline(img)
         self.last = {"px_per_mm": ppm, "grid": grid, "work_scale": 1.0, "card": outline, "tiles": len(origins)}
-        return merge_fragments(on_card([Box(*found[i]) for i in merge_tiles(found, tiles)], outline, CARD_EDGE_MM * (ppm or 0)))
+        boxes = [Box(*found[i], label=labels[i]) for i in merge_tiles(found, tiles)]
+        return merge_fragments(on_card(boxes, outline, CARD_EDGE_MM * (ppm or 0)))
 
 
 def _has_mps() -> bool:

@@ -16,7 +16,7 @@ from ..db import session_scope
 from ..models import Capture, Card, Detection, Event, Track, Trap, utcnow
 from ..settings import get_settings
 from . import track as trk
-from .classify import crop, make_classifier
+from .classify import NOT_FOR_A_MOTH_HEAD, crop, make_classifier, moth_only
 from .detect import card_outline, in_mask, make_detector, photo_quality
 
 log = logging.getLogger(__name__)
@@ -106,8 +106,18 @@ class Pipeline:
         return {"path": path, "boxes": boxes, "info": info, "quality": quality, "size": (w, h), "probs": None}
 
     def _classify(self, found: dict) -> list:
+        """Class probabilities per box. A moth-only head (classify.moth_only) sees only the boxes the detector
+        called moth; a box it called other_insect or debris keeps that call as probability 1, since that head has
+        nothing to weigh it against (a reviewer can still change it). Neither is counted as a target moth."""
+        boxes = found["boxes"]
+        to_head = [i for i, b in enumerate(boxes)
+                   if not (moth_only(self.classifier) and b.label in NOT_FOR_A_MOTH_HEAD)]
         with Image.open(found["path"]) as img:
-            return self.classifier.classify([crop(img, b) for b in found["boxes"]])
+            probs = self.classifier.classify([crop(img, boxes[i]) for i in to_head]) if to_head else []
+        out: list = [{b.label: 1.0} for b in boxes]
+        for i, p in zip(to_head, probs):
+            out[i] = p
+        return out
 
     def analyse(self, db: Session, cap: Capture) -> dict:
         """Detection and classification, the slow part, ahead of process(). Reads only, so it can run

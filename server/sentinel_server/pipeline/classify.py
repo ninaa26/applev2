@@ -10,6 +10,10 @@ temperature T (picked on real-liner crops by train_v1.py) has its logits divided
 that a confidence of 0.80 is right about 80% of the time and track.py's thresholds hold.
 `cnn-v2` is the fine-tuned CNN from ml/train_v2.py (SENTINEL_CLASSIFIER_MODEL points at
 its models/classifier/cnn/<arch>/<arch>.pt).
+
+A head trained with `train_v1.py --dataset moth` knows only moth species (MOTH_SPECIES): it expects the
+detector to have sorted out bycatch and debris already, so the worker gives it only the boxes the detector
+called moth (`moth_only`).
 """
 
 from __future__ import annotations
@@ -20,6 +24,16 @@ import numpy as np
 from PIL import Image
 
 from ..models import SPECIES
+
+MOTH_SPECIES = ("CM", "OFM", "OBLR", "other_moth")
+NOT_FOR_A_MOTH_HEAD = ("other_insect", "debris")  # detector labels whose call stands with a moth-only head
+
+
+def moth_only(classifier) -> bool:
+    """True for a classifier that can only name moth species (no other_insect, no debris)."""
+    classes = getattr(classifier, "classes", None) or []
+    return bool(classes) and set(classes) <= set(MOTH_SPECIES)
+
 
 PROMPTS = {
     "CM": "a photo of Cydia pomonella, codling moth",
