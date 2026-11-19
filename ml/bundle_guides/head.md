@@ -19,7 +19,7 @@ The data (`ml/data/training/classifier/moth_dataset.csv`, from `build_moth_datas
   accuracy: BioCLIP 2 has likely seen many of these photos.
 - OFM is thin: 116 training photos against about 16,000 CM.
 
-The PC has an **NVIDIA RTX 3060**. Expect 20–60 minutes, nearly all of it BioCLIP reading 45,000 photos once.
+The PC has an **NVIDIA RTX 3060 Ti (8 GB)**. Expect 20–60 minutes, nearly all of it BioCLIP reading 45,000 photos once.
 
 ## Rules
 
@@ -33,8 +33,8 @@ The PC has an **NVIDIA RTX 3060**. Expect 20–60 minutes, nearly all of it BioC
 ## 1. Check the machine
 
 ```bash
-nvidia-smi                                                    # must show the RTX 3060 and a driver
-nvidia-smi --query-gpu=name,memory.total --format=csv
+nvidia-smi                                                    # must show the RTX 3060 Ti and a driver
+nvidia-smi --query-gpu=name,memory.total --format=csv         # 8 GB (8192 MiB)
 ```
 
 - **WSL 2 on Windows:** the NVIDIA driver goes on Windows only, never inside WSL, and this folder must sit in

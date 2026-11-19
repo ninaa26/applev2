@@ -156,7 +156,7 @@ labels are moth, other insect or debris only, for the detector, so the head is n
 real liner here; how it does on one comes from our own trap's cards. On the labelling site, Claude's review
 (Nov 8–9 2026) is what counts: a box someone else edited stays if Claude passed it, and only Nina's or Claude's
 photo tags keep a photo out of the detector. The server sends only moth boxes to such a head (`classify.moth_only`); with a six-class head every box
-still goes to it. Not trained yet: both runs are bundled for the RTX 3060.
+still goes to it. Not trained yet: both runs are bundled for the RTX 3060 Ti (8 GB).
 
 **The CUDA runs (Oct 8 2026, RTX 3060 Ti under WSL).** Three fine-tuned CNNs, 20 epochs each, scored on the
 same 785 held-out real-liner crops as `models/classifier/bioclip_head/current` (15 and 10 px/mm together), each with its own temperature:
