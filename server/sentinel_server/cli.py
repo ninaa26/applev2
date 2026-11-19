@@ -30,6 +30,7 @@ from sqlalchemy import select
 
 from .db import init_db, session_scope
 from .models import Trap, WeatherDay
+from .monitoring import init_sentry
 from .services import TRAP_KINDS, create_trap, hash_key, new_api_key, set_kind
 from .settings import get_settings
 
@@ -375,6 +376,7 @@ def main(argv: list[str] | None = None) -> int:
 
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    init_sentry(args.fn.__name__.removeprefix("cmd_"))
     return args.fn(args)
 
 

@@ -192,6 +192,8 @@ bench hub that has no server to ask.
 
 Every piece can be updated without visiting it, and goes back to the version before by itself if the new
 one doesn't come up.
+To hear about a hub's crashes without checking on it, give it a Sentry DSN
+([server-on-linux.md](server-on-linux.md#error-reports-sentry)).
 
 | What | How | If the new one doesn't work |
 |---|---|---|
