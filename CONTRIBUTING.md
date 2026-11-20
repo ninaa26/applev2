@@ -67,7 +67,7 @@ The device's camera-bench tests need OpenCV, which `make setup` installs (the `b
 |---|---|---|
 | Server | `server/deploy.sh` from the Mac, on the merged commit | `server-<date>-<time>` |
 | A hub | `device/deploy-hub.sh pi@<hub>` | `hub-<hub>-<date>-<time>` |
-| Camera firmware | raise `FW_VERSION` in `src/main.cpp`, build with `device/esp32-node/release.sh`, upload on the dashboard (Set up traps → Camera firmware) | `fw-<version>` |
+| Camera firmware | raise `FW_VERSION` in `src/main.cpp`, build with `device/esp32-node/release.sh` (it signs it with the team's firmware key), upload on the dashboard (Set up traps → Camera firmware) | `fw-<version>` |
 
 All three go back to the old version by themselves if the new one doesn't come up
 ([docs/esp32-traps.md](docs/esp32-traps.md#fixing-and-updating-in-the-field)). Tags are pushed to

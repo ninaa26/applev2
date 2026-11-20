@@ -202,13 +202,15 @@ class Firmware(Base):
     version: Mapped[str] = mapped_column(String(32), primary_key=True)
     size: Mapped[int] = mapped_column(Integer)
     md5: Mapped[str] = mapped_column(String(32))
+    sig: Mapped[str] = mapped_column(String(160), default="", server_default="")  # hex ECDSA signature (release.sh)
     uploaded_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     note: Mapped[str] = mapped_column(String(200), default="")
 
 
 class PendingCamera(Base):
     """An ESP32 with no trap id or key yet that asked a hub to be added (pairing). It shows on Set up traps;
-    when it is added there, its new key waits here until the hub has handed it to the camera."""
+    when it is added there (with the secret on its sticker), its new key waits here, sealed with that secret,
+    until the hub has handed it to the camera. The plain key is never kept."""
 
     __tablename__ = "pending_cameras"
     code: Mapped[str] = mapped_column(String(12), primary_key=True)  # last 6 hex digits of its MAC, on its sticker
@@ -217,8 +219,12 @@ class PendingCamera(Base):
     rssi: Mapped[int | None] = mapped_column(Integer, nullable=True)
     first_seen_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     last_seen_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    proof: Mapped[str] = mapped_column(String(32), default="", server_default="")  # fleet.pairing_proof
     trap_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    api_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    api_key: Mapped[str | None] = mapped_column(String(64), nullable=True)  # no longer written (keys go sealed);
+    # kept because migrations only add, so an older checkout still runs on this database
+    key_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    sealed: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON: fleet.seal_key
 
 
 class HubClaim(Base):

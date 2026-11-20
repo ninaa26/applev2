@@ -32,28 +32,38 @@ def _gw(tmp_path: Path, clock=lambda: NOW) -> gateway.Gateway:
     return gateway.Gateway(cfg, tmp_path, clock=clock)
 
 
-def test_a_new_camera_waits_until_it_is_added_on_the_dashboard_then_gets_its_key(tmp_path: Path, monkeypatch):
+PROOF = "ab" * 16
+SEALED = {"trap_id": "T2", "key_hash": gateway.hash_key("newkey"), "nonce": "01" * 16, "box": "5a" * 32, "tag": "cd" * 16}
+
+
+def test_a_new_camera_waits_until_it_is_added_on_the_dashboard_then_gets_its_sealed_key(tmp_path: Path, monkeypatch):
     gw = _gw(tmp_path)
-    status, reply = gw.pair(json.dumps({"code": "7f3a2c", "fw": "0.3.0", "rssi": -61}))
+    status, reply = gw.pair(json.dumps({"code": "7f3a2c", "proof": PROOF, "fw": "0.4.0", "rssi": -61}))
     assert status == 202 and reply["waiting"] and "now" in reply
-    assert gw.pair('{"code": "zz"}')[0] == 422 and gw.pair("not json")[0] == 422
+    assert gw.pair(json.dumps({"code": "zz", "proof": PROOF}))[0] == 422 and gw.pair("not json")[0] == 422
+    assert gw.pair('{"code": "7F3A2C"}')[0] == 422  # older firmware with no secret can't pair
     assert "New camera 7F3A2C" in gw.status_page()
 
     sent, assigned = [], {}
     monkeypatch.setattr(gateway.requests, "post",
                         lambda url, json, headers, timeout: sent.append(json) or _Reply(200, {"assigned": dict(assigned)}))
     gw.sync_pairing()
-    assert sent[-1] == {"waiting": [{"code": "7F3A2C", "fw": "0.3.0", "rssi": -61}], "handed": []}
-    assert gw.pair('{"code": "7F3A2C"}')[0] == 202  # not added yet
+    assert sent[-1] == {"waiting": [{"code": "7F3A2C", "proof": PROOF, "fw": "0.4.0", "rssi": -61}], "handed": []}
+    assert gw.pair(json.dumps({"code": "7F3A2C", "proof": PROOF}))[0] == 202  # not added yet
 
-    assigned["7F3A2C"] = {"trap_id": "T2", "api_key": "newkey"}  # added on the dashboard
+    assigned["7F3A2C"] = {**SEALED, "box": "zz"}  # not a sealed key: ignored
     gw.sync_pairing()
-    status, reply = gw.pair('{"code": "7F3A2C"}')
-    assert status == 200 and (reply["trap_id"], reply["api_key"]) == ("T2", "newkey")
+    assert gw.assigned == {}
+    assigned["7F3A2C"] = dict(SEALED)  # added on the dashboard
+    gw.sync_pairing()
+    status, reply = gw.pair(json.dumps({"code": "7F3A2C", "proof": PROOF}))
+    assert status == 200 and {k: reply[k] for k in ("trap_id", "nonce", "box", "tag")} == \
+        {k: SEALED[k] for k in ("trap_id", "nonce", "box", "tag")}
+    assert "api_key" not in reply and "newkey" not in (tmp_path / "pairing.json").read_text()
     assert json.loads((tmp_path / "pairing.json").read_text())["7F3A2C"]["handed"] is False  # survives a restart
-    assert gateway.Gateway(gw.cfg, tmp_path, clock=gw.clock).pair('{"code": "7F3A2C"}')[0] == 200
+    assert gateway.Gateway(gw.cfg, tmp_path, clock=gw.clock).pair(json.dumps({"code": "7F3A2C", "proof": PROOF}))[0] == 200
 
-    # The camera uses its key before the next node list from the server includes it.
+    # The camera opens it and uses its key before the next node list from the server includes it.
     assert gw.schedule("Bearer newkey")[0] == 200
     assert (tmp_path / "nodes" / "T2" / "key").read_text() == "newkey"
     gw.sync_pairing()
@@ -61,12 +71,28 @@ def test_a_new_camera_waits_until_it_is_added_on_the_dashboard_then_gets_its_key
     del assigned["7F3A2C"]  # the server has forgotten its copy
     gw.sync_pairing()
     assert gw.assigned == {}
-    assert gw.pair('{"code": "7F3A2C"}')[0] == 202  # held 10 s and reset, it would pair again
+    assert gw.pair(json.dumps({"code": "7F3A2C", "proof": PROOF}))[0] == 202  # held 10 s and reset, it would pair again
+
+
+def test_a_key_the_server_stops_listing_before_the_camera_has_it_is_dropped(tmp_path: Path, monkeypatch):
+    """The camera was removed, or given another key, on the dashboard: the hub stops handing out the old one."""
+    gw = _gw(tmp_path)
+    assigned = {"7F3A2C": dict(SEALED)}
+    monkeypatch.setattr(gateway.requests, "post", lambda url, json, headers, timeout: _Reply(200, {"assigned": dict(assigned)}))
+    gw.pair(json.dumps({"code": "7F3A2C", "proof": PROOF}))
+    gw.sync_pairing()
+    assert gw.pair(json.dumps({"code": "7F3A2C", "proof": PROOF}))[0] == 200 and "T2" in gw.hashes
+    assigned.clear()
+    gw.sync_pairing()
+    assert gw.assigned == {} and "T2" not in gw.hashes
+    old = tmp_path / "pairing.json"
+    old.write_text(json.dumps({"7F3A2C": {"trap_id": "T2", "api_key": "plain", "handed": False}}))  # an older hub's file
+    assert gateway.Gateway(gw.cfg, tmp_path, clock=gw.clock).assigned == {}
 
 
 def test_firmware_sent_from_the_dashboard_is_offered_only_once_the_hub_has_a_good_copy(tmp_path: Path, monkeypatch):
     fw = b"\xe9firmware" * 1000
-    good = {"version": "0.3.1", "size": len(fw), "md5": hashlib.md5(fw).hexdigest()}
+    good = {"version": "0.3.1", "size": len(fw), "md5": hashlib.md5(fw).hexdigest(), "sig": "3044" + "00" * 68}
     nodes = {"nodes": {"T2": gateway.hash_key("key2")}, "firmware": {"T2": good}}
     served = {"content": fw}
 

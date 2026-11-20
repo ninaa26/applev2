@@ -33,10 +33,11 @@ pio device monitor                                        # 115200 baud
 
 `flash-camera.sh` does the copy and the upload. With no arguments it wipes the board and flashes the
 **release build** (`pio run -e release`), which has no trap id or key: the camera pairs with its hub and is
-added on the dashboard, and the script prints its pairing code. With `T3 <key>` (the command the dashboard
+added on the dashboard, and the script prints its code and secret for its sticker. With `T3 <key>` (the command the dashboard
 shows for a camera added by hand) it flashes the dev build with that id and key. Either way the Wi-Fi and
 pins stay in `node_config.h`. `release.sh` builds the file for updating cameras over the air from the
-dashboard. How both work: [docs/esp32-traps.md](../../docs/esp32-traps.md#adding-and-removing-esp32-traps).
+dashboard, signed with the team's firmware key (`make-signing-key.sh` made it; the cameras check against
+`include/firmware_key.h`). How both work: [docs/esp32-traps.md](../../docs/esp32-traps.md#adding-and-removing-esp32-traps).
 
 The board this was written for: a Freenove-style ESP32-S3 CAM (N8R8: 8 MB flash, 8 MB octal PSRAM,
 CH343 USB serial, ESP32-S3-EYE camera pins) with an OV3660. On a Mac the CH343 garbles uploads above
@@ -71,11 +72,14 @@ A check-in wake prints `wake=checkin` and no `captured` line, unless the hub say
 `photo asked for on the dashboard`. Setup mode prints `wake=setup` and `live preview at http://10.42.0.23/ for 120 s`.
 
 Since 0.3.0 each boot first prints `SENTINEL_FW_VERSION=0.3.0;release` (or `;dev`). A camera not added yet
-prints `sentinel node (not added) ...`, `not added yet: pairing code 7F3A2C` and `pair -> 202` until it is
-added on the dashboard, then `added on the dashboard as T3` and restarts into setup mode. An update prints
+prints `sentinel node (not added) ...`, `not added yet: pairing code 7F3A2C, pairing secret K7QM-...` and
+`pair -> 202` until it is added on the dashboard, then `added on the dashboard as T3` and restarts into setup
+mode (`ERROR the key from the hub didn't check out`: the sealed key didn't open with this camera's secret). An update prints
 `updating firmware 0.3.0 -> 0.3.1`, `firmware written: restarting into it`, then `wake=update` and
 `firmware 0.3.1 reached the hub: keeping it`; if that wake can't reach the hub it prints `ERROR new firmware
-didn't reach the hub: going back` and the old firmware starts. `button held 10 s` means it forgot its id and key.
+didn't reach the hub: going back` and the old firmware starts. `firmware signature doesn't check out` (or
+`ERROR firmware offered without a signature`): the update wasn't signed with the team's key, and isn't
+installed. `button held 10 s` means it forgot its id and key.
 
 If the hub's Wi-Fi is up but its gateway is not open yet (`upload ... -> -1`), the node tries again every
 5 s until the end of its connect window (2–5 min), then sleeps. A node with no schedule from the hub
@@ -88,4 +92,5 @@ the MAC registered).
 `node_config.h`. `ERROR hub not reachable`: out of range, the wrong Wi-Fi password, or the hub was not
 awake (it is awake for a few minutes after each scheduled time). `ERROR hub not answering`: the node
 joined the Wi-Fi but the gateway never took the photos before the connect window ran out. `ERROR hub does not know this trap's
-key`: the camera was removed on the dashboard, given a new key, or not added yet.
+key`: the camera was removed on the dashboard, given a new key, or not added yet. After 24 such wakes in a
+row it prints `ERROR key refused by the hub: pairing again` and pairs again.

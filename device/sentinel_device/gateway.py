@@ -27,13 +27,16 @@ Node protocol (all requests carry "Authorization: Bearer <that trap's server API
 All reply with {"now": unix seconds, "sleep_s": seconds until the node's next wake, "wakes": the next
 12 wake times in unix seconds, "checkin_s": how often to check in between photos (0: don't),
 "photo_now": true when a photo was asked for on the dashboard and this node hasn't sent one since,
-and "firmware": {"version", "size", "md5"} when the dashboard sent it firmware to install}.
+and "firmware": {"version", "size", "md5", "sig"} when the dashboard sent it firmware to install; the node
+installs it only if "sig" checks out against the signing key built into it}.
 
-A node with no trap id or key yet (a new camera, firmware 0.3.0 or later) pairs instead, with no key:
+A node with no trap id or key yet (a new camera, firmware 0.4.0 or later) pairs instead, with no key:
 
-    POST /node/v1/pair       header X-Sentinel-Meta: {"code": last 6 hex digits of its MAC, "fw", "rssi"}
+    POST /node/v1/pair       header X-Sentinel-Meta: {"code": last 6 hex digits of its MAC, "proof": that it
+                             has the secret on its sticker (sentinel_server.fleet.pairing_proof), "fw", "rssi"}
                              202 {"waiting": true} until it is added on the dashboard, then
-                             200 {"trap_id", "api_key"}
+                             200 {"trap_id", "nonce", "box", "tag"}: its key sealed with that secret, which
+                             only the camera can open. The hub never has the plain key until the camera uses it.
 
 The hub's own trap id and key come from its config, or, for a hub set up with a pairing code
 (install-hub.sh with no arguments), from the server once that code is entered on the dashboard
@@ -72,8 +75,21 @@ TRAP_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,31}")
 PREVIEW_STREAM_PORT = 81  # a camera streams its preview here, beside the page on its PREVIEW_URL
 PREVIEW_PATH = re.compile(r"/preview/([A-Za-z0-9][A-Za-z0-9_-]{0,31})(/|/stream|/still)?")
 CAMERA_CODE = re.compile(r"[0-9A-F]{6}")
+PROOF = re.compile(r"[0-9a-f]{32}")
+SEALED = {"key_hash": re.compile(r"[0-9a-f]{64}"), "nonce": re.compile(r"[0-9a-f]{32}"),
+          "box": re.compile(r"(?:[0-9a-f]{2}){8,64}"), "tag": re.compile(r"[0-9a-f]{32}")}
+SIG = re.compile(r"(?:[0-9a-f]{2}){0,72}")  # ECDSA P-256 signature, DER, in hex ("" from older servers)
 FW_VERSION = re.compile(r"[0-9A-Za-z._-]{1,32}")
 WAITING_FOR = 600  # a pairing camera not heard from for this long is no longer reported as waiting
+
+
+def _sealed(a: object) -> dict | None:
+    """A sealed key from the server (sentinel_server.fleet.hub_pairing), checked for shape, or None."""
+    if not isinstance(a, dict) or not TRAP_ID.fullmatch(str(a.get("trap_id"))):
+        return None
+    if not all(pat.fullmatch(str(a.get(k, ""))) for k, pat in SEALED.items()):
+        return None
+    return {"trap_id": a["trap_id"], **{k: a[k] for k in SEALED}}
 
 
 def hash_key(key: str) -> str:
@@ -116,9 +132,10 @@ class Gateway:
         self.firmware: dict[str, dict] = {}  # trap_id -> {version, size, md5}, for firmware this hub has a copy of
         self.waiting: dict[str, dict] = {}   # pairing cameras: code -> {fw, rssi, seen (clock())}
         self.pairing_file = data_dir / "pairing.json"
-        try:  # code -> {trap_id, api_key, handed}: keys from the dashboard for cameras that paired here
-            self.assigned: dict[str, dict] = json.loads(self.pairing_file.read_text())
-        except (OSError, ValueError):
+        try:  # code -> {trap_id, key_hash, nonce, box, tag, handed}: sealed keys for cameras that paired here
+            self.assigned: dict[str, dict] = {c: a for c, a in json.loads(self.pairing_file.read_text()).items()
+                                              if _sealed(a) is not None}  # not plain keys from older hubs
+        except (OSError, ValueError, AttributeError):
             self.assigned = {}
         self.lock = threading.RLock()
         self._set_nodes(server)
@@ -129,8 +146,7 @@ class Gateway:
         hashes = dict(self.server_nodes)
         hashes.update({t: hash_key(k) for t, k in self.local_keys.items()})
         # A camera just added on the dashboard can use its key before the next node list lists it.
-        hashes.update({a["trap_id"]: hash_key(a["api_key"]) for a in self.assigned.values()
-                       if TRAP_ID.fullmatch(str(a.get("trap_id"))) and a.get("api_key")})
+        hashes.update({a["trap_id"]: a["key_hash"] for a in self.assigned.values()})
         self.hashes = hashes
 
     def refresh_nodes(self) -> bool:
@@ -194,7 +210,8 @@ class Gateway:
                 tmp.write_bytes(r.content)
                 os.replace(tmp, path)
                 log.info("firmware %s fetched (%d kB)", version, size // 1000)
-            ready[trap_id] = {"version": version, "size": size, "md5": md5}
+            sig = str(fw.get("sig", ""))
+            ready[trap_id] = {"version": version, "size": size, "md5": md5, "sig": sig if SIG.fullmatch(sig) else ""}
         with self.lock:
             new = sorted(f"{t} -> {f['version']}" for t, f in ready.items() if self.firmware.get(t) != f)
             self.firmware = ready
@@ -219,19 +236,20 @@ class Gateway:
         dashboard; then it gets its trap id and key here."""
         try:
             meta = json.loads(meta_header or "{}")
-            code = str(meta["code"]).upper()
-            assert CAMERA_CODE.fullmatch(code)
+            code, proof = str(meta["code"]).upper(), str(meta["proof"])
+            assert CAMERA_CODE.fullmatch(code) and PROOF.fullmatch(proof)
         except (ValueError, KeyError, TypeError, AttributeError, AssertionError):
-            return 422, {"error": 'meta must be {"code": "<6 hex digits>", "fw", "rssi"}'}
+            return 422, {"error": 'meta must be {"code": "<6 hex digits>", "proof": "<32 hex digits>", "fw", "rssi"}'}
         with self.lock:
             got = self.assigned.get(code)
-            if got:  # marked handed once the camera uses the key (trap_for): this reply may not reach it
-                log.info("camera %s: sending it its key, as %s", code, got["trap_id"])
-                return 200, {**self.schedule_reply(got["trap_id"]), "trap_id": got["trap_id"], "api_key": got["api_key"]}
+            if got:  # sealed: only the camera with the sticker's secret can open it, so it can go to whoever asks
+                log.info("camera %s: sending it its sealed key, as %s", code, got["trap_id"])
+                return 200, {**self.schedule_reply(got["trap_id"]), "trap_id": got["trap_id"],
+                             "nonce": got["nonce"], "box": got["box"], "tag": got["tag"]}
             fw = str(meta.get("fw", ""))
             if code not in self.waiting:
                 log.info("camera %s is asking to be added (fw %s)", code, fw)
-            self.waiting[code] = {"fw": fw if FW_VERSION.fullmatch(fw) else "",
+            self.waiting[code] = {"fw": fw if FW_VERSION.fullmatch(fw) else "", "proof": proof,
                                   "rssi": meta.get("rssi") if isinstance(meta.get("rssi"), int) else None,
                                   "seen": self.clock()}
         return 202, {**self.schedule_reply(), "waiting": True}
@@ -247,7 +265,7 @@ class Gateway:
         now = self.clock()
         with self.lock:
             self.waiting = {c: w for c, w in self.waiting.items() if now - w["seen"] < WAITING_FOR}
-            waiting = [{"code": c, "fw": w["fw"], "rssi": w["rssi"]} for c, w in self.waiting.items()]
+            waiting = [{"code": c, "proof": w["proof"], "fw": w["fw"], "rssi": w["rssi"]} for c, w in self.waiting.items()]
             handed = [c for c, a in self.assigned.items() if a.get("handed")]
         if not waiting and not handed and not self.assigned:
             return
@@ -262,12 +280,13 @@ class Gateway:
             log.warning("pairing not synced: %s", e.__class__.__name__)
             return
         with self.lock:
-            # The server keeps a key until told it was handed over, so a handed one it no longer lists is done.
-            kept = {c: a for c, a in self.assigned.items() if c in assigned or not a.get("handed")}
+            # The server lists a key until told it was handed over, or until the camera is removed or given
+            # another key, so one it no longer lists is done either way.
+            kept = {c: a for c, a in self.assigned.items() if c in assigned}
             for code, a in assigned.items():
-                if CAMERA_CODE.fullmatch(code) and isinstance(a, dict) and TRAP_ID.fullmatch(str(a.get("trap_id"))) \
-                        and a.get("api_key") and code not in kept:
-                    kept[code] = {"trap_id": a["trap_id"], "api_key": a["api_key"], "handed": False}
+                sealed = _sealed(a)
+                if CAMERA_CODE.fullmatch(code) and sealed is not None and code not in kept:
+                    kept[code] = {**sealed, "handed": False}
                     self.waiting.pop(code, None)
                     log.info("camera %s was added on the dashboard as %s", code, a["trap_id"])
             changed = kept != self.assigned

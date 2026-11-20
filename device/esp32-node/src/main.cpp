@@ -6,12 +6,16 @@
 // checkin_s (from the hub) just to ask whether a photo was asked for on the dashboard.
 //
 // Identity: the trap id and key live in flash (NVS), not in the firmware, so one release build serves every
-// camera. A new camera has none: it pairs (POST /node/v1/pair with the last 6 hex digits of its MAC) until
-// it is added on the dashboard and the hub hands it its key. BOOT held for 10 s forgets them, to pair again.
+// camera. A new camera has none: it pairs (POST /node/v1/pair with the last 6 hex digits of its MAC, and a
+// proof that it has the secret on its sticker) until it is added on the dashboard with that secret; its key
+// then comes through the hub sealed with the secret, so only this camera can open it. The secret is made on
+// the first boot and stays in flash. BOOT held for 10 s forgets the trap id and key, to pair again, and so
+// does the hub refusing the key for a day (the camera, or its hub, was removed on the dashboard).
 // A dev build flashed for one trap (flash-camera.sh T3 <key>) stores the id and key compiled into it.
 //
-// Updates: the hub offers firmware sent from the dashboard ("firmware" in its replies). The node writes it to
-// the other app slot and restarts into it. The new firmware keeps itself only if it reaches the hub on that
+// Updates: the hub offers firmware sent from the dashboard ("firmware" in its replies). The node installs only
+// a newer version whose signature checks out against the team's key (include/firmware_key.h), writing it to
+// the other app slot and restarting into it. The new firmware keeps itself only if it reaches the hub on that
 // first boot; if it can't, or crashes, the bootloader goes back to the old one.
 //
 // Timekeeping: the node never sets its clock. `clock` is seconds since power-on, which keeps counting
@@ -31,7 +35,13 @@
 #include "driver/rtc_io.h"
 #include "esp_camera.h"
 #include "esp_ota_ops.h"
+#include "bootloader_random.h"
+#include "mbedtls/md.h"
+#include "mbedtls/pk.h"
+#include "mbedtls/pkcs5.h"
 #include "drift.h"
+#include "firmware_key.h"
+#include "pairing.h"
 #include "esp_http_server.h"
 #include "node_config.h"
 
@@ -53,7 +63,7 @@
 #define API_KEY ""
 #endif
 
-#define FW_VERSION "0.3.0"
+#define FW_VERSION "0.4.0"
 #ifdef RELEASE_BUILD
 #define FW_KIND "release"
 #else
@@ -74,6 +84,8 @@ static const int HUB_DOWN_CONNECT_S = 45;  // photo wakes after one that couldn'
 static const int PAIR_FAST_TRIES = 30;     // a new camera asks to be added every 30 s for 15 min, then every 10 min
 static const int RESET_HOLD_MS = 10000;    // BOOT held this long forgets the trap id and key
 static const int OTA_MAX_TRIES = 2;        // a firmware version that failed this often is not tried again
+static const int REPAIR_AFTER_REJECTS = 24;  // the hub refusing this key on this many wakes in a row: pair again
+static const unsigned PAIR_ITERATIONS = 20000;  // PBKDF2 rounds for the pairing key (fleet.PAIR_ITERATIONS)
 
 // Survives deep sleep, lost on power loss.
 RTC_DATA_ATTR uint32_t session = 0;        // random per power-on: photos from an older session have no usable clock
@@ -91,9 +103,12 @@ RTC_DATA_ATTR int checkin_s = 0;           // from the hub: check in this often 
 RTC_DATA_ATTR bool checkin_next = false;   // the coming timer wake is a check-in, not a photo
 RTC_DATA_ATTR int hub_misses = 0;          // photo wakes in a row that couldn't reach the hub
 RTC_DATA_ATTR int pair_tries = 0;          // wakes spent asking to be added
+RTC_DATA_ATTR int rejected = 0;            // wakes in a row the hub refused this camera's key
+RTC_DATA_ATTR uint8_t pair_key[32];        // derived from the sticker's secret (pairingKey): slow, so kept
+RTC_DATA_ATTR bool have_pair_key = false;
 static char trap_id[33] = "";              // from NVS (loadIdentity); empty until the camera is added
 static char api_key[65] = "";
-static String fw_offer, fw_offer_md5;      // the hub's last reply: firmware sent from the dashboard
+static String fw_offer, fw_offer_md5, fw_offer_sig;  // the hub's last reply: firmware sent from the dashboard
 static size_t fw_offer_size = 0;
 static bool photo_now = false;             // the hub's last reply: a photo was asked for on the dashboard
 // The previous wake, reported at the end of this one: how long it was awake (power) and whether it got through.
@@ -155,6 +170,53 @@ static String pairingCode() {  // the last 6 hex digits of the MAC, written on t
   char code[7];
   snprintf(code, sizeof(code), "%02X%02X%02X", mac[3], mac[4], mac[5]);
   return code;
+}
+
+// ------------------------------------------------------------------ pairing secret (sentinel_server.fleet)
+
+static const char SECRET_ALPHABET[] = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";  // fleet.CAMERA_SECRET: no 0/O, 1/I/L
+
+// The secret on the camera's sticker: made on the first boot from the hardware random number generator and
+// kept in flash. Forgetting the trap id and key keeps it, so the sticker stays right; erasing the flash
+// (flash-camera.sh) makes a new one.
+static String pairingSecret() {
+  Preferences p;
+  p.begin("pair");
+  String s = p.getString("secret", "");
+  if (s.length() != 16) {
+    bootloader_random_enable();  // true randomness with the radio still off
+    char buf[17];
+    for (int i = 0; i < 16;) {
+      uint32_t r = esp_random() & 31;
+      if (r < 31) buf[i++] = SECRET_ALPHABET[r];
+    }
+    buf[16] = 0;
+    bootloader_random_disable();
+    s = buf;
+    p.putString("secret", s);
+  }
+  p.end();
+  return s;
+}
+
+static void hmacSha256(const uint8_t *key, size_t key_len, const uint8_t *msg, size_t len, uint8_t out[32]) {
+  mbedtls_md_hmac(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), key, key_len, msg, len, out);
+}
+
+// pairing.h has the rest: the proof the camera sends, and opening the sealed key it gets back.
+
+// The key both sides derive from the secret (fleet.pairing_key). About 1 s, so kept through deep sleep.
+static const uint8_t *pairingKey(const String &code) {
+  if (have_pair_key) return pair_key;
+  String secret = pairingSecret(), salt = "orchard-sentinel-pair:" + code;
+  mbedtls_md_context_t md;
+  mbedtls_md_init(&md);
+  have_pair_key = mbedtls_md_setup(&md, mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), 1) == 0 &&
+                  mbedtls_pkcs5_pbkdf2_hmac(&md, (const uint8_t *)secret.c_str(), secret.length(),
+                                            (const uint8_t *)salt.c_str(), salt.length(), PAIR_ITERATIONS,
+                                            sizeof(pair_key), pair_key) == 0;
+  mbedtls_md_free(&md);
+  return pair_key;
 }
 
 static void setError(const char *msg) {
@@ -274,6 +336,7 @@ static void takeTime(JsonDocument &reply, double sent_clock) {
   fw_offer = reply["firmware"]["version"] | "";
   fw_offer_md5 = reply["firmware"]["md5"] | "";
   fw_offer_size = reply["firmware"]["size"] | 0;
+  fw_offer_sig = reply["firmware"]["sig"] | "";
   photo_now = reply["photo_now"] | false;
   if (!reply["now"].is<double>()) return;
   double now_clock = clockNow();
@@ -502,22 +565,30 @@ static void sleepFor(double s) {
 
 // A camera with no trap id or key: ask the hub to be added, then start like a fresh install. Never returns.
 static void pairWake() {
-  String code = pairingCode();
-  Serial.printf("not added yet: pairing code %s\n", code.c_str());
+  String code = pairingCode(), secret = pairingSecret();
+  // flash-camera.sh reads this line for the sticker: the code is sent openly, the secret never is.
+  Serial.printf("not added yet: pairing code %s, pairing secret %s-%s-%s-%s\n", code.c_str(), secret.substring(0, 4).c_str(),
+                secret.substring(4, 8).c_str(), secret.substring(8, 12).c_str(), secret.substring(12).c_str());
   if (connectWifi(pair_tries < PAIR_FAST_TRIES ? 20 : 60)) {
+    const uint8_t *k = pairingKey(code);
+    char proof[33];
+    pairingProof(hmacSha256, k, proof);
     JsonDocument m, reply;
-    m["code"] = code; m["fw"] = FW_VERSION; m["rssi"] = WiFi.RSSI();
+    m["code"] = code; m["proof"] = proof; m["fw"] = FW_VERSION; m["rssi"] = WiFi.RSSI();
     String meta;
     serializeJson(m, meta);
     int c = post("/node/v1/pair", "POST", nullptr, meta, reply);
-    const char *id = reply["trap_id"] | "", *key = reply["api_key"] | "";
-    if (c == 200 && id[0] && key[0] && strlen(id) < sizeof(trap_id) && strlen(key) < sizeof(api_key)) {
+    const char *id = reply["trap_id"] | "";
+    char key[sizeof(api_key)];
+    if (c == 200 && id[0] && strlen(id) < sizeof(trap_id) &&
+        openKey(hmacSha256, k, id, reply["nonce"] | "", reply["box"] | "", reply["tag"] | "", key, sizeof(key))) {
       saveIdentity(id, key);
       Serial.printf("added on the dashboard as %s\n", trap_id);
       pair_tries = 0;
       WiFi.disconnect(true);
       esp_restart();  // as if just powered on: the live preview for aiming, then the first photo
     }
+    if (c == 200) setError("the key from the hub didn't check out");
     Serial.printf("pair -> %d (waiting to be added on the dashboard)\n", c);
   } else {
     setError("hub not reachable");
@@ -528,9 +599,46 @@ static void pairWake() {
   sleepFor(pair_tries <= PAIR_FAST_TRIES ? 30 : 600);
 }
 
-// The firmware the hub offers, if it is new to this node and hasn't already failed here. Restarts into it.
+// Write an image to the other app slot, hashing it on the way, and keep it only if its signature checks out
+// against the team's public key: firmware that release.sh didn't sign is never installed, whoever offers it.
+static bool writeSigned(Stream &in, size_t size, const uint8_t *sig, size_t sig_len) {
+  static uint8_t buf[4096];
+  uint8_t hash[32];
+  mbedtls_md_context_t md;
+  mbedtls_md_init(&md);
+  bool ok = mbedtls_md_setup(&md, mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), 0) == 0 && mbedtls_md_starts(&md) == 0;
+  size_t got = 0;
+  uint32_t last = millis();
+  while (ok && got < size) {
+    size_t n = in.available();
+    if (!n) {
+      if (millis() - last > 30000) ok = false;
+      else delay(2);
+      continue;
+    }
+    n = in.readBytes(buf, std::min({n, sizeof(buf), size - got}));
+    ok = n > 0 && mbedtls_md_update(&md, buf, n) == 0 && Update.write(buf, n) == n;
+    got += n;
+    last = millis();
+  }
+  ok = ok && mbedtls_md_finish(&md, hash) == 0;
+  mbedtls_md_free(&md);
+  if (!ok) return false;
+  mbedtls_pk_context pk;
+  mbedtls_pk_init(&pk);
+  ok = mbedtls_pk_parse_public_key(&pk, (const uint8_t *)FIRMWARE_PUBKEY_PEM, sizeof(FIRMWARE_PUBKEY_PEM)) == 0 &&
+       mbedtls_pk_verify(&pk, MBEDTLS_MD_SHA256, hash, sizeof(hash), sig, sig_len) == 0;
+  mbedtls_pk_free(&pk);
+  if (!ok) Serial.println("firmware signature doesn't check out: not installing it");
+  return ok;
+}
+
+// The firmware the hub offers, if it is newer, signed, and hasn't already failed here. Restarts into it.
 static void maybeUpdate() {
-  if (!fw_offer.length() || fw_offer == FW_VERSION || !fw_offer_size || fw_offer_md5.length() != 32) return;
+  if (!fw_offer.length() || !newerVersion(fw_offer.c_str(), FW_VERSION) || !fw_offer_size || fw_offer_md5.length() != 32) return;
+  uint8_t sig[72];
+  int sig_len = fromHex(fw_offer_sig.c_str(), sig, sizeof(sig));
+  if (sig_len < 8) { setError("firmware offered without a signature: not installed"); return; }
   Preferences p;
   p.begin("ota");
   if (p.getString("version") != fw_offer) { p.putString("version", fw_offer); p.putInt("tries", 0); }
@@ -547,7 +655,7 @@ static void maybeUpdate() {
   bool ok = code == 200 && http.getSize() == (int)fw_offer_size && Update.begin(fw_offer_size);
   if (ok) {
     Update.setMD5(fw_offer_md5.c_str());
-    ok = Update.writeStream(*http.getStreamPtr()) == fw_offer_size && Update.end();
+    ok = writeSigned(*http.getStreamPtr(), fw_offer_size, sig, sig_len) && Update.end();
     if (!ok) Update.abort();
   }
   http.end();
@@ -684,6 +792,7 @@ void setup() {
     }
     if (code == 0) {
       hub_misses = 0;
+      rejected = 0;
       int sched = askSchedule();
       if (trial && sched == 200) {
         esp_ota_mark_app_valid_cancel_rollback();
@@ -699,7 +808,15 @@ void setup() {
         Serial.println("photo asked for on the dashboard");
         if (captureToQueue("requested", false)) restartForUpload("requested");
       }
-    } else if (code != 401 && !checkin) {
+    } else if (code == 401) {
+      // The hub doesn't know this key: the camera, or the hub it paired at, was removed or given another key
+      // on the dashboard. Once that has lasted, forget the key and pair again: the sticker still works.
+      if (++rejected >= REPAIR_AFTER_REJECTS) {
+        setError("key refused by the hub: pairing again");
+        forgetIdentity();
+        rejected = pair_tries = 0;
+      }
+    } else if (!checkin) {
       setError("hub not answering");
       if (!search) hub_misses++;
     }
